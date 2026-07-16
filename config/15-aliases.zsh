@@ -83,11 +83,16 @@ alias isodate='date -u +"%Y-%m-%dT%H:%M:%SZ"'
 # Text Processing
 # =============================================================================
 
-# Copy to clipboard (if available)
-if command -v xclip &>/dev/null; then
+# Copy/paste clipboard (Wayland > X11 > macOS)
+if command -v wl-copy &>/dev/null; then
+    alias clip='wl-copy'
+    alias paste='wl-paste'
+elif command -v xclip &>/dev/null; then
     alias clip='xclip -selection clipboard'
+    alias paste='xclip -selection clipboard -o'
 elif command -v pbcopy &>/dev/null; then
     alias clip='pbcopy'
+    alias paste='pbpaste'
 fi
 
 # =============================================================================

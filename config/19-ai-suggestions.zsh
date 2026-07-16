@@ -20,7 +20,7 @@ export NIVUUS_AI_SUGGESTIONS_LOADED=1
 typeset -g AI_SUGGESTION_MIN_CHARS="${AI_SUGGESTION_MIN_CHARS:-3}"
 typeset -g AI_DEBOUNCE_DELAY="${AI_DEBOUNCE_DELAY:-2}"  # Debounce delay in seconds
 typeset -g ENABLE_AI_AUTO_DEBOUNCE="${ENABLE_AI_AUTO_DEBOUNCE:-false}"  # Auto-trigger after typing
-typeset -g AI_SUGGESTION_MODEL="${AI_SUGGESTION_MODEL:-gemini-2.0-flash}"  # Model for suggestions
+typeset -g AI_SUGGESTION_MODEL="${AI_SUGGESTION_MODEL:-gemini-1.5-flash}"  # Model for suggestions
 
 # Cache
 typeset -gA _AI_CACHE
@@ -521,12 +521,12 @@ Configuration:
   AI_SUGGESTION_MIN_CHARS=3       # Minimum chars to trigger
   AI_DEBOUNCE_DELAY=2             # Debounce delay in seconds
   ENABLE_AI_AUTO_DEBOUNCE=false   # Auto-trigger after typing pause
-  AI_SUGGESTION_MODEL=gemini-2.0-flash  # Model for suggestions (default)
+  AI_SUGGESTION_MODEL=gemini-1.5-flash  # Model for suggestions (default)
 
 Available models:
-  gemini-2.0-flash       # Latest, fastest, best balance (default)
+  gemini-1.5-flash       # Latest stable, fast, best balance (default)
   gemini-1.5-pro         # More capable, slower
-  gemini-1.5-flash       # Previous generation
+  gemini-2.0-flash       # Experimental 2.0 Flash (if available)
 
 Keybindings:
   Ctrl+↓     - Accept inline AI suggestion

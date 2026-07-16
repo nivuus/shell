@@ -47,7 +47,7 @@ AI Terminal Titles:
   Help:    ai-title-help
 
 Configuration:
-  Model: ${GEMINI_MODEL:-gemini-2.0-flash}
+  Model: ${GEMINI_MODEL:-Global setting (from gemini /settings)}
   Status: $gemini_status
 
 Setup:
@@ -85,68 +85,81 @@ fi
 # Configuration
 # =============================================================================
 
-export GEMINI_MODEL="${GEMINI_MODEL:-gemini-2.0-flash}"
+# export GEMINI_MODEL="${GEMINI_MODEL:-gemini-2.0-flash}"
 
 # =============================================================================
 # AI Command Functions
 # =============================================================================
 
+# Helper to get model flag
+_ai_model_flag() {
+    if [[ -n "$GEMINI_MODEL" ]]; then
+        echo "--model $GEMINI_MODEL"
+    fi
+}
+
 # General command suggestions
 _nivuus_ai_suggest() {
     local query="$*"
+    local model_flag=($(_ai_model_flag))
     if [[ -z "$query" ]]; then
-        gemini --model "$GEMINI_MODEL" "Suggest useful zsh commands and shell tricks" 2>/dev/null
+        gemini "${model_flag[@]}" "Suggest useful zsh commands and shell tricks" 2>/dev/null
     else
-        gemini --model "$GEMINI_MODEL" "Suggest zsh commands for: $query" 2>/dev/null
+        gemini "${model_flag[@]}" "Suggest zsh commands for: $query" 2>/dev/null
     fi
 }
 
 # Git-specific help
 _nivuus_git_help() {
     local query="$*"
-    gemini --model "$GEMINI_MODEL" "Git command help: $query. Provide the exact command to run." 2>/dev/null
+    local model_flag=($(_ai_model_flag))
+    gemini "${model_flag[@]}" "Git command help: $query. Provide the exact command to run." 2>/dev/null
 }
 
 # GitHub CLI help
 _nivuus_gh_help() {
     local query="$*"
-    gemini --model "$GEMINI_MODEL" "GitHub CLI (gh) help: $query. Provide the exact command to run." 2>/dev/null
+    local model_flag=($(_ai_model_flag))
+    gemini "${model_flag[@]}" "GitHub CLI (gh) help: $query. Provide the exact command to run." 2>/dev/null
 }
 
 # Explain a command
 why() {
     local cmd="$*"
+    local model_flag=($(_ai_model_flag))
     if [[ -z "$cmd" ]]; then
         echo "Usage: why <command>"
         echo "Example: why 'tar -xzf file.tar.gz'"
         return 1
     fi
 
-    gemini --model "$GEMINI_MODEL" "Explain this command concisely: $cmd" 2>/dev/null
+    gemini "${model_flag[@]}" "Explain this command concisely: $cmd" 2>/dev/null
 }
 
 # Detailed explanation
 explain() {
     local cmd="$*"
+    local model_flag=($(_ai_model_flag))
     if [[ -z "$cmd" ]]; then
         echo "Usage: explain <command>"
         echo "Example: explain 'find . -name \"*.log\" -delete'"
         return 1
     fi
 
-    gemini --model "$GEMINI_MODEL" "Provide a detailed explanation of this command, including each option: $cmd" 2>/dev/null
+    gemini "${model_flag[@]}" "Provide a detailed explanation of this command, including each option: $cmd" 2>/dev/null
 }
 
 # General question
 ask() {
     local question="$*"
+    local model_flag=($(_ai_model_flag))
     if [[ -z "$question" ]]; then
         echo "Usage: ask <question>"
         echo "Example: ask 'how to compress a folder'"
         return 1
     fi
 
-    gemini --model "$GEMINI_MODEL" "$question" 2>/dev/null
+    gemini "${model_flag[@]}" "$question" 2>/dev/null
 }
 
 # =============================================================================

@@ -19,7 +19,7 @@ fi
 
 : ${AI_ERROR_CACHE_DIR:="$HOME/.cache/nivuus-shell/ai-errors"}
 : ${AI_ERROR_CACHE_TTL:=86400}  # 24 hours
-: ${AI_ERROR_MODEL:="${GEMINI_MODEL:-gemini-2.0-flash-thinking-exp-01-21}"}
+: ${AI_ERROR_MODEL:="${GEMINI_MODEL:-gemini-1.5-flash}"}
 
 # Create cache directory
 mkdir -p "$AI_ERROR_CACHE_DIR"
@@ -308,7 +308,7 @@ CONFIGURATION:
   export ENABLE_AI_ERROR_EXPLANATION=false    # Disable feature
   export ENABLE_AI_ERROR_INDICATOR=false      # Hide ⚠ in RPROMPT
   export AI_ERROR_CACHE_TTL=86400             # Cache duration (seconds)
-  export AI_ERROR_MODEL=gemini-2.0-flash      # Gemini model to use
+  export AI_ERROR_MODEL=gemini-1.5-flash      # Gemini model to use
 
 CACHE MANAGEMENT:
   ai-error-clear-cache    Clear cached explanations
