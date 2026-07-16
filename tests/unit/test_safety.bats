@@ -18,7 +18,7 @@ setup() {
 }
 
 @test "Safety module can be disabled via ENABLE_SAFETY_CHECKS" {
-    run zsh -c "export ENABLE_SAFETY_CHECKS=false && source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/21-safety.zsh' && typeset -f _nivuus_safety_check"
+    run zsh -c "export ENABLE_SAFETY_CHECKS=false && source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/21-safety.zsh' && typeset -f _nivuus_match_danger"
     [ "$status" -ne 0 ]
 }
 
@@ -31,43 +31,49 @@ setup() {
     [ "$status" -eq 0 ]
 }
 
-@test "DANGEROUS_PATTERNS includes 'rm -rf /' pattern" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep \"rm -rf /\" config/21-safety.zsh"
+# Behavioural: assert what commands are actually detected as dangerous,
+# independent of how the patterns are spelled.
+_danger() {
+    run zsh -c "source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/21-safety.zsh' && _nivuus_match_danger '$1'"
+}
+
+@test "detects 'rm -rf /'" {
+    _danger 'rm -rf /'
     [ "$status" -eq 0 ]
 }
 
-@test "DANGEROUS_PATTERNS includes 'rm -rf ~' pattern" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep 'rm -rf ~' config/21-safety.zsh"
+@test "detects 'rm -rf ~'" {
+    _danger 'rm -rf ~'
     [ "$status" -eq 0 ]
 }
 
-@test "DANGEROUS_PATTERNS includes 'chmod -R 777' pattern" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep 'chmod -R 777' config/21-safety.zsh"
+@test "detects 'chmod -R 777'" {
+    _danger 'chmod -R 777 /var/www'
     [ "$status" -eq 0 ]
 }
 
-@test "DANGEROUS_PATTERNS includes 'dd if=.*of=/dev/sd' pattern" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep 'dd if=.*of=/dev/sd' config/21-safety.zsh"
+@test "detects raw disk write 'dd ... of=/dev/sd'" {
+    _danger 'dd if=image.iso of=/dev/sda bs=4M'
     [ "$status" -eq 0 ]
 }
 
-@test "DANGEROUS_PATTERNS includes 'mkfs' pattern" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep 'mkfs' config/21-safety.zsh"
+@test "detects 'mkfs'" {
+    _danger 'mkfs.ext4 /dev/sdb1'
     [ "$status" -eq 0 ]
 }
 
-@test "DANGEROUS_PATTERNS includes system directory deletions" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -E '(rm -rf /boot|rm -rf /etc|rm -rf /usr|rm -rf /var)' config/21-safety.zsh"
+@test "detects system directory deletions" {
+    _danger 'rm -rf /etc'
     [ "$status" -eq 0 ]
 }
 
-@test "DANGEROUS_PATTERNS includes sudo removal warnings" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep 'remove.*sudo' config/21-safety.zsh"
+@test "detects sudo package removal" {
+    _danger 'apt-get remove sudo'
     [ "$status" -eq 0 ]
 }
 
-@test "DANGEROUS_PATTERNS includes iptables flush" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep 'iptables -F' config/21-safety.zsh"
+@test "detects iptables flush" {
+    _danger 'iptables -F'
     [ "$status" -eq 0 ]
 }
 
@@ -80,28 +86,33 @@ setup() {
     [ "$status" -eq 0 ]
 }
 
-@test "WARNING_PATTERNS includes 'rm -rf' pattern" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -A 5 'WARNING_PATTERNS' config/21-safety.zsh | grep 'rm -rf'"
+# Behavioural warning detection.
+_warn() {
+    run zsh -c "source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/21-safety.zsh' && _nivuus_match_warning '$1'"
+}
+
+@test "warns on 'rm -rf <dir>'" {
+    _warn 'rm -rf node_modules'
     [ "$status" -eq 0 ]
 }
 
-@test "WARNING_PATTERNS includes git force push patterns" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep 'git push.*--force' config/21-safety.zsh"
+@test "warns on git force push" {
+    _warn 'git push --force origin main'
     [ "$status" -eq 0 ]
 }
 
-@test "WARNING_PATTERNS includes 'sudo rm' pattern" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep 'sudo rm' config/21-safety.zsh"
+@test "warns on 'sudo rm'" {
+    _warn 'sudo rm file.txt'
     [ "$status" -eq 0 ]
 }
 
-@test "WARNING_PATTERNS includes 'chmod 777' pattern" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -A 10 'WARNING_PATTERNS' config/21-safety.zsh | grep 'chmod 777'"
+@test "warns on 'chmod 777'" {
+    _warn 'chmod 777 file.txt'
     [ "$status" -eq 0 ]
 }
 
-@test "WARNING_PATTERNS includes mass deletion patterns" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -E '(find.*-delete|xargs.*rm)' config/21-safety.zsh"
+@test "warns on mass deletion" {
+    _warn 'find . -name "*.tmp" -delete'
     [ "$status" -eq 0 ]
 }
 
@@ -109,32 +120,44 @@ setup() {
 # Safety Check Function Tests
 # =============================================================================
 
-@test "_nivuus_safety_check function is defined" {
-    run zsh -c "source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/21-safety.zsh' && typeset -f _nivuus_safety_check"
+@test "detection predicates are defined" {
+    run zsh -c "source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/21-safety.zsh' && typeset -f _nivuus_match_danger _nivuus_match_warning _nivuus_safety_confirm"
     [ "$status" -eq 0 ]
 }
 
-@test "_nivuus_safety_check returns 0 for safe commands" {
-    run zsh -c "source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/21-safety.zsh' && _nivuus_safety_check 'ls -la'"
+@test "_nivuus_match_danger does not match safe commands" {
+    run zsh -c "source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/21-safety.zsh' && _nivuus_match_danger 'ls -la'"
+    [ "$status" -ne 0 ]
+}
+
+@test "_nivuus_match_danger returns non-zero for empty commands" {
+    run zsh -c "source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/21-safety.zsh' && _nivuus_match_danger ''"
+    [ "$status" -ne 0 ]
+}
+
+@test "_nivuus_match_danger matches rm -rf /" {
+    run zsh -c "source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/21-safety.zsh' && _nivuus_match_danger 'rm -rf /'"
     [ "$status" -eq 0 ]
 }
 
-@test "_nivuus_safety_check returns 0 for empty commands" {
-    run zsh -c "source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/21-safety.zsh' && _nivuus_safety_check ''"
-    [ "$status" -eq 0 ]
+@test "_nivuus_match_danger does NOT match rm -rf of a subdirectory" {
+    run zsh -c "source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/21-safety.zsh' && _nivuus_match_danger 'rm -rf /home/user/project'"
+    [ "$status" -ne 0 ]
 }
 
 # =============================================================================
-# Preexec Hook Tests
+# accept-line Widget Tests
 # =============================================================================
+# Unlike a preexec hook, the accept-line widget runs before submission so it
+# can actually prevent execution of a dangerous command.
 
-@test "_nivuus_preexec_safety hook function is defined" {
-    run zsh -c "source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/21-safety.zsh' && typeset -f _nivuus_preexec_safety"
+@test "_nivuus_safety_accept_line widget function is defined" {
+    run zsh -c "source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/21-safety.zsh' && typeset -f _nivuus_safety_accept_line"
     [ "$status" -eq 0 ]
 }
 
-@test "preexec hook is registered" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep 'add-zsh-hook preexec' config/21-safety.zsh"
+@test "safety wraps accept-line via ZLE (not preexec)" {
+    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -q 'zle -N accept-line _nivuus_safety_accept_line' config/21-safety.zsh && ! grep -q 'add-zsh-hook preexec' config/21-safety.zsh"
     [ "$status" -eq 0 ]
 }
 

@@ -88,6 +88,6 @@ if [[ -n "$EPOCHREALTIME" ]] && [[ -n "$NIVUUS_START_TIME" ]]; then
     typeset -g NIVUUS_LOAD_TIME=$(( ($NIVUUS_END_TIME - $NIVUUS_START_TIME) * 1000 ))
 
     if (( ${NIVUUS_LOAD_TIME} > 500 )); then
-        echo "⚠️  Nivuus Shell: ${NIVUUS_LOAD_TIME}ms (target: <300ms)"
+        echo "⚠️  Nivuus Shell: slow startup ${NIVUUS_LOAD_TIME}ms (target: <300ms)"
     fi
 fi

@@ -39,6 +39,17 @@ typeset -g _AI_GENERATE_PID=""
 # Context Collection
 # =============================================================================
 
+# Redact obvious secrets before any context leaves the machine for the AI API.
+# Masks API keys, tokens, passwords and Authorization headers on a line.
+_ai_redact() {
+    sed -E \
+        -e 's/((api[_-]?key|token|secret|password|passwd|pwd|access[_-]?key|client[_-]?secret|authorization)[[:space:]]*[:=][[:space:]]*)[^[:space:]"'"'"']+/\1***REDACTED***/gI' \
+        -e 's/(Bearer[[:space:]]+)[A-Za-z0-9._-]+/\1***REDACTED***/g' \
+        -e 's/(gh[pousr]_)[A-Za-z0-9]+/\1***REDACTED***/g' \
+        -e 's/(AKIA)[0-9A-Z]{12,}/\1***REDACTED***/g' \
+        -e 's/(sk-)[A-Za-z0-9]{16,}/\1***REDACTED***/g'
+}
+
 _ai_get_context() {
     local context=""
 
@@ -108,7 +119,9 @@ _ai_get_context() {
         [[ -n "$git_diff" ]] && context+="Git diff (first 100 lines):\n$git_diff\n"
     fi
 
-    echo "$context"
+    # Strip secrets before this context is sent to the AI provider.
+    # (No -r: keep the historical behaviour of expanding the embedded \n.)
+    print -- "$context" | _ai_redact
 }
 
 # =============================================================================

@@ -26,6 +26,14 @@ NIVUUS_VERSION_FILE="$NIVUUS_SHELL_DIR/.version"
 # Helper Functions
 # ============================================================================
 
+# Detect a development checkout (git working copy).
+# The release-based updater is destructive (it wipes $NIVUUS_SHELL_DIR),
+# so it must NEVER run against a git checkout or it would delete .git and
+# any uncommitted work.
+_nivuus_is_dev_checkout() {
+    [[ -d "$NIVUUS_SHELL_DIR/.git" ]] || [[ -f "$NIVUUS_SHELL_DIR/.git" ]]
+}
+
 # Get current installed version
 _nivuus_current_version() {
     if [[ -f "$NIVUUS_VERSION_FILE" ]]; then
@@ -71,6 +79,11 @@ _nivuus_version_greater() {
     for i in {1..3}; do
         local p1=${v1_parts[$i]:-0}
         local p2=${v2_parts[$i]:-0}
+
+        # Strip any pre-release/build suffix (e.g. "1-rc2" -> "1") and
+        # fall back to 0 for non-numeric parts so (( )) never errors.
+        p1=${p1%%[-+]*}; [[ "$p1" == <-> ]] || p1=0
+        p2=${p2%%[-+]*}; [[ "$p2" == <-> ]] || p2=0
 
         if (( p2 > p1 )); then
             return 0
@@ -166,30 +179,40 @@ _nivuus_download_release() {
         return 1
     fi
 
-    # Download and verify checksums if enabled
+    # Download and verify checksums if enabled.
+    # When verification is requested we fail CLOSED: any inability to fetch or
+    # match a checksum aborts the install, so a network/MITM failure cannot be
+    # used to silently skip verification.
     if [[ "$NIVUUS_VERIFY_CHECKSUMS" == "true" ]]; then
         echo "🔐 Verifying checksums..."
 
         if ! curl -fsSL -o "$temp_dir/SHA256SUMS" "$checksums_url"; then
-            echo "⚠️  Warning: Could not download checksums, skipping verification"
-        else
-            # Extract the checksum for our archive
-            local expected_sum=$(grep "nivuus-shell-v${version}.tar.gz" "$temp_dir/SHA256SUMS" | awk '{print $1}')
-
-            if [[ -n "$expected_sum" ]]; then
-                local actual_sum=$(sha256sum "$temp_dir/nivuus-shell.tar.gz" | awk '{print $1}')
-
-                if [[ "$expected_sum" != "$actual_sum" ]]; then
-                    echo "❌ Checksum verification failed!"
-                    echo "   Expected: $expected_sum"
-                    echo "   Got:      $actual_sum"
-                    rm -rf "$temp_dir"
-                    return 1
-                fi
-
-                echo "✅ Checksum verified"
-            fi
+            echo "❌ Could not download checksums (verification required, aborting)"
+            echo "   Set NIVUUS_VERIFY_CHECKSUMS=false to bypass at your own risk."
+            rm -rf "$temp_dir"
+            return 1
         fi
+
+        # Extract the checksum for our archive
+        local expected_sum=$(grep "nivuus-shell-v${version}.tar.gz" "$temp_dir/SHA256SUMS" | awk '{print $1}')
+
+        if [[ -z "$expected_sum" ]]; then
+            echo "❌ No checksum found for nivuus-shell-v${version}.tar.gz (aborting)"
+            rm -rf "$temp_dir"
+            return 1
+        fi
+
+        local actual_sum=$(sha256sum "$temp_dir/nivuus-shell.tar.gz" | awk '{print $1}')
+
+        if [[ "$expected_sum" != "$actual_sum" ]]; then
+            echo "❌ Checksum verification failed!"
+            echo "   Expected: $expected_sum"
+            echo "   Got:      $actual_sum"
+            rm -rf "$temp_dir"
+            return 1
+        fi
+
+        echo "✅ Checksum verified"
     fi
 
     echo "$temp_dir"
@@ -227,9 +250,19 @@ _nivuus_install_release() {
             cp "$NIVUUS_SHELL_DIR/$file" "$temp_preserve/"
     done
 
-    # Install new version
-    rm -rf "$NIVUUS_SHELL_DIR"/*
-    cp -r "$extract_dir"/* "$NIVUUS_SHELL_DIR/"
+    # Refuse to wipe a git checkout, whatever the caller did.
+    if _nivuus_is_dev_checkout; then
+        echo "❌ Refusing to overwrite a git checkout at $NIVUUS_SHELL_DIR"
+        return 1
+    fi
+
+    # Install new version. Remove old contents explicitly (never via a glob,
+    # which would honour GLOB_DOTS and could match .git / dotfiles) while
+    # always preserving VCS metadata and user files.
+    find "$NIVUUS_SHELL_DIR" -mindepth 1 -maxdepth 1 \
+        ! -name '.git' ! -name '.zsh_local' ! -name '.version' \
+        -exec rm -rf {} + 2>/dev/null
+    cp -r "$extract_dir"/. "$NIVUUS_SHELL_DIR/"
 
     # Restore preserved files
     for file in "${files_to_preserve[@]}"; do
@@ -299,6 +332,8 @@ _nivuus_perform_update() {
 
 # Background update check (async, no performance impact)
 _nivuus_check_update_async() {
+    local log_file
+    log_file=$(mktemp "${TMPDIR:-/tmp}/nivuus-update.XXXXXX") || return
     (
         # Update timestamp
         _nivuus_update_check_timestamp
@@ -306,7 +341,7 @@ _nivuus_check_update_async() {
         # Check if update is available
         if _nivuus_update_available; then
             # Auto-install the update
-            _nivuus_perform_update > /tmp/nivuus-update.log 2>&1
+            _nivuus_perform_update > "$log_file" 2>&1
         fi
     ) &!
 }
@@ -315,14 +350,16 @@ _nivuus_check_update_async() {
 # Main Auto-Update Logic
 # ============================================================================
 
-# Only run if enabled
-if [[ "$ENABLE_AUTOUPDATE" == "true" ]]; then
+# Only run if enabled — and never against a git checkout (dev mode), where a
+# destructive release install would delete .git and any uncommitted work.
+if [[ "$ENABLE_AUTOUPDATE" == "true" ]] && ! _nivuus_is_dev_checkout; then
     # Check if it's time for an update check
-    local days_since_check=$(_nivuus_days_since_check)
+    days_since_check=$(_nivuus_days_since_check)
 
     if (( days_since_check >= AUTOUPDATE_CHECK_FREQUENCY_DAYS )); then
         _nivuus_check_update_async
     fi
+    unset days_since_check
 fi
 
 # ============================================================================
@@ -330,6 +367,13 @@ fi
 # ============================================================================
 
 nivuus-update() {
+    # Never run the destructive release updater on a git checkout.
+    if _nivuus_is_dev_checkout; then
+        echo "ℹ️  Development checkout detected at $NIVUUS_SHELL_DIR"
+        echo "   Use 'git pull' here instead of the release updater."
+        return 0
+    fi
+
     echo "🔍 Checking for updates..."
 
     # Update check timestamp

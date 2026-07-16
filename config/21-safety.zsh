@@ -13,138 +13,145 @@
 # Dangerous Command Patterns
 # =============================================================================
 
-# Critical patterns that should always warn
+# Critical patterns that should always warn.
+# Keys are POSIX ERE (matched with [[ =~ ]]) and are anchored on path
+# boundaries so that, e.g., "rm -rf /home/project" does NOT match "rm -rf /".
+# The recursive-flag fragment [-][a-z]*[rf][a-z]* matches -r, -f, -rf, -fr, ...
 typeset -gA DANGEROUS_PATTERNS=(
-    # Recursive deletion
-    "rm -rf /"              "Deleting root directory - EXTREMELY DANGEROUS!"
-    "rm -rf /\*"            "Deleting root directory - EXTREMELY DANGEROUS!"
-    "rm -rf ~"              "Deleting home directory - EXTREMELY DANGEROUS!"
-    "rm -rf ~/"             "Deleting home directory - EXTREMELY DANGEROUS!"
-    "rm -rf \$HOME"         "Deleting home directory - EXTREMELY DANGEROUS!"
-    "rm -rf /*"             "Deleting root directory - EXTREMELY DANGEROUS!"
-    "rm -rf \."             "Deleting current directory recursively - DANGEROUS!"
+    # Recursive deletion of a critical top-level target
+    'rm[[:space:]]+-[a-z]*[rf][a-z]*[[:space:]]+(/\*|/|~/|~|\$HOME)([[:space:]]|$)'  "Deleting a critical top-level directory - EXTREMELY DANGEROUS!"
+    'rm[[:space:]]+-[a-z]*[rf][a-z]*[[:space:]]+\.([[:space:]]|$)'                   "Deleting the current directory recursively - DANGEROUS!"
+
+    # Recursive deletion of a system directory
+    'rm[[:space:]]+-[a-z]*[rf][a-z]*[[:space:]]+/(boot|etc|usr|var|lib|bin|sbin)([[:space:]/]|$)'  "Deleting a system directory - SYSTEM FAILURE!"
 
     # Dangerous permissions
-    "chmod -R 777"          "Making everything world-writable - SECURITY RISK!"
-    "chmod 777 /"           "Changing root permissions - EXTREMELY DANGEROUS!"
-    "chown -R"              "Recursive ownership change - verify paths!"
+    'chmod[[:space:]]+-R[[:space:]]+777'          "Making everything world-writable - SECURITY RISK!"
+    'chmod[[:space:]]+777[[:space:]]+/([[:space:]]|$)'  "Changing root permissions - EXTREMELY DANGEROUS!"
 
     # Disk operations
-    "dd if=.*of=/dev/sd"    "Writing to raw disk device - DATA LOSS RISK!"
-    "mkfs"                  "Creating filesystem - WILL DESTROY DATA!"
-    "fdisk"                 "Disk partitioning - DATA LOSS RISK!"
-
-    # System modifications
-    "rm -rf /boot"          "Deleting boot files - SYSTEM WON'T START!"
-    "rm -rf /etc"           "Deleting system config - SYSTEM FAILURE!"
-    "rm -rf /usr"           "Deleting user binaries - SYSTEM FAILURE!"
-    "rm -rf /var"           "Deleting variable data - SYSTEM FAILURE!"
+    'dd[[:space:]].*of=/dev/(sd|nvme|vd|hd)'      "Writing to raw disk device - DATA LOSS RISK!"
+    'mkfs'                                        "Creating filesystem - WILL DESTROY DATA!"
+    '(^|[[:space:]])fdisk([[:space:]]|$)'         "Disk partitioning - DATA LOSS RISK!"
 
     # Package management
-    "apt-get remove.*sudo"  "Removing sudo - YOU'LL LOSE ADMIN ACCESS!"
-    "yum remove.*sudo"      "Removing sudo - YOU'LL LOSE ADMIN ACCESS!"
+    '(apt-get|apt|yum|dnf)[[:space:]]+(remove|purge).*[[:space:]]sudo([[:space:]]|$)'  "Removing sudo - YOU'LL LOSE ADMIN ACCESS!"
 
     # Network
-    "iptables -F"           "Flushing firewall rules - SECURITY RISK!"
-    "iptables -X"           "Deleting firewall chains - SECURITY RISK!"
+    'iptables[[:space:]]+-[FX]([[:space:]]|$)'    "Flushing/deleting firewall rules - SECURITY RISK!"
 )
 
 # Warnings for potentially dangerous but common operations
 typeset -gA WARNING_PATTERNS=(
     # Force flags
-    "rm -rf"                "Recursive force deletion"
-    "rm -fr"                "Recursive force deletion"
-    "git push.*--force"     "Force push - can overwrite remote history"
-    "git push.*-f"          "Force push - can overwrite remote history"
+    'rm[[:space:]]+-[a-z]*[rf][a-z]*[rf][a-z]*'   "Recursive force deletion"
+    'git[[:space:]]+push.*(--force|[[:space:]]-f)([[:space:]]|$)'  "Force push - can overwrite remote history"
 
     # Sensitive operations
-    "sudo rm"               "Removing files as root"
-    "chmod 777"             "Making file world-writable"
-    "chmod.*\+x /usr"       "Modifying system directory permissions"
+    'sudo[[:space:]]+rm([[:space:]]|$)'           "Removing files as root"
+    'chown[[:space:]]+-R'                          "Recursive ownership change - verify paths!"
+    'chmod[[:space:]]+777'                          "Making file world-writable"
 
     # Mass operations
-    "find.*-delete"         "Mass file deletion"
-    "xargs.*rm"             "Mass file deletion via xargs"
+    'find[[:space:]].*-delete'                     "Mass file deletion"
+    'xargs[[:space:]].*[[:space:]]rm([[:space:]]|$)'  "Mass file deletion via xargs"
 )
 
 # =============================================================================
 # Safety Check Function
 # =============================================================================
 
-_nivuus_safety_check() {
-    local cmd="$1"
-
-    # Skip empty commands
-    [[ -z "$cmd" ]] && return 0
-
-    # Check for critical dangerous patterns
+# Pure predicate: echo the danger message for $1, or nothing.
+# No I/O beyond the echo, so it is easy to unit-test.
+_nivuus_match_danger() {
+    local cmd="$1" pattern danger_msg
+    [[ -z "$cmd" ]] && return 1
     for pattern danger_msg in ${(kv)DANGEROUS_PATTERNS}; do
-        # Expand the pattern to handle variables
-        local expanded_pattern=$(echo "$pattern" | sed 's/\\././g')
-
-        if [[ "$cmd" =~ "$expanded_pattern" ]]; then
-            # Critical warning - requires explicit confirmation
-            print ""
-            print -P "⚠️  ${NORD_ERROR}DANGER:${NORD_RESET} $danger_msg"
-            print -P "Command: ${NORD_PATH}$cmd${NORD_RESET}"
-            print ""
-            print -n "Type 'yes' to continue or Ctrl+C to cancel: "
-            read -r response
-
-            if [[ "$response" != "yes" ]]; then
-                print ""
-                print -P "${NORD_ERROR}You must type 'yes' to proceed or press Ctrl+C to cancel.${NORD_RESET}"
-                print -n "Type 'yes' to continue or Ctrl+C to cancel: "
-                read -r response
-
-                if [[ "$response" != "yes" ]]; then
-                    print ""
-                    print -P "${NORD_ERROR}Invalid response. Press Ctrl+C now to cancel!${NORD_RESET}"
-                    sleep 2
-                    return 1
-                fi
-            fi
-
-            print -P "${NORD_ERROR}⚠ Proceeding with dangerous command...${NORD_RESET}"
+        if [[ "$cmd" =~ $pattern ]]; then
+            print -r -- "$danger_msg"
             return 0
         fi
     done
+    return 1
+}
 
-    # Check for warning patterns
+# Pure predicate: echo the warning message for $1, or nothing.
+_nivuus_match_warning() {
+    local cmd="$1" pattern warning_msg
+    [[ -z "$cmd" ]] && return 1
     for pattern warning_msg in ${(kv)WARNING_PATTERNS}; do
-        if [[ "$cmd" =~ "$pattern" ]]; then
-            # Warning - show but allow to proceed
-            print ""
-            print -P "⚠️  ${NORD_FIREBASE}WARNING:${NORD_RESET} $warning_msg"
-            print -P "Command: ${NORD_PATH}$cmd${NORD_RESET}"
-            print -n "Press Enter to continue or Ctrl+C to cancel... "
-            read -r
-
+        if [[ "$cmd" =~ $pattern ]]; then
+            print -r -- "$warning_msg"
             return 0
         fi
     done
+    return 1
+}
+
+# Interactive check. Returns 0 to allow the command, 1 to block it.
+# Reads confirmation from the terminal, so it works from within a ZLE widget.
+_nivuus_safety_confirm() {
+    local cmd="$1" msg
+
+    if msg=$(_nivuus_match_danger "$cmd"); then
+        print -r ""
+        print -rP "⚠️  ${NORD_ERROR}DANGER:${NORD_RESET} $msg"
+        print -rP "Command: ${NORD_PATH}$cmd${NORD_RESET}"
+        print -rn "Type 'yes' to run this command (anything else cancels): "
+        local response
+        read -r response </dev/tty 2>/dev/null || read -r response
+        [[ "$response" == "yes" ]]
+        return
+    fi
+
+    if msg=$(_nivuus_match_warning "$cmd"); then
+        print -r ""
+        print -rP "⚠️  ${NORD_FIREBASE}WARNING:${NORD_RESET} $msg"
+        print -rP "Command: ${NORD_PATH}$cmd${NORD_RESET}"
+        print -rn "Press Enter to run, or Ctrl-C to cancel... "
+        read -r </dev/tty 2>/dev/null || read -r
+        return 0
+    fi
 
     return 0
 }
 
 # =============================================================================
-# Hook into Command Execution
+# Hook into Command Execution (via accept-line ZLE widget)
 # =============================================================================
+# Unlike a preexec hook, an accept-line widget runs BEFORE the line is
+# submitted, so it can truly prevent execution by clearing the buffer.
 
-# ZSH preexec hook - runs before command execution
-_nivuus_preexec_safety() {
-    local cmd="$1"
+_nivuus_safety_accept_line() {
+    if _nivuus_match_danger "$BUFFER" >/dev/null || \
+       _nivuus_match_warning "$BUFFER" >/dev/null; then
+        # Take over the display to prompt interactively.
+        zle -I
+        if ! _nivuus_safety_confirm "$BUFFER"; then
+            print -rP "${NORD_ERROR}✗ Command cancelled${NORD_RESET}"
+            BUFFER=""
+            zle reset-prompt
+            return 0
+        fi
+    fi
 
-    # Run safety check (blocks until user responds)
-    # If user cancels, the function returns 1, but note that we cannot
-    # prevent command execution at this stage (preexec runs too late).
-    # User must press Ctrl+C during the confirmation prompt to truly cancel.
-    _nivuus_safety_check "$cmd"
+    # Delegate to the previous accept-line (preserves plugin behaviour such
+    # as zsh-autosuggestions), falling back to the builtin.
+    if [[ -n "${widgets[_nivuus_orig_accept_line]}" ]]; then
+        zle _nivuus_orig_accept_line
+    else
+        zle .accept-line
+    fi
 }
 
-# Register the hook
-autoload -U add-zsh-hook
-add-zsh-hook preexec _nivuus_preexec_safety
+# Only wrap accept-line in an interactive shell with ZLE available.
+if [[ -o interactive ]] && zle -l >/dev/null 2>&1; then
+    # Preserve any existing accept-line widget under a new name, then wrap it.
+    if [[ "${widgets[accept-line]}" == user:* ]]; then
+        zle -A accept-line _nivuus_orig_accept_line
+    fi
+    zle -N accept-line _nivuus_safety_accept_line
+fi
 
 # =============================================================================
 # Safe Alternatives
