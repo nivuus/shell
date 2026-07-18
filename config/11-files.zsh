@@ -116,10 +116,7 @@ size() {
 # Safe Operations
 # =============================================================================
 
-# Safer rm (ask before deleting)
-alias rm='rm -i'
-alias cp='cp -i'
-alias mv='mv -i'
+# rm/cp/mv -i live in 15-aliases.zsh, guarded on an interactive shell.
 
 # =============================================================================
 # Modern Tool Suggestions
