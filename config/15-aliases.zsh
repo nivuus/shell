@@ -16,10 +16,14 @@ alias -- -='cd -'                  # Go to previous directory
 # Safety
 # =============================================================================
 
-alias rm='rm -i'                   # Confirm before removing
-alias cp='cp -i'                   # Confirm before overwriting
-alias mv='mv -i'                   # Confirm before overwriting
-alias ln='ln -i'                   # Confirm before overwriting
+# Interactive only: -i blocks on a confirmation prompt nothing can answer in a
+# script, cron job or agent shell, so the command fails or hangs silently.
+if [[ -o interactive ]]; then
+    alias rm='rm -i'               # Confirm before removing
+    alias cp='cp -i'               # Confirm before overwriting
+    alias mv='mv -i'               # Confirm before overwriting
+    alias ln='ln -i'               # Confirm before overwriting
+fi
 
 # =============================================================================
 # Shortcuts

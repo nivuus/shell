@@ -33,28 +33,35 @@ setup() {
 # Safety Aliases
 # =============================================================================
 
-@test "rm alias includes -i flag for confirmation" {
-    run zsh -c "source '$NIVUUS_SHELL_DIR/config/15-aliases.zsh' && alias rm"
+@test "rm alias includes -i flag in an interactive shell" {
+    run zsh -ic "source '$NIVUUS_SHELL_DIR/config/15-aliases.zsh' && alias rm"
     [ "$status" -eq 0 ]
     [[ "$output" == *"-i"* ]]
 }
 
-@test "cp alias includes -i flag for confirmation" {
-    run zsh -c "source '$NIVUUS_SHELL_DIR/config/15-aliases.zsh' && alias cp"
+@test "cp alias includes -i flag in an interactive shell" {
+    run zsh -ic "source '$NIVUUS_SHELL_DIR/config/15-aliases.zsh' && alias cp"
     [ "$status" -eq 0 ]
     [[ "$output" == *"-i"* ]]
 }
 
-@test "mv alias includes -i flag for confirmation" {
-    run zsh -c "source '$NIVUUS_SHELL_DIR/config/15-aliases.zsh' && alias mv"
+@test "mv alias includes -i flag in an interactive shell" {
+    run zsh -ic "source '$NIVUUS_SHELL_DIR/config/15-aliases.zsh' && alias mv"
     [ "$status" -eq 0 ]
     [[ "$output" == *"-i"* ]]
 }
 
-@test "ln alias includes -i flag for confirmation" {
-    run zsh -c "source '$NIVUUS_SHELL_DIR/config/15-aliases.zsh' && alias ln"
+@test "ln alias includes -i flag in an interactive shell" {
+    run zsh -ic "source '$NIVUUS_SHELL_DIR/config/15-aliases.zsh' && alias ln"
     [ "$status" -eq 0 ]
     [[ "$output" == *"-i"* ]]
+}
+
+@test "confirmation aliases are absent in a non-interactive shell" {
+    for cmd in rm cp mv ln; do
+        run zsh -c "source '$NIVUUS_SHELL_DIR/config/15-aliases.zsh' && alias $cmd"
+        [ "$status" -ne 0 ]
+    done
 }
 
 # =============================================================================
