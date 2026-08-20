@@ -38,7 +38,7 @@ L'installeur actuel (`install.sh`, 590 lignes) empêche l'adoption :
 | 7 | Le « one-liner » du README est un `git clone /tmp` + `rm -rf` | élevée |
 | 8 | `init_git_repo()` crée un dépôt git dans `~/.nivuus-shell`, que l'updater interprète comme un « dev checkout » et refuse alors de mettre à jour — **toute installation via le one-liner a l'auto-update silencieusement désactivé** | bloquant |
 | 9 | CI `ubuntu-latest` uniquement, aucun test d'installation réelle : `tests/e2e/test_installation.bats` ne fait que vérifier l'existence de fichiers et `--help`, et les suites `e2e/` et `integration/` ne sont **jamais exécutées** par la CI | bloquant |
-| 10 | Fichiers `.zwc` compilés commités, provoquant des erreurs de permission masquées par `grep -v "Permission denied"` | hygiène |
+| 10 | ~~Fichiers `.zwc` compilés commités~~ — **corrigé le 2026-08-20 : faux**. `.gitignore` couvre déjà `*.zwc` et `git ls-files 'config/*.zwc'` renvoie 0. Subsiste néanmoins le `grep -v "Permission denied"` qui masque les erreurs de copie, et un effet de bord vérifié : les `.zwc` **locaux** (non versionnés) font passer `tests/unit/test_ai_suggestions.bats` dans un checkout de travail alors qu'il échoue sur un checkout propre — zsh charge le bytecode périmé au lieu du source. Hors périmètre de ce chantier. | hygiène |
 
 ## Approche retenue
 
@@ -294,8 +294,8 @@ badge dédié **« uninstall verified »**.
   le nettoyer, pour débloquer les installations existantes.
 - **`bin/healthcheck` → `nivuus doctor`** (alias conservé), enrichi de ce que le
   manifeste permet : installation partielle, `.zshrc` divergent, bloc corrompu.
-- **`.zwc` retirés du dépôt** et ajoutés au `.gitignore` ; suppression du
-  `grep -v "Permission denied"` qui masquait le symptôme.
+- **Suppression du `grep -v "Permission denied"`** qui masquait les erreurs de
+  copie. (Les `.zwc` sont déjà ignorés par git : rien à retirer du dépôt.)
 
 ### Hors périmètre
 

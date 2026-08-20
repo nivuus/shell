@@ -1882,8 +1882,7 @@ git commit -m "test(e2e): prove uninstall leaves HOME bit-identical"
 
 **Files:**
 - Modify: `.github/workflows/tests.yml`
-- Modify: `.gitignore`
-- Delete: `config/*.zwc`
+(Les `.zwc` sont déjà couverts par `.gitignore` et non suivis par git — vérifié : `git ls-files 'config/*.zwc'` renvoie 0. Aucune action de dé-suivi n'est nécessaire.)
 
 **Interfaces:**
 - Consumes: toutes les suites précédentes
@@ -1893,13 +1892,6 @@ git commit -m "test(e2e): prove uninstall leaves HOME bit-identical"
 
 Run: `grep -c "tests/e2e" .github/workflows/tests.yml || true`
 Expected: `0` — confirme que les tests e2e ne tournent jamais en CI.
-
-- [ ] **Step 2: Remove the committed bytecode**
-
-```bash
-git rm --cached config/*.zwc
-printf '\n# Bytecode ZSH compilé — jamais commité\n*.zwc\n' >> .gitignore
-```
 
 - [ ] **Step 3: Add the e2e job**
 
@@ -1927,11 +1919,14 @@ Ajouter dans `.github/workflows/tests.yml`, au même niveau que les jobs existan
 
 - [ ] **Step 4: Verify locally before pushing**
 
-Run: `bats tests/unit/ tests/e2e/`
-Expected: PASS. Vérifier ensuite qu'aucun `.zwc` n'est suivi par git :
+Run: `bats tests/unit/test_lib_*.bats tests/e2e/`
+Expected: PASS.
 
-Run: `git ls-files '*.zwc' | wc -l`
-Expected: `0`
+**Attention :** `bats tests/unit/` en entier contient un échec **préexistant et
+hors périmètre** — `test_ai_suggestions.bats` test 6 (`_ai_spinner_tick`), qui
+échoue sur tout checkout propre et ne passe en local que parce que zsh charge un
+`.zwc` périmé. Ne pas tenter de le corriger dans ce chantier ; ne pas non plus
+l'ajouter au job CI de cette tâche.
 
 - [ ] **Step 5: Commit**
 
@@ -1947,10 +1942,9 @@ git commit -m "ci: run library and installation E2E suites, drop committed .zwc"
 Une fois les 12 tâches terminées, ces commandes doivent toutes réussir :
 
 ```bash
-bats tests/unit/ tests/e2e/          # toutes les suites
-./bin/nivuus install --dry-run --yes # n'écrit rien, décrit tout
-git ls-files '*.zwc' | wc -l         # 0
-grep -rn "init_git_repo" install.sh  # aucun résultat
+bats tests/unit/test_lib_*.bats tests/e2e/   # les suites de ce chantier
+./bin/nivuus install --dry-run --yes         # n'écrit rien, décrit tout
+grep -rn "init_git_repo" install.sh          # aucun résultat
 ```
 
 ## Ce que ce plan ne livre pas
