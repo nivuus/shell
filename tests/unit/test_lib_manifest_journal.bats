@@ -62,3 +62,26 @@ teardown() { rm -rf "$TMP"; }
     nivuus_manifest_commit
     [ ! -d "$NIVUUS_STATE_DIR" ]
 }
+
+@test "manifest_each on a header-only manifest yields nothing and returns 0" {
+    nivuus_manifest_begin user "$TMP/install"
+    nivuus_manifest_commit
+    collect() { printf '%s:%s ' "$1" "$2"; }
+    run nivuus_manifest_each collect
+    [ "$status" -eq 0 ]
+    [ "$output" = "" ]
+}
+
+@test "manifest_each survives a set -o pipefail caller with a header-only manifest" {
+    nivuus_manifest_begin user "$TMP/install"
+    nivuus_manifest_commit
+    run bash -c "set -euo pipefail
+        source '$LIB/log.sh'
+        source '$LIB/manifest.sh'
+        NIVUUS_MANIFEST='$NIVUUS_MANIFEST'
+        noop() { :; }
+        nivuus_manifest_each noop
+        echo SURVIVED"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"SURVIVED"* ]]
+}

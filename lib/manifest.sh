@@ -58,7 +58,7 @@ nivuus_manifest_each() {
     local callback="$1"
     [ -f "$NIVUUS_MANIFEST" ] || return 0
     # tail -r n'existe pas partout ; on inverse avec sed.
-    grep -v '^#' "$NIVUUS_MANIFEST" | sed '1!G;h;$!d' | while IFS="$NIVUUS_TAB" read -r a p h r; do
+    { grep -v '^#' "$NIVUUS_MANIFEST" || true; } | sed '1!G;h;$!d' | while IFS="$NIVUUS_TAB" read -r a p h r; do
         [ -n "$a" ] || continue
         "$callback" "$a" "$p" "$h" "$r"
     done
