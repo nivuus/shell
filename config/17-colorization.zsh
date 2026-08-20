@@ -108,6 +108,19 @@ if command -v delta &>/dev/null; then
 fi
 
 # =============================================================================
+# fzf with Nord colors (also styles the fzf-tab completion popup)
+# =============================================================================
+
+if command -v fzf &>/dev/null; then
+    export FZF_DEFAULT_OPTS="${FZF_DEFAULT_OPTS:-"\
+--color=bg+:#3B4252,bg:#2E3440,spinner:#81A1C1,hl:#88C0D0 \
+--color=fg:#D8DEE9,header:#616E88,info:#81A1C1,pointer:#81A1C1 \
+--color=marker:#A3BE8C,fg+:#ECEFF4,prompt:#81A1C1,hl+:#88C0D0 \
+--color=border:#4C566A,gutter:#2E3440 \
+--layout=reverse --border=rounded"}"
+fi
+
+# =============================================================================
 # ripgrep with Nord colors
 # =============================================================================
 
@@ -177,6 +190,7 @@ Modern Tools:
   less              - bat as pager
   git diff          - delta with Nord theme
   img, showimg      - timg for terminal image display
+  TAB completion    - fzf-tab popup with Nord theme (see fzf below)
 
 Colorized Commands (via grc):
   tail, ping, ps, df, du, netstat, dig
@@ -187,6 +201,7 @@ Configuration:
   bat:     $BAT_THEME (Nord)
   grep:    $GREP_COLORS
   delta:   Git config (Nord theme)
+  fzf:     $FZF_DEFAULT_OPTS (override before this file loads to customize)
 
 Install missing tools:
   cargo install eza bat git-delta ripgrep

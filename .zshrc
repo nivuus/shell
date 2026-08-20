@@ -70,6 +70,7 @@ config_files=(
     20-terminal-title.zsh
     21-safety.zsh
     22-ai-errors.zsh
+    23-terminal-sanity.zsh
     98-syntax.zsh
     99-cleanup.zsh
 )

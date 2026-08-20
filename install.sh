@@ -271,6 +271,52 @@ EOF
     print_success "Created version file (v$VERSION)"
 }
 
+# Install fzf + fzf-tab (real multi-select on TAB in completion menus)
+install_fzf_tab() {
+    echo ""
+    echo "Setting up fzf-tab (multi-select completion)..."
+
+    # Install fzf itself if missing (best-effort, never fatal)
+    if ! command -v fzf &>/dev/null; then
+        if command -v apt-get &>/dev/null; then
+            sudo apt-get install -y fzf &>/dev/null && print_success "Installed fzf" \
+                || print_warning "Could not install fzf automatically (install it manually for multi-select completion)"
+        elif command -v dnf &>/dev/null; then
+            sudo dnf install -y fzf &>/dev/null && print_success "Installed fzf" \
+                || print_warning "Could not install fzf automatically (install it manually for multi-select completion)"
+        elif command -v yum &>/dev/null; then
+            sudo yum install -y fzf &>/dev/null && print_success "Installed fzf" \
+                || print_warning "Could not install fzf automatically (install it manually for multi-select completion)"
+        elif command -v brew &>/dev/null; then
+            brew install fzf &>/dev/null && print_success "Installed fzf" \
+                || print_warning "Could not install fzf automatically (install it manually for multi-select completion)"
+        elif command -v pacman &>/dev/null; then
+            sudo pacman -S --noconfirm fzf &>/dev/null && print_success "Installed fzf" \
+                || print_warning "Could not install fzf automatically (install it manually for multi-select completion)"
+        else
+            print_warning "No known package manager found - install fzf manually for multi-select completion"
+        fi
+    else
+        print_success "fzf already installed"
+    fi
+
+    # Vendor the fzf-tab plugin (not packaged by distros, so we manage it ourselves)
+    local fzf_tab_dir="$INSTALL_DIR/plugins/fzf-tab"
+    if command -v git &>/dev/null; then
+        if [[ -d "$fzf_tab_dir/.git" ]]; then
+            git -C "$fzf_tab_dir" pull --ff-only &>/dev/null && print_success "Updated fzf-tab plugin" \
+                || print_warning "Could not update fzf-tab plugin (keeping existing copy)"
+        else
+            rm -rf "$fzf_tab_dir" 2>/dev/null
+            git clone --depth 1 https://github.com/Aloxaf/fzf-tab.git "$fzf_tab_dir" &>/dev/null \
+                && print_success "Installed fzf-tab plugin" \
+                || print_warning "Could not clone fzf-tab plugin (multi-select completion will stay disabled)"
+        fi
+    else
+        print_warning "git not found - skipping fzf-tab plugin install"
+    fi
+}
+
 # Create local configuration file
 create_local_config() {
     if [[ -f "$HOME/.zsh_local" ]]; then
@@ -494,6 +540,9 @@ main() {
 
     # Install Nivuus Shell
     install_nivuus
+
+    # Install fzf-tab (multi-select completion)
+    install_fzf_tab
 
     # Create local configuration
     create_local_config
