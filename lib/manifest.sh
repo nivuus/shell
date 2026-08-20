@@ -197,7 +197,7 @@ _nivuus_place() {
         new_hash="$(nivuus_hash_file "$src")"
     else
         nivuus_mkdir_p "$(dirname "$dst")"
-        cp -p "$src" "$dst"
+        cp -p "$src" "$dst" || return 1
         new_hash="$(nivuus_hash_file "$dst")"
     fi
 

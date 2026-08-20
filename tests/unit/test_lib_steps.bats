@@ -22,6 +22,28 @@ setup() {
 
 teardown() { rm -rf "$TMP"; }
 
+@test "copy_tree propagates a failure instead of reporting success" {
+    # Force nivuus_install_file to fail on config/00-core.zsh: its parent
+    # directory in the target ("config") is pre-created as a plain FILE, so
+    # mkdir -p (and then cp) cannot possibly succeed, root or not.
+    mkdir -p "$TMP/install"
+    printf 'not a directory\n' > "$TMP/install/config"
+    run nivuus_step_copy_tree "$SRC" "$TMP/install"
+    [ "$status" -ne 0 ]
+}
+
+@test "copy_tree tolerates a source path with glob metacharacters" {
+    GLOBSRC="$TMP/weird[1]"
+    mkdir -p "$GLOBSRC/config"
+    printf 'core\n' > "$GLOBSRC/config/00-core.zsh"
+    nivuus_step_copy_tree "$GLOBSRC" "$TMP/install2"
+    # The relative path must be stripped correctly: the file lands at
+    # config/00-core.zsh under the target, not re-nested under the
+    # (glob-matched) source path.
+    [ -f "$TMP/install2/config/00-core.zsh" ]
+    [ ! -d "$TMP/install2/tmp" ]
+}
+
 @test "copy_tree copies config, themes and bin" {
     nivuus_step_copy_tree "$SRC" "$TMP/install"
     [ -f "$TMP/install/config/00-core.zsh" ]
