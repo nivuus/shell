@@ -104,20 +104,23 @@ teardown() { rm -rf "$TMP"; }
     [[ "$output" == *"curl"* ]]
 }
 
-@test "check_required_deps never executes a package manager" {
-    mkdir -p "$TMP/fakebin"
-    # Tripwires: if any of these is executed, it leaves evidence.
-    for tool in sudo apt-get dnf pacman brew; do
-        printf '#!/bin/sh\n: > "%s/EXECUTED-%s"\n' "$TMP" "$tool" > "$TMP/fakebin/$tool"
-        chmod +x "$TMP/fakebin/$tool"
+@test "check_required_deps never executes any package manager" {
+    for mgr in apt-get dnf pacman brew; do
+        rm -rf "$TMP/fakebin" "$TMP"/EXECUTED-*
+        mkdir -p "$TMP/fakebin"
+        for tool in sudo "$mgr"; do
+            printf '#!/bin/sh\n: > "%s/EXECUTED-%s"\n' "$TMP" "$tool" > "$TMP/fakebin/$tool"
+            chmod +x "$TMP/fakebin/$tool"
+        done
+        run bash -c "
+            PATH='$TMP/fakebin'
+            source '$LIB/log.sh'
+            source '$LIB/steps.sh'
+            nivuus_step_check_required_deps
+        "
+        [ "$status" -eq 1 ]
+        [[ "$output" == *"$mgr"* ]]          # la bonne commande est bien suggérée
+        run ls "$TMP"
+        [[ "$output" != *"EXECUTED-"* ]]     # ...mais jamais exécutée
     done
-    run bash -c "
-        PATH='$TMP/fakebin'
-        source '$LIB/log.sh'
-        source '$LIB/steps.sh'
-        nivuus_step_check_required_deps
-    "
-    [ "$status" -eq 1 ]
-    run ls "$TMP"
-    [[ "$output" != *"EXECUTED-"* ]]
 }
