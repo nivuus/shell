@@ -195,8 +195,18 @@ nivuus_restore_entry() {
             if [ "$current" = "-" ]; then
                 return 0                      # déjà absent
             elif [ "$current" = "$hash" ]; then
-                if [ -n "${NIVUUS_DRY_RUN:-}" ]; then log_dry "supprimerait $path"
-                else rm -f "$path"; fi
+                if [ -n "${NIVUUS_DRY_RUN:-}" ]; then
+                    log_dry "supprimerait $path"
+                else
+                    rm -f "$path"
+                    # zsh peut avoir compilé ce fichier pendant la session
+                    # (config/99-cleanup.zsh, config/03-completion.zsh) sans
+                    # jamais passer par le manifeste : un .zwc orphelin ne
+                    # doit pas survivre au fichier source qu'il compile. On
+                    # ne le supprime que parce que le fichier source lui-même
+                    # vient d'être traité (jamais à l'aveugle).
+                    [ -f "$path.zwc" ] && rm -f "$path.zwc"
+                fi
             else
                 log_warn "Conservé (modifié depuis l'installation) : $path"
             fi
@@ -212,8 +222,21 @@ nivuus_restore_entry() {
                 log_warn "Sauvegarde introuvable pour $path, fichier conservé"
                 return 0
             fi
-            if [ -n "${NIVUUS_DRY_RUN:-}" ]; then log_dry "restaurerait $path"
-            else cp -p "$NIVUUS_BACKUP_DIR/$ref" "$path"; fi
+            if [ -n "${NIVUUS_DRY_RUN:-}" ]; then
+                log_dry "restaurerait $path"
+            else
+                cp -p "$NIVUUS_BACKUP_DIR/$ref" "$path"
+                # cp -p préserve l'horodatage d'origine (antérieur à
+                # l'installation), qui peut être plus vieux que le .zwc écrit
+                # pendant la session : zsh préférerait alors le bytecode
+                # compilé -- qui source encore un répertoire que l'uninstall
+                # vient de supprimer -- au fichier texte restauré. On force
+                # donc le fichier restauré à être strictement plus récent que
+                # tout .zwc frère, et on supprime ce dernier : son contenu ne
+                # correspond de toute façon plus au fichier restauré.
+                touch "$path"
+                [ -f "$path.zwc" ] && rm -f "$path.zwc"
+            fi
             ;;
         MKDIR)
             if [ -n "${NIVUUS_DRY_RUN:-}" ]; then

@@ -82,6 +82,29 @@ teardown() { rm -rf "$TMP"; }
     [ "$status" -eq 0 ]
 }
 
+@test "install, use the shell once, then uninstall still leaves HOME bit-identical" {
+    command -v zsh >/dev/null 2>&1 || skip "zsh not available"
+    printf 'export MINE=42\n' > "$HOME/.zshrc"
+
+    fs_fingerprint "$HOME" > "$TMP/before"
+    "$NIVUUS" install --yes --prefix "$HOME/.nivuus-shell"
+    # An ordinary interactive session: zcompile of .zshrc, config/*.zsh and
+    # the compdump all happen here, none of it through the manifest.
+    NIVUUS_NO_COMPILE=0 zsh -i -c true
+    "$NIVUUS" uninstall --yes --purge
+    fs_fingerprint "$HOME" > "$TMP/after"
+
+    run diff "$TMP/before" "$TMP/after"
+    [ "$status" -eq 0 ]
+
+    # The sharpest edge of all: the shell must still start cleanly afterwards
+    # (a stale .zwc newer than a restored .zshrc used to source a directory
+    # uninstall had just deleted).
+    run zsh -i -c 'echo POST_UNINSTALL_OK'
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"POST_UNINSTALL_OK"* ]]
+}
+
 @test "uninstall keeps a pre-existing ~/.local/state with foreign content" {
     mkdir -p "$HOME/.local/state/someapp"
     printf 'foreign\n' > "$HOME/.local/state/someapp/data"

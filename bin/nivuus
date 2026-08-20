@@ -106,6 +106,20 @@ cmd_uninstall() {
         if [ -f "$HOME/.zsh_local" ]; then
             log_info "~/.zsh_local n'a pas été créé par Nivuus : conservé. Supprime-le à la main si tu le souhaites."
         fi
+        # Artefacts d'exécution écrits par le shell une fois la session
+        # démarrée (config/20-autoupdate.zsh, config/22-ai-errors.zsh, etc.),
+        # donc jamais journalisés au moment de l'installation. Reconnus par
+        # leur nom exact -- propre à Nivuus -- jamais par un motif large :
+        # aucun rm -rf sur un répertoire qui pourrait contenir autre chose.
+        [ -f "$HOME/.nivuus-shell-last-update-check" ] && rm -f "$HOME/.nivuus-shell-last-update-check"
+        if [ -d "$HOME/.cache/nivuus-shell" ]; then
+            find "$HOME/.cache/nivuus-shell" -type f -exec rm -f {} +
+            find "$HOME/.cache/nivuus-shell" -depth -type d -exec rmdir {} + 2>/dev/null || true
+            # ~/.cache lui-même n'est pas à nous (d'autres apps y écrivent) :
+            # rmdir échoue silencieusement s'il contient autre chose, ne le
+            # supprime que s'il ne restait que le sous-répertoire Nivuus.
+            rmdir "$HOME/.cache" 2>/dev/null || true
+        fi
         # ~/.local, ~/.local/state et l'état Nivuus lui-même sont journalisés
         # en MKDIR par nivuus_manifest_begin, comme toute autre mutation :
         # rien n'est deviné ici. Mais nivuus_manifest_rollback (déjà exécuté
