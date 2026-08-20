@@ -51,6 +51,20 @@ EOF
     [[ "$output" == *"✓"* ]]
 }
 
+@test "ask works end-to-end under GEMINI_AUTH_MODE=cli" {
+    local fake_bin_dir="$BATS_TEST_TMPDIR/fake-agy-e2e"
+    mkdir -p "$fake_bin_dir"
+    cat > "$fake_bin_dir/agy" <<'EOF'
+#!/usr/bin/env bash
+echo '{"response":"mocked e2e response","status":"SUCCESS"}'
+EOF
+    chmod +x "$fake_bin_dir/agy"
+
+    run zsh -c "export PATH=\"$fake_bin_dir:\$PATH\" GEMINI_AUTH_MODE=cli; unset GOOGLE_API_KEY; source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh'; source '$NIVUUS_SHELL_DIR/config/09-ai-backend-gemini.zsh'; source '$NIVUUS_SHELL_DIR/config/09-ai-backend-openai.zsh'; source '$NIVUUS_SHELL_DIR/config/09-ai-backend-anthropic.zsh'; source '$NIVUUS_SHELL_DIR/config/10-ai.zsh'; ask 'test question'"
+    [ "$status" -eq 0 ]
+    [ "$output" = "mocked e2e response" ]
+}
+
 # =============================================================================
 # AI Suggestions Module Tests
 # =============================================================================

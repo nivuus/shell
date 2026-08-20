@@ -46,6 +46,41 @@ setup() {
     [[ "$output" == *"unknown backend 'bogus'"* ]]
 }
 
+@test "_ai_json_escape flattens raw control characters into valid JSON" {
+    run zsh -c "
+source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh'
+s=\$'a\x01b'
+esc=\$(_ai_json_escape \"\$s\")
+printf '{\"x\":\"%s\"}' \"\$esc\"
+"
+    [ "$status" -eq 0 ]
+    echo "$output" | jq . >/dev/null
+}
+
+@test "_ai_credentials_ok is true for gemini cli mode when agy is installed" {
+    local fake_bin_dir="$BATS_TEST_TMPDIR/fake-agy-creds-ok"
+    mkdir -p "$fake_bin_dir"
+    cat > "$fake_bin_dir/agy" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+    chmod +x "$fake_bin_dir/agy"
+
+    run zsh -c "export PATH='$fake_bin_dir:\$PATH' GEMINI_AUTH_MODE=cli; source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh'; _ai_credentials_ok && echo ok"
+    [ "$status" -eq 0 ]
+    [ "$output" = "ok" ]
+}
+
+@test "_ai_credentials_ok is false for gemini cli mode when agy is missing" {
+    run zsh -c "export PATH='/nonexistent-bin-only' GEMINI_AUTH_MODE=cli; source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh'; _ai_credentials_ok"
+    [ "$status" -eq 1 ]
+}
+
+@test "_ai_credentials_ok falls back to _ai_get_api_key for gemini api-key mode" {
+    run zsh -c "export GOOGLE_API_KEY=test-key; source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh'; source '$NIVUUS_SHELL_DIR/config/09-ai-backend-gemini.zsh'; _ai_credentials_ok"
+    [ "$status" -eq 0 ]
+}
+
 # --- Gemini backend (api-key mode) ---
 
 @test "gemini backend parses candidates text via curl+jq" {
@@ -54,9 +89,11 @@ setup() {
     # in this process is invisible to that subprocess. So the mock must be a
     # real executable on PATH, not a shell function.
     local mock_bin="$BATS_TEST_TMPDIR/bin"
+    local arg_log="$BATS_TEST_TMPDIR/curl-args-gemini.log"
     mkdir -p "$mock_bin"
-    cat > "$mock_bin/curl" <<'MOCK'
+    cat > "$mock_bin/curl" <<MOCK
 #!/usr/bin/env bash
+printf '%s\n' "\$*" >> "$arg_log"
 printf '%s' '{"candidates":[{"content":{"parts":[{"text":"mocked gemini response"}]}}]}'
 MOCK
     chmod +x "$mock_bin/curl"
@@ -70,6 +107,13 @@ _ai_backend_gemini_call "hello" "gemini-3.5-flash-lite" 100 0.3 5
 '
     [ "$status" -eq 0 ]
     [ "$output" = "mocked gemini response" ]
+
+    # Assert URL/payload construction
+    grep -q "generateContent" "$arg_log"
+    grep -q "key=test-key" "$arg_log"
+    local payload
+    payload=$(grep -o "\-d {.*}" "$arg_log" | sed 's/^-d //')
+    echo "$payload" | jq . >/dev/null
 }
 
 @test "gemini backend fails when no API key is configured" {
@@ -91,9 +135,11 @@ _ai_backend_gemini_call "hello"
     # in this process is invisible to that subprocess. So the mock must be a
     # real executable on PATH, not a shell function.
     local mock_bin="$BATS_TEST_TMPDIR/bin"
+    local arg_log="$BATS_TEST_TMPDIR/curl-args-openai.log"
     mkdir -p "$mock_bin"
-    cat > "$mock_bin/curl" <<'MOCK'
+    cat > "$mock_bin/curl" <<MOCK
 #!/usr/bin/env bash
+printf '%s\n' "\$*" >> "$arg_log"
 printf '%s' '{"choices":[{"message":{"content":"mocked openai response"}}]}'
 MOCK
     chmod +x "$mock_bin/curl"
@@ -107,6 +153,13 @@ _ai_backend_openai_call "hello" "gpt-5.6-luna" 100 0.3 5
 '
     [ "$status" -eq 0 ]
     [ "$output" = "mocked openai response" ]
+
+    # Assert URL/headers/payload construction
+    grep -q "https://api.openai.com/v1/chat/completions" "$arg_log"
+    grep -q "Authorization: Bearer test-key" "$arg_log"
+    local payload
+    payload=$(grep -o "\-d {.*}" "$arg_log" | sed 's/^-d //')
+    echo "$payload" | jq . >/dev/null
 }
 
 @test "openai backend fails when no API key is configured" {
@@ -146,9 +199,11 @@ _ai_backend_openai_call "hello"
     # in this process is invisible to that subprocess. So the mock must be a
     # real executable on PATH, not a shell function.
     local mock_bin="$BATS_TEST_TMPDIR/bin"
+    local arg_log="$BATS_TEST_TMPDIR/curl-args-anthropic.log"
     mkdir -p "$mock_bin"
-    cat > "$mock_bin/curl" <<'MOCK'
+    cat > "$mock_bin/curl" <<MOCK
 #!/usr/bin/env bash
+printf '%s\n' "\$*" >> "$arg_log"
 printf '%s' '{"content":[{"type":"text","text":"mocked anthropic response"}]}'
 MOCK
     chmod +x "$mock_bin/curl"
@@ -162,6 +217,14 @@ _ai_backend_anthropic_call "hello" "claude-haiku-4-5" 100 0.3 5
 '
     [ "$status" -eq 0 ]
     [ "$output" = "mocked anthropic response" ]
+
+    # Assert URL/headers/payload construction
+    grep -q "https://api.anthropic.com/v1/messages" "$arg_log"
+    grep -q "x-api-key: test-key" "$arg_log"
+    grep -q "anthropic-version: 2023-06-01" "$arg_log"
+    local payload
+    payload=$(grep -o "\-d {.*}" "$arg_log" | sed 's/^-d //')
+    echo "$payload" | jq . >/dev/null
 }
 
 @test "anthropic backend fails when no API key is configured" {
