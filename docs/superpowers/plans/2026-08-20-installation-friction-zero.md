@@ -35,7 +35,7 @@
 
 **Interfaces:**
 - Consumes: rien
-- Produces: `log_info(msg)`, `log_ok(msg)`, `log_warn(msg)`, `log_error(msg)`, `log_dry(msg)` — tous écrivent sur stdout sauf `log_error` (stderr) ; honorent `NIVUUS_QUIET=1` (seuls `log_warn`/`log_error` survivent) et désactivent les couleurs si stdout n'est pas un TTY ou si `NO_COLOR` est défini.
+- Produces: `log_info(msg)`, `log_ok(msg)`, `log_warn(msg)`, `log_error(msg)`, `log_dry(msg)` — `log_warn` et `log_error` écrivent sur **stderr** (convention Unix), les trois autres sur stdout ; honorent `NIVUUS_QUIET=1` (seuls `log_warn`/`log_error` survivent) et désactivent les couleurs si stdout n'est pas un TTY ou si `NO_COLOR` est défini.
 
 - [ ] **Step 1: Write the failing test**
 
