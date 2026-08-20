@@ -36,3 +36,4 @@ tests/fixtures/python_project/
 tests/fixtures/.firebaserc
 coverage/
 .coverage
+.worktrees
