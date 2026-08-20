@@ -66,9 +66,42 @@ teardown() { rm -rf "$TMP"; }
     [ -f "$TMP/d/keep" ]
 }
 
-@test "PKG entries are ignored by rollback" {
+@test "CHSH restoration never executes chsh" {
+    mkdir -p "$TMP/fakebin"
+    printf '#!/bin/sh\n: > "%s/EXECUTED-chsh"\n' "$TMP" > "$TMP/fakebin/chsh"
+    chmod +x "$TMP/fakebin/chsh"
+
+    nivuus_manifest_record CHSH "$HOME" - /bin/bash
+    nivuus_manifest_commit
+
+    # Le vrai PATH reste accessible (nivuus_manifest_each dépend de grep/sed
+    # externes) mais fakebin passe devant : le faux chsh masque le vrai.
+    run bash -c "
+        PATH='$TMP/fakebin:$PATH'
+        source '$LIB/log.sh'
+        source '$LIB/manifest.sh'
+        NIVUUS_MANIFEST='$NIVUUS_MANIFEST'
+        NIVUUS_BACKUP_DIR='$NIVUUS_BACKUP_DIR'
+        nivuus_manifest_rollback
+    "
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"/bin/bash"* ]]      # la commande est bien indiquée...
+    run ls "$TMP"
+    [[ "$output" != *"EXECUTED-chsh"* ]]  # ...mais jamais exécutée
+}
+
+@test "PKG entries are ignored by rollback without warning" {
     nivuus_manifest_record PKG fzf - apt-get
     nivuus_manifest_commit
     run nivuus_manifest_rollback
     [ "$status" -eq 0 ]
+    [[ "$output" != *"inconnue"* ]]
+}
+
+@test "an unknown manifest action warns but does not abort rollback" {
+    nivuus_manifest_record BOGUS "$TMP/whatever" - -
+    nivuus_manifest_commit
+    run nivuus_manifest_rollback
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"inconnue"* ]]
 }

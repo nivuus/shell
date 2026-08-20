@@ -186,6 +186,9 @@ nivuus_restore_entry() {
         PKG)
             return 0    # jamais désinstallé
             ;;
+        *)
+            log_warn "Action de manifeste inconnue, ignorée : $action ($path)"
+            ;;
     esac
     return 0
 }
