@@ -54,6 +54,16 @@ teardown() { rm -rf "$TMP"; }
     [ ! -e "$TMP/target/.git" ]
 }
 
+@test "the installed CLI (not the repo checkout) works standalone" {
+    "$NIVUUS" install --yes --prefix "$TMP/target"
+    run "$TMP/target/bin/nivuus" uninstall --dry-run
+    [ "$status" -eq 0 ]
+    run "$TMP/target/bin/nivuus" help
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"install"* ]]
+    [[ "$output" == *"uninstall"* ]]
+}
+
 @test "install twice is idempotent" {
     "$NIVUUS" install --yes --prefix "$TMP/target"
     cp "$HOME/.zshrc" "$TMP/zshrc.first"

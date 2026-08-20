@@ -7,7 +7,7 @@ nivuus_step_copy_tree() {
 
     # Répertoires copiés récursivement, en excluant .zwc et .git.
     local d
-    for d in config themes bin plugins; do
+    for d in config themes bin plugins lib; do
         [ -d "$src/$d" ] || continue
         find "$src/$d" -type f \
             ! -name '*.zwc' \
