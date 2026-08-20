@@ -83,9 +83,41 @@ teardown() { rm -rf "$TMP"; }
 }
 
 @test "check_required_deps succeeds when zsh, git and curl are present" {
-    if ! command -v zsh >/dev/null || ! command -v git >/dev/null; then
+    if ! command -v zsh >/dev/null || ! command -v git >/dev/null || ! command -v curl >/dev/null; then
         skip "dépendances absentes dans cet environnement"
     fi
     run nivuus_step_check_required_deps
     [ "$status" -eq 0 ]
+}
+
+@test "check_required_deps fails and reports when dependencies are missing" {
+    mkdir -p "$TMP/emptybin"
+    run bash -c "
+        PATH='$TMP/emptybin'
+        source '$LIB/log.sh'
+        source '$LIB/steps.sh'
+        nivuus_step_check_required_deps
+    "
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"zsh"* ]]
+    [[ "$output" == *"git"* ]]
+    [[ "$output" == *"curl"* ]]
+}
+
+@test "check_required_deps never executes a package manager" {
+    mkdir -p "$TMP/fakebin"
+    # Tripwires: if any of these is executed, it leaves evidence.
+    for tool in sudo apt-get dnf pacman brew; do
+        printf '#!/bin/sh\ntouch "%s/EXECUTED-%s"\n' "$TMP" "$tool" > "$TMP/fakebin/$tool"
+        chmod +x "$TMP/fakebin/$tool"
+    done
+    run bash -c "
+        PATH='$TMP/fakebin'
+        source '$LIB/log.sh'
+        source '$LIB/steps.sh'
+        nivuus_step_check_required_deps
+    "
+    [ "$status" -eq 1 ]
+    run ls "$TMP"
+    [[ "$output" != *"EXECUTED-"* ]]
 }
