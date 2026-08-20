@@ -129,3 +129,26 @@ teardown() { rm -rf "$TMP"; }
     run diff "$TMP/before" "$TMP/after"
     [ "$status" -eq 0 ]
 }
+
+@test "uninstall keeps a zwc the user compiled before installing" {
+    printf 'export MINE=42\n' > "$HOME/.zshrc"
+    printf 'pre-existing bytecode\n' > "$HOME/.zshrc.zwc"
+    fs_fingerprint "$HOME" > "$TMP/before"
+    "$NIVUUS" install --yes --prefix "$HOME/.nivuus-shell"
+    "$NIVUUS" uninstall --yes --purge
+    fs_fingerprint "$HOME" > "$TMP/after"
+    run diff "$TMP/before" "$TMP/after"
+    [ "$status" -eq 0 ]
+}
+
+@test "uninstall keeps a pre-existing empty ~/.cache" {
+    mkdir -p "$HOME/.cache"
+    printf 'export MINE=42\n' > "$HOME/.zshrc"
+    fs_fingerprint "$HOME" > "$TMP/before"
+    "$NIVUUS" install --yes --prefix "$HOME/.nivuus-shell"
+    zsh -i -c true || true
+    "$NIVUUS" uninstall --yes --purge
+    fs_fingerprint "$HOME" > "$TMP/after"
+    run diff "$TMP/before" "$TMP/after"
+    [ "$status" -eq 0 ]
+}

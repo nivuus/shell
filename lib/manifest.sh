@@ -136,6 +136,11 @@ nivuus_manifest_commit() {
 nivuus_manifest_each() {
     local callback="$1" manifest="${2:-$NIVUUS_MANIFEST}" seen
     [ -f "$manifest" ] || return 0
+    # Exposé pour _nivuus_zwc_preserved, appelée depuis nivuus_restore_entry
+    # (le callback ci-dessous) : elle doit consulter EXACTEMENT le fichier
+    # en cours de rejeu, pas un autre manifeste qui traînerait en variable
+    # globale.
+    _NIVUUS_ACTIVE_MANIFEST="$manifest"
     seen="$(mktemp)"
     # tail -r n'existe pas partout ; on inverse avec sed.
     # Un chemin peut apparaître plusieurs fois (installations répétées héritées
@@ -185,6 +190,20 @@ nivuus_mkdir_p() {
 # la première entrée MODIFY pour ce chemin -- la plus ancienne, donc celle
 # qui pointe vers la sauvegarde d'origine de l'utilisateur, avant que
 # Nivuus n'y touche jamais. Vide si aucune.
+# Un .zwc est-il journalisé comme PRESERVE (préexistant à Nivuus, jamais à
+# supprimer) pour ce chemin exact ? Consulte $_NIVUUS_ACTIVE_MANIFEST posé
+# par nivuus_manifest_each pendant un rollback/abort, ou $NIVUUS_MANIFEST_TMP
+# pendant une installation (où _nivuus_place écrit ces marqueurs). Rien de
+# trouvable ne veut jamais dire "préservé" par défaut : seule une entrée
+# PRESERVE explicite protège.
+_nivuus_zwc_preserved() {
+    local zwc="$1" file="${_NIVUUS_ACTIVE_MANIFEST:-$NIVUUS_MANIFEST_TMP}"
+    [ -n "$file" ] && [ -f "$file" ] || return 1
+    awk -F"$NIVUUS_TAB" -v p="$zwc" \
+        '$1 == "PRESERVE" && $2 == p { found=1 } END { exit !found }' \
+        "$file" 2>/dev/null
+}
+
 _nivuus_prior_modify_ref() {
     local path="$1"
     [ -f "$NIVUUS_MANIFEST_TMP" ] || return 0
@@ -211,6 +230,18 @@ _nivuus_place() {
     # cible.
     if [ -L "$dst" ]; then
         log_warn "$dst est un lien symbolique vers $(readlink "$dst") : Nivuus écrit à travers, dans ce fichier réel."
+    fi
+
+    # zsh peut compiler n'importe quel fichier qu'il source en un .zwc à
+    # côté. Si un .zwc est DÉJÀ là avant que Nivuus ne touche $dst, il
+    # préexistait à Nivuus (l'utilisateur avait zcompilé son propre fichier,
+    # par exemple) : ce n'est pas à nous de le supprimer un jour. On le
+    # journalise comme PRESERVE avant d'écrire quoi que ce soit, pour que
+    # nivuus_restore_entry (CREATE/MODIFY) sache plus tard ne jamais y
+    # toucher -- contrairement à un .zwc apparu APRÈS coup (compilé par une
+    # session zsh utilisant Nivuus), qui reste fondé à être nettoyé.
+    if [ -f "$dst.zwc" ] && ! _nivuus_zwc_preserved "$dst.zwc"; then
+        nivuus_manifest_record PRESERVE "$dst.zwc" '-' '-'
     fi
 
     if [ "$existed" -eq 1 ]; then
@@ -295,10 +326,12 @@ nivuus_restore_entry() {
                     # zsh peut avoir compilé ce fichier pendant la session
                     # (config/99-cleanup.zsh, config/03-completion.zsh) sans
                     # jamais passer par le manifeste : un .zwc orphelin ne
-                    # doit pas survivre au fichier source qu'il compile. On
-                    # ne le supprime que parce que le fichier source lui-même
-                    # vient d'être traité (jamais à l'aveugle).
-                    [ -f "$path.zwc" ] && rm -f "$path.zwc"
+                    # doit pas survivre au fichier source qu'il compile. Mais
+                    # s'il préexistait à Nivuus (_nivuus_zwc_preserved,
+                    # journalisé par _nivuus_place à l'installation), ce
+                    # n'est PAS le nôtre : on ne le supprime que s'il n'est
+                    # pas marqué préservé.
+                    [ -f "$path.zwc" ] && ! _nivuus_zwc_preserved "$path.zwc" && rm -f "$path.zwc"
                 fi
             else
                 log_warn "Conservé (modifié depuis l'installation) : $path"
@@ -337,7 +370,7 @@ nivuus_restore_entry() {
                         cat "$stripped" > "$path"
                         rm -f "$stripped"
                         touch "$path"
-                        [ -f "$path.zwc" ] && rm -f "$path.zwc"
+                        [ -f "$path.zwc" ] && ! _nivuus_zwc_preserved "$path.zwc" && rm -f "$path.zwc"
                     fi
                     log_warn "$path a été modifié depuis l'installation : seul le bloc Nivuus en a été retiré, tes propres lignes sont intactes."
                     if [ -f "$NIVUUS_BACKUP_DIR/$ref" ] && [ "$ref" != "-" ]; then
@@ -369,7 +402,7 @@ nivuus_restore_entry() {
                 # tout .zwc frère, et on supprime ce dernier : son contenu ne
                 # correspond de toute façon plus au fichier restauré.
                 touch "$path"
-                [ -f "$path.zwc" ] && rm -f "$path.zwc"
+                [ -f "$path.zwc" ] && ! _nivuus_zwc_preserved "$path.zwc" && rm -f "$path.zwc"
             fi
             ;;
         MKDIR)
@@ -394,6 +427,9 @@ nivuus_restore_entry() {
             ;;
         PKG)
             return 0    # jamais désinstallé
+            ;;
+        PRESERVE)
+            return 0    # marqueur pur : un .zwc préexistant, jamais touché
             ;;
         *)
             log_warn "Action de manifeste inconnue, ignorée : $action ($path)"

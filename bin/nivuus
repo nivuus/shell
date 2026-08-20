@@ -67,6 +67,16 @@ cmd_install() {
     # échoue, nivuus_manifest_abort ne doit défaire que sa propre part, pas
     # réutiliser rétroactivement une installation précédente qui a réussi.
     nivuus_manifest_watermark_capture
+    # ~/.cache n'est créé par aucune étape d'installation : Nivuus n'y écrit
+    # que plus tard, à l'exécution du shell (config/22-ai-errors.zsh,
+    # config/20-terminal-title.zsh...), hors du manifeste. On journalise
+    # ici, une fois pour toutes, le SEUL fait qui compte pour un futur
+    # uninstall --purge : ce répertoire existait-il déjà avant que Nivuus ne
+    # s'en approche ? S'il existe déjà, on ne journalise rien -- uninstall
+    # ne le supprimera donc jamais, préexistant ou non. S'il n'existe pas
+    # encore, un MKDIR l'autorise à être repris par rmdir plus tard s'il
+    # finit vide -- sans jamais toucher à un ~/.cache non vide ou déjà là.
+    [ -d "$HOME/.cache" ] || nivuus_manifest_record MKDIR "$HOME/.cache" '-' '-'
     if ! nivuus_step_copy_tree "$NIVUUS_SRC_ROOT" "$prefix" \
         || ! nivuus_step_write_version "$NIVUUS_SRC_ROOT" "$prefix" \
         || ! nivuus_step_write_zshrc "$HOME/.zshrc" "$prefix"; then
@@ -136,12 +146,15 @@ cmd_uninstall() {
         # aucun rm -rf sur un répertoire qui pourrait contenir autre chose.
         [ -f "$HOME/.nivuus-shell-last-update-check" ] && rm -f "$HOME/.nivuus-shell-last-update-check"
         if [ -d "$HOME/.cache/nivuus-shell" ]; then
-            find "$HOME/.cache/nivuus-shell" -type f -exec rm -f {} +
+            find "$HOME/.cache/nivuus-shell" -type f -exec rm -f {} + 2>/dev/null || true
             find "$HOME/.cache/nivuus-shell" -depth -type d -exec rmdir {} + 2>/dev/null || true
-            # ~/.cache lui-même n'est pas à nous (d'autres apps y écrivent) :
-            # rmdir échoue silencieusement s'il contient autre chose, ne le
-            # supprime que s'il ne restait que le sous-répertoire Nivuus.
-            rmdir "$HOME/.cache" 2>/dev/null || true
+            # ~/.cache lui-même n'est PAS supprimé ici : on ne sait pas, à cet
+            # instant, s'il préexistait à Nivuus. C'est exactement ce que le
+            # MKDIR conditionnel posé par cmd_install journalise -- il n'est
+            # présent que si ~/.cache n'existait pas avant l'installation --
+            # et le rejeu générique des MKDIR ci-dessous s'en charge, avec la
+            # même prudence (rmdir échoue silencieusement si non vide) que
+            # pour $NIVUUS_STATE_DIR et ses parents.
         fi
         # ~/.local, ~/.local/state et l'état Nivuus lui-même sont journalisés
         # en MKDIR par nivuus_manifest_begin, comme toute autre mutation :

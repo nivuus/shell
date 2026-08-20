@@ -221,3 +221,14 @@ teardown() { rm -rf "$TMP"; }
     run zsh -i -c true
     [ "$status" -eq 0 ]                          # et le shell démarre
 }
+
+@test "purge survives an unreadable subdirectory under the cache" {
+    "$NIVUUS" install --yes --prefix "$TMP/target"
+    mkdir -p "$NIVUUS_STATE_DIR"     # unused here; cache lives under $HOME
+    mkdir -p "$HOME/.cache/nivuus-shell/blocked"
+    chmod 000 "$HOME/.cache/nivuus-shell/blocked"
+    run "$NIVUUS" uninstall --yes --purge
+    chmod 700 "$HOME/.cache/nivuus-shell/blocked" 2>/dev/null || true
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"désinstallé"* ]]
+}
