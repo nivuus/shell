@@ -124,3 +124,13 @@ teardown() { rm -rf "$TMP"; }
     [[ "$output" == *"--prefix"* ]]
     [[ "$output" != *"unbound variable"* ]]
 }
+
+@test "purge only removes backup files named like a sha256" {
+    "$NIVUUS" install --yes --prefix "$TMP/target"
+    mkdir -p "$NIVUUS_STATE_DIR/backups"
+    printf 'not mine\n' > "$NIVUUS_STATE_DIR/backups/readme.md"
+    printf 'not mine\n' > "$NIVUUS_STATE_DIR/backups/backup.db"
+    "$NIVUUS" uninstall --yes --purge
+    [ -f "$NIVUUS_STATE_DIR/backups/readme.md" ]
+    [ -f "$NIVUUS_STATE_DIR/backups/backup.db" ]
+}

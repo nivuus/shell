@@ -75,7 +75,7 @@ cmd_install() {
 }
 
 cmd_uninstall() {
-    local purge=''
+    local purge='' f name
     while [ $# -gt 0 ]; do
         case "$1" in
             --dry-run) export NIVUUS_DRY_RUN=1 ;;
@@ -107,8 +107,16 @@ cmd_uninstall() {
         fi
         rm -f "$NIVUUS_MANIFEST"
         if [ -d "$NIVUUS_BACKUP_DIR" ]; then
-            # Les sauvegardes sont nommées par leur sha256 : rien d'autre ne peut s'y trouver.
-            find "$NIVUUS_BACKUP_DIR" -type f -name '*[0-9a-f]' -maxdepth 1 -exec rm -f {} +
+            for f in "$NIVUUS_BACKUP_DIR"/*; do
+                [ -f "$f" ] || continue
+                name="${f##*/}"
+                # Une sauvegarde Nivuus porte son sha256 : 64 caractères hexadécimaux, rien d'autre.
+                case "$name" in
+                    *[!0-9a-f]*) continue ;;
+                esac
+                [ ${#name} -eq 64 ] || continue
+                rm -f "$f"
+            done
             rmdir "$NIVUUS_BACKUP_DIR" 2>/dev/null || true
         fi
         rmdir "$NIVUUS_STATE_DIR" 2>/dev/null || true
