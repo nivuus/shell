@@ -37,7 +37,7 @@ L'installeur actuel (`install.sh`, 590 lignes) empêche l'adoption :
 | 6 | Pas de `--dry-run` : impossible d'auditer avant exécution | élevée |
 | 7 | Le « one-liner » du README est un `git clone /tmp` + `rm -rf` | élevée |
 | 8 | `init_git_repo()` crée un dépôt git dans `~/.nivuus-shell`, que l'updater interprète comme un « dev checkout » et refuse alors de mettre à jour — **toute installation via le one-liner a l'auto-update silencieusement désactivé** | bloquant |
-| 9 | CI `ubuntu-latest` uniquement, aucun test d'installation réelle | bloquant |
+| 9 | CI `ubuntu-latest` uniquement, aucun test d'installation réelle : `tests/e2e/test_installation.bats` ne fait que vérifier l'existence de fichiers et `--help`, et les suites `e2e/` et `integration/` ne sont **jamais exécutées** par la CI | bloquant |
 | 10 | Fichiers `.zwc` compilés commités, provoquant des erreurs de permission masquées par `grep -v "Permission denied"` | hygiène |
 
 ## Approche retenue
@@ -240,10 +240,13 @@ artificiels (vide, avec bloc, bloc corrompu, oh-my-zsh, CRLF, sans newline
 finale) ; détection de plateforme sur `/proc/version` et `uname` simulés ;
 manifeste sur des scénarios de divergence de hash.
 
-*Décision :* plutôt qu'ajouter bats-core, on écrit `tests/framework.sh`
-(~80 lignes) reprenant **exactement l'API d'assertions** de
-`tests/framework.zsh`. Aucune dépendance nouvelle, une seule grammaire de test
-dans le projet.
+*Décision (corrigée le 2026-08-20) :* les tests s'écrivent en **bats**, déjà
+dépendance du projet (`tests/unit/*.bats`, installé par la CI et requis par
+`bin/test`). Une version antérieure de ce spec prévoyait un framework maison
+`tests/framework.sh` pour éviter d'ajouter un écosystème — c'était fondé sur
+une lecture incomplète : bats est déjà là, et il teste nativement du bash, donc
+il couvre `lib/` sans adaptation. `tests/framework.zsh` reste utilisé par le
+seul fichier legacy `tests/unit/test_prompt.zsh` ; on n'y touche pas.
 
 **2. Installation réelle en containers** — container vierge → `install` →
 `zsh -i -c` réel → vérification du prompt, des fonctions clés, et de l'absence
