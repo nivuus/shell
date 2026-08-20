@@ -385,7 +385,7 @@ git commit -m "feat(lib): add manifest journal with atomic commit"
 - Consumes: `nivuus_manifest_record`, `nivuus_hash_file`
 - Produces:
   - `nivuus_store_backup <path>` — copie le fichier dans `$NIVUUS_BACKUP_DIR/<sha256>` et imprime le sha ; imprime `-` si le fichier n'existe pas.
-  - `nivuus_mkdir_p <dir>` — crée le répertoire s'il manque et enregistre `MKDIR` (une entrée par niveau créé, du plus profond au plus superficiel non existant) ; ne fait rien s'il existe déjà.
+  - `nivuus_mkdir_p <dir>` — crée le répertoire s'il manque et enregistre `MKDIR` (une entrée par niveau créé, **du plus superficiel au plus profond**) ; ne fait rien s'il existe déjà. L'ordre est contraint par la désinstallation : `nivuus_manifest_each` parcourt le manifeste à l'envers, donc un enregistrement superficiel-vers-profond produit un `rmdir` profond-vers-superficiel. L'ordre inverse laisserait le parent non supprimé, `rmdir` échouant sur un répertoire encore occupé par son enfant.
   - `nivuus_install_file <src> <dst>` — enregistre `CREATE` si `dst` n'existait pas, `MODIFY` (avec backup de l'original) sinon ; **`SKIP` silencieux si le contenu est déjà identique** (idempotence) ; respecte `NIVUUS_DRY_RUN`.
   - `nivuus_write_file <dst>` — même contrat, mais le contenu est lu depuis stdin (utilisé pour `.zshrc` et `.version`).
 
