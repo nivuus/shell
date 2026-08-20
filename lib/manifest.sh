@@ -167,6 +167,17 @@ _nivuus_place() {
         return 0   # idempotent : rien à faire, rien à journaliser
     fi
 
+    # [ -f "$dst" ] suit les liens : un utilisateur stow/chezmoi dont
+    # ~/.zshrc est un symlink verrait sa cible réécrite en place, hors
+    # $HOME et hors de toute empreinte -- sans jamais le savoir. Le contenu
+    # reste restauré à la désinstallation (ce n'est pas une perte de
+    # données), mais c'est une mutation non annoncée d'un fichier
+    # potentiellement versionné : au minimum, prévenir en nommant la vraie
+    # cible.
+    if [ -L "$dst" ]; then
+        log_warn "$dst est un lien symbolique vers $(readlink "$dst") : Nivuus écrit à travers, dans ce fichier réel."
+    fi
+
     if [ "$existed" -eq 1 ]; then
         # Une réinstallation ne doit JAMAIS écraser la sauvegarde d'origine :
         # si une entrée MODIFY existe déjà pour ce chemin, $dst est une

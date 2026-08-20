@@ -113,3 +113,13 @@ teardown() { rm -rf "$TMP"; }
     nivuus_manifest_rollback
     [ "$(cat "$TMP/dst")" = "pristine" ]
 }
+
+@test "writing through a symlinked destination warns and names the real target" {
+    printf 'stow-managed\n' > "$TMP/real-target"
+    ln -s "$TMP/real-target" "$TMP/dst"
+    printf 'new' > "$TMP/src"
+    run nivuus_install_file "$TMP/src" "$TMP/dst"
+    [[ "$output" == *"$TMP/dst"* ]]
+    [[ "$output" == *"$TMP/real-target"* ]]
+    [ "$(cat "$TMP/real-target")" = "new" ]
+}
