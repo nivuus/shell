@@ -108,7 +108,7 @@ teardown() { rm -rf "$TMP"; }
     mkdir -p "$TMP/fakebin"
     # Tripwires: if any of these is executed, it leaves evidence.
     for tool in sudo apt-get dnf pacman brew; do
-        printf '#!/bin/sh\ntouch "%s/EXECUTED-%s"\n' "$TMP" "$tool" > "$TMP/fakebin/$tool"
+        printf '#!/bin/sh\n: > "%s/EXECUTED-%s"\n' "$TMP" "$tool" > "$TMP/fakebin/$tool"
         chmod +x "$TMP/fakebin/$tool"
     done
     run bash -c "
