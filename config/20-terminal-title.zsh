@@ -29,7 +29,7 @@ esac
 
 # AI Titles Configuration (only if enabled)
 if [[ "${ENABLE_AI_TERMINAL_TITLES:-false}" == "true" ]]; then
-    export AI_TITLE_MODEL="${AI_TITLE_MODEL:-gemini-3.1-flash-lite}"
+    export AI_TITLE_MODEL="${AI_TITLE_MODEL:-$(_ai_resolve_model)}"
     export AI_TITLE_CACHE_TTL="${AI_TITLE_CACHE_TTL:-3600}"  # 1 hour
     export AI_TITLE_MAX_LENGTH="${AI_TITLE_MAX_LENGTH:-60}"
     export AI_TITLE_CACHE_DIR="${AI_TITLE_CACHE_DIR:-$HOME/.cache/nivuus-shell/ai-titles}"
@@ -174,8 +174,9 @@ if [[ "${ENABLE_AI_TERMINAL_TITLES:-false}" == "true" ]]; then
 
         local context=$(_ai_title_get_context)
 
-        # Check for API key
-        _ai_get_api_key &>/dev/null || return 1
+        # Check credentials for the active backend (accounts for
+        # GEMINI_AUTH_MODE=cli, where an API key isn't required).
+        _ai_credentials_ok || return 1
 
         # Use ONLY this session's commands (SHARE_HISTORY would otherwise leak
         # commands from other terminals via `fc`). Falls back to nothing if empty.

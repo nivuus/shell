@@ -29,6 +29,42 @@
     [ "$status" -eq 0 ]
 }
 
+@test "aihelp shows the active backend and model" {
+    run zsh -c "export AI_BACKEND=openai OPENAI_API_KEY=test-key; source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh'; source '$NIVUUS_SHELL_DIR/config/09-ai-backend-gemini.zsh'; source '$NIVUUS_SHELL_DIR/config/09-ai-backend-openai.zsh'; source '$NIVUUS_SHELL_DIR/config/09-ai-backend-anthropic.zsh'; source '$NIVUUS_SHELL_DIR/config/10-ai.zsh'; aihelp"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Backend: openai"* ]]
+    [[ "$output" == *"gpt-5.6-luna"* ]]
+}
+
+@test "aihelp shows agy status in gemini cli auth mode" {
+    local fake_bin_dir="$BATS_TEST_TMPDIR/fake-agy-aihelp"
+    mkdir -p "$fake_bin_dir"
+    cat > "$fake_bin_dir/agy" <<'EOF'
+#!/usr/bin/env bash
+[[ "$1" == "--version" ]] && echo "agy 1.0.0"
+EOF
+    chmod +x "$fake_bin_dir/agy"
+
+    run zsh -c "export PATH='$fake_bin_dir:\$PATH' GEMINI_AUTH_MODE=cli; source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh'; source '$NIVUUS_SHELL_DIR/config/09-ai-backend-gemini.zsh'; source '$NIVUUS_SHELL_DIR/config/09-ai-backend-openai.zsh'; source '$NIVUUS_SHELL_DIR/config/09-ai-backend-anthropic.zsh'; source '$NIVUUS_SHELL_DIR/config/10-ai.zsh'; aihelp"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Antigravity CLI"* ]]
+    [[ "$output" == *"✓"* ]]
+}
+
+@test "ask works end-to-end under GEMINI_AUTH_MODE=cli" {
+    local fake_bin_dir="$BATS_TEST_TMPDIR/fake-agy-e2e"
+    mkdir -p "$fake_bin_dir"
+    cat > "$fake_bin_dir/agy" <<'EOF'
+#!/usr/bin/env bash
+echo '{"response":"mocked e2e response","status":"SUCCESS"}'
+EOF
+    chmod +x "$fake_bin_dir/agy"
+
+    run zsh -c "export PATH=\"$fake_bin_dir:\$PATH\" GEMINI_AUTH_MODE=cli; unset GOOGLE_API_KEY; source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh'; source '$NIVUUS_SHELL_DIR/config/09-ai-backend-gemini.zsh'; source '$NIVUUS_SHELL_DIR/config/09-ai-backend-openai.zsh'; source '$NIVUUS_SHELL_DIR/config/09-ai-backend-anthropic.zsh'; source '$NIVUUS_SHELL_DIR/config/10-ai.zsh'; ask 'test question'"
+    [ "$status" -eq 0 ]
+    [ "$output" = "mocked e2e response" ]
+}
+
 # =============================================================================
 # AI Suggestions Module Tests
 # =============================================================================
@@ -138,7 +174,9 @@
 # =============================================================================
 
 @test "AI commands use gemini model variable" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep 'GEMINI_MODEL' config/10-ai.zsh"
+    # GEMINI_MODEL is now resolved centrally by _ai_resolve_model() in
+    # config/09-ai-core.zsh (config/10-ai.zsh only calls _ai_resolve_model).
+    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep 'GEMINI_MODEL' config/09-ai-core.zsh"
     [ "$status" -eq 0 ]
 }
 

@@ -9,7 +9,7 @@
 # Skip if explicitly disabled or the Gemini API key is not configured
 [[ "${ENABLE_AI_ERROR_EXPLANATION:-true}" != "true" ]] && return
 
-if ! _ai_get_api_key &>/dev/null; then
+if ! _ai_credentials_ok; then
     return
 fi
 
@@ -19,7 +19,7 @@ fi
 
 : ${AI_ERROR_CACHE_DIR:="$HOME/.cache/nivuus-shell/ai-errors"}
 : ${AI_ERROR_CACHE_TTL:=86400}  # 24 hours
-: ${AI_ERROR_MODEL:="${GEMINI_MODEL:-gemini-3.1-flash-lite}"}
+: ${AI_ERROR_MODEL:="$(_ai_resolve_model)"}
 
 # Create cache directory
 mkdir -p "$AI_ERROR_CACHE_DIR"

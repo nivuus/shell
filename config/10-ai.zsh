@@ -1,8 +1,9 @@
 #!/usr/bin/env zsh
 # =============================================================================
-# AI-Powered Commands - Gemini API Integration
+# AI-Powered Commands - Multi-Backend Integration
 # =============================================================================
-# Talks directly to the Gemini REST API (no gemini-cli dependency)
+# Talks to the active AI backend (Gemini/OpenAI/Anthropic) via
+# config/09-ai-core.zsh - no gemini-cli dependency for API-key mode.
 # =============================================================================
 
 # =============================================================================
@@ -10,16 +11,25 @@
 # =============================================================================
 
 aihelp() {
-    local key_status
-    if _ai_get_api_key &>/dev/null; then
-        key_status="✓ Configured"
+    local status_line
+
+    if _ai_credentials_ok; then
+        if [[ "$AI_BACKEND" == "gemini" && "$GEMINI_AUTH_MODE" == "cli" ]]; then
+            status_line="✓ Antigravity CLI (agy) found"
+        else
+            status_line="✓ Configured"
+        fi
     else
-        key_status="✗ Not configured"
+        if [[ "$AI_BACKEND" == "gemini" && "$GEMINI_AUTH_MODE" == "cli" ]]; then
+            status_line="✗ Antigravity CLI (agy) not found"
+        else
+            status_line="✗ Not configured"
+        fi
     fi
 
     # Use /bin/cat to bypass bat alias
     /bin/cat <<EOF
-Nivuus AI Commands (powered by Gemini)
+Nivuus AI Commands
 
 General:
   ??                     - Get command suggestions
@@ -41,18 +51,21 @@ AI Suggestions (Interactive):
   Help:    ai_suggestions_help
 
 AI Terminal Titles:
-  Creative terminal titles powered by Gemini
+  Creative terminal titles powered by AI
   Enable:  export ENABLE_AI_TERMINAL_TITLES=true
   Stats:   ai-title-stats
   Help:    ai-title-help
 
 Configuration:
-  Model: ${GEMINI_MODEL:-$AI_DEFAULT_MODEL}
-  API key: $key_status
+  Backend: $AI_BACKEND
+  Model: $(_ai_resolve_model)
+  Status: $status_line
 
 Setup:
-  Get a key: https://aistudio.google.com/apikey
-  export GOOGLE_API_KEY='your-api-key'
+  Gemini:    export GOOGLE_API_KEY='...' (get one: https://aistudio.google.com/apikey)
+             or export GEMINI_AUTH_MODE=cli (uses Antigravity CLI + your AI Pro/Ultra subscription)
+  OpenAI:    export AI_BACKEND=openai OPENAI_API_KEY='...'
+  Anthropic: export AI_BACKEND=anthropic ANTHROPIC_API_KEY='...'
 EOF
 }
 
@@ -60,12 +73,29 @@ EOF
 # Check if the Gemini API key is configured
 # =============================================================================
 
-if ! _ai_get_api_key &>/dev/null; then
+if ! _ai_credentials_ok; then
     # Provide setup instructions on first use
     _nivuus_ai_not_installed() {
-        echo "⚠️  GOOGLE_API_KEY not set"
-        echo "Get a key: https://aistudio.google.com/apikey"
-        echo "Then: export GOOGLE_API_KEY='your-api-key'"
+        case "$AI_BACKEND" in
+            openai)
+                echo "⚠️  OPENAI_API_KEY not set"
+                echo "Then: export OPENAI_API_KEY='your-api-key'"
+                ;;
+            anthropic)
+                echo "⚠️  ANTHROPIC_API_KEY not set"
+                echo "Then: export ANTHROPIC_API_KEY='your-api-key'"
+                ;;
+            gemini)
+                if [[ "$GEMINI_AUTH_MODE" == "cli" ]]; then
+                    echo "⚠️  Antigravity CLI (agy) not found"
+                    echo "Install it, or set GEMINI_AUTH_MODE=api-key"
+                else
+                    echo "⚠️  GOOGLE_API_KEY not set"
+                    echo "Get a key: https://aistudio.google.com/apikey"
+                    echo "Then: export GOOGLE_API_KEY='your-api-key'"
+                fi
+                ;;
+        esac
         echo ""
         echo "Run 'aihelp' for more information"
         return 1
@@ -91,22 +121,22 @@ fi
 _nivuus_ai_suggest() {
     local query="$*"
     if [[ -z "$query" ]]; then
-        _ai_api_call "Suggest useful zsh commands and shell tricks" "${GEMINI_MODEL:-$AI_DEFAULT_MODEL}"
+        _ai_api_call "Suggest useful zsh commands and shell tricks"
     else
-        _ai_api_call "Suggest zsh commands for: $query" "${GEMINI_MODEL:-$AI_DEFAULT_MODEL}"
+        _ai_api_call "Suggest zsh commands for: $query"
     fi
 }
 
 # Git-specific help
 _nivuus_git_help() {
     local query="$*"
-    _ai_api_call "Git command help: $query. Provide the exact command to run." "${GEMINI_MODEL:-$AI_DEFAULT_MODEL}"
+    _ai_api_call "Git command help: $query. Provide the exact command to run."
 }
 
 # GitHub CLI help
 _nivuus_gh_help() {
     local query="$*"
-    _ai_api_call "GitHub CLI (gh) help: $query. Provide the exact command to run." "${GEMINI_MODEL:-$AI_DEFAULT_MODEL}"
+    _ai_api_call "GitHub CLI (gh) help: $query. Provide the exact command to run."
 }
 
 # Explain a command
@@ -118,7 +148,7 @@ why() {
         return 1
     fi
 
-    _ai_api_call "Explain this command concisely: $cmd" "${GEMINI_MODEL:-$AI_DEFAULT_MODEL}"
+    _ai_api_call "Explain this command concisely: $cmd"
 }
 
 # Detailed explanation
@@ -130,7 +160,7 @@ explain() {
         return 1
     fi
 
-    _ai_api_call "Provide a detailed explanation of this command, including each option: $cmd" "${GEMINI_MODEL:-$AI_DEFAULT_MODEL}"
+    _ai_api_call "Provide a detailed explanation of this command, including each option: $cmd"
 }
 
 # General question
@@ -142,7 +172,7 @@ ask() {
         return 1
     fi
 
-    _ai_api_call "$question" "${GEMINI_MODEL:-$AI_DEFAULT_MODEL}"
+    _ai_api_call "$question"
 }
 
 # =============================================================================
