@@ -24,7 +24,7 @@ nivuus_zshrc_block() {
     cat <<EOF
 $NIVUUS_BLOCK_BEGIN
 # Généré par Nivuus. Ne pas éditer : ce bloc est réécrit à chaque mise à jour.
-# Mets tes personnalisations dans ~/.zsh_local
+# Pour tes personnalisations, crée ~/.zsh_local (il n'existe pas par défaut)
 export NIVUUS_SHELL_DIR="$install_dir"
 source "\$NIVUUS_SHELL_DIR/.zshrc"
 $NIVUUS_BLOCK_END
