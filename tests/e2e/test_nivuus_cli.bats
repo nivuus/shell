@@ -144,3 +144,16 @@ teardown() { rm -rf "$TMP"; }
     [ -f "$NIVUUS_STATE_DIR/backups/readme.md" ]
     [ -f "$NIVUUS_STATE_DIR/backups/backup.db" ]
 }
+
+@test "a plain (non-purge) uninstall keeps the manifest when it had to preserve a diverged file" {
+    printf 'export MINE=42\n' > "$HOME/.zshrc"
+    "$NIVUUS" install --yes --prefix "$TMP/target"
+    printf 'user edit after install\n' >> "$HOME/.zshrc"
+    run "$NIVUUS" uninstall --yes
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Conservé"* ]]
+    # The journal explaining why -- and where the backup is -- must survive
+    # so the uninstall can be retried; it must not be deleted just because
+    # this one file could not be reverted.
+    [ -f "$NIVUUS_STATE_DIR/manifest.tsv" ]
+}
