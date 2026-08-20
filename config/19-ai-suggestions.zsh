@@ -26,11 +26,17 @@ typeset -g AI_SUGGESTION_MODEL="${AI_SUGGESTION_MODEL:-$(_ai_resolve_model)}"  #
 typeset -gA _AI_CACHE
 typeset -gA _AI_CACHE_TIME
 
-# Current inline suggestion
-typeset -g _AI_CURRENT_SUGGESTION=""
+# Animation state (braille spinner via zle -F)
+typeset -g _AI_SPINNER_FRAME=0
+typeset -ga _AI_SPINNER_CHARS=(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏)
+typeset -g _AI_ANIM_FD=""
+typeset -g _AI_ANIM_PID=""
 
-# Animation state
-typeset -g _AI_ANIMATION_DOTS=1
+# Typewriter animation state via zle -F
+typeset -g _AI_TYPEWRITER_FD=""
+typeset -g _AI_TYPEWRITER_PID=""
+typeset -g _AI_TYPEWRITER_TEXT=""
+typeset -g _AI_TYPEWRITER_POS=0
 
 # Current generation process PID
 typeset -g _AI_GENERATE_PID=""
@@ -191,43 +197,62 @@ $context"
 
 
 # =============================================================================
-# Loading Animation
+# Loading Animation (braille spinner in POSTDISPLAY via zle -F)
 # =============================================================================
 
-_ai_animate_dots() {
-    # Stop if no active generation
-    if [[ -z "$_AI_GENERATE_PID" ]]; then
-        return
+# Load zsh/system for sysparams and FD handlers
+zmodload zsh/system 2>/dev/null
+
+_ai_spinner_tick() {
+    local dummy
+    if [[ -z "$2" || "$2" == "hup" ]]; then
+        read -u $1 dummy 2>/dev/null
+        if [[ -n "$_AI_GENERATE_PID" ]]; then
+            (( _AI_SPINNER_FRAME = (_AI_SPINNER_FRAME + 1) % ${#_AI_SPINNER_CHARS[@]} ))
+            _ai_set_postdisplay " ${_AI_SPINNER_CHARS[$((_AI_SPINNER_FRAME + 1))]}" "fg=110"
+        fi
     fi
+}
 
-    # Cycle through 1, 2, 3 dots
-    (( _AI_ANIMATION_DOTS = (_AI_ANIMATION_DOTS % 3) + 1 ))
+_ai_start_spinner() {
+    _ai_cancel_animation
 
-    # Update RPROMPT with new dots
-    _ai_update_loading_animation
-    zle && zle reset-prompt
+    _AI_SPINNER_FRAME=0
+    _ai_set_postdisplay " ${_AI_SPINNER_CHARS[1]}" "fg=110"
 
-    # Schedule next animation frame (1 second from now)
-    sched +1 _ai_animate_dots
+    builtin exec {_AI_ANIM_FD}< <(
+        echo $sysparams[pid]
+        while true; do
+            sleep 0.1
+            echo "1"
+        done
+    )
+    read _AI_ANIM_PID <&$_AI_ANIM_FD
+    zle -F "$_AI_ANIM_FD" _ai_spinner_tick
 }
 
 _ai_cancel_animation() {
-    # Cancel all scheduled animation jobs
-    local -a job_ids
-    local line job_num
+    # Close spinner FD handler and kill background process
+    if [[ -n "$_AI_ANIM_FD" ]]; then
+        zle -F "$_AI_ANIM_FD" 2>/dev/null
+        builtin exec {_AI_ANIM_FD}<&- 2>/dev/null
+        _AI_ANIM_FD=""
+    fi
+    if [[ -n "$_AI_ANIM_PID" ]]; then
+        kill -TERM "$_AI_ANIM_PID" 2>/dev/null
+        _AI_ANIM_PID=""
+    fi
 
-    while IFS= read -r line; do
-        if [[ "$line" == *"_ai_animate_dots"* ]]; then
-            job_num=$(echo "$line" | awk '{print $1}')
-            if [[ -n "$job_num" ]]; then
-                job_ids+=($job_num)
-            fi
-        fi
-    done < <(sched 2>/dev/null)
-
-    for job_num in $job_ids; do
-        sched -$job_num 2>/dev/null
-    done
+    # Close typewriter FD handler and kill background process
+    if [[ -n "$_AI_TYPEWRITER_FD" ]]; then
+        zle -F "$_AI_TYPEWRITER_FD" 2>/dev/null
+        builtin exec {_AI_TYPEWRITER_FD}<&- 2>/dev/null
+        _AI_TYPEWRITER_FD=""
+    fi
+    if [[ -n "$_AI_TYPEWRITER_PID" ]]; then
+        kill -TERM "$_AI_TYPEWRITER_PID" 2>/dev/null
+        _AI_TYPEWRITER_PID=""
+    fi
 }
 
 # =============================================================================
@@ -236,12 +261,48 @@ _ai_cancel_animation() {
 
 # Global variable for temp file (shared with async checker)
 typeset -g _AI_TEMP_FILE=""
-typeset -g _AI_SAVED_RPROMPT=""
+typeset -g _AI_SAVED_AUTOSUGGEST_STRATEGY=""
+
+# Helper: restore zsh-autosuggestions strategy
+_ai_restore_autosuggest() {
+    unset _ZSH_AUTOSUGGEST_DISABLED
+    if [[ -n "$_AI_SAVED_AUTOSUGGEST_STRATEGY" ]]; then
+        # Restore as array
+        ZSH_AUTOSUGGEST_STRATEGY=(${=_AI_SAVED_AUTOSUGGEST_STRATEGY})
+        _AI_SAVED_AUTOSUGGEST_STRATEGY=""
+    fi
+}
+
+# Helper: set POSTDISPLAY with a color using region_highlight
+# POSTDISPLAY is plain text; color is applied via region_highlight P-prefix
+_ai_set_postdisplay() {
+    local text="$1"
+    local style="$2"  # e.g., "fg=143" or "fg=110"
+
+    POSTDISPLAY="$text"
+
+    # Remove any previous AI POSTDISPLAY highlight entries (P-prefixed)
+    region_highlight=("${(@)region_highlight:#P*}")
+
+    # Add highlight for the full POSTDISPLAY range
+    if [[ -n "$text" && -n "$style" ]]; then
+        region_highlight+=("P0 ${#text} ${style}")
+    fi
+
+    zle && zle -R
+}
+
+# Helper: clear POSTDISPLAY and its highlights
+_ai_clear_postdisplay() {
+    POSTDISPLAY=""
+    region_highlight=("${(@)region_highlight:#P*}")
+    zle && zle -R
+}
 
 _ai_show_inline() {
     local prefix="$BUFFER"
 
-    # Cancel any pending debounce timer and animation
+    # Cancel any pending debounce timer, animation, and generation
     _ai_cancel_debounce
     _ai_cancel_animation
     _ai_cancel_generation
@@ -251,42 +312,87 @@ _ai_show_inline() {
         return
     fi
 
-    # Show loading message with Nord colors (cyan)
-    # Save current RPROMPT and replace with suggestion message
-    _AI_SAVED_RPROMPT="$RPROMPT"
-    _AI_ANIMATION_DOTS=1
-    _ai_update_loading_animation
-    zle reset-prompt
+    # --- Anti-collision: cancel pending zsh-autosuggestions async request & disable it ---
+    if [[ -n "$_ZSH_AUTOSUGGEST_ASYNC_FD" ]] && { true <&$_ZSH_AUTOSUGGEST_ASYNC_FD } 2>/dev/null; then
+        builtin exec {_ZSH_AUTOSUGGEST_ASYNC_FD}<&-
+        zle -F "$_ZSH_AUTOSUGGEST_ASYNC_FD" 2>/dev/null
+        if [[ -n "$_ZSH_AUTOSUGGEST_CHILD_PID" ]]; then
+            kill -TERM "$_ZSH_AUTOSUGGEST_CHILD_PID" 2>/dev/null
+            _ZSH_AUTOSUGGEST_CHILD_PID=""
+        fi
+        _ZSH_AUTOSUGGEST_ASYNC_FD=""
+    fi
+    typeset -g _ZSH_AUTOSUGGEST_DISABLED=1
+    _AI_SAVED_AUTOSUGGEST_STRATEGY="${ZSH_AUTOSUGGEST_STRATEGY[*]}"
+    ZSH_AUTOSUGGEST_STRATEGY=()
 
-    # Start animation (updates every 0.5 seconds)
-    sched +1 _ai_animate_dots
+    # Clear any existing autosuggestion ghost text
+    _ai_clear_postdisplay
+
+    # Start spinner animation (realtime 100ms via zle -F)
+    _ai_start_spinner
 
     # Generate in background with SIGUSR1 notification
     _AI_TEMP_FILE=$(mktemp)
 
     # Generate in background and signal when done
     {
-        _ai_generate "$prefix" 2>&1 | head -1 > "$_AI_TEMP_FILE"
+        # Discard stderr: backend error diagnostics (e.g. agy failures) must
+        # never be captured as suggestion text and shown as ghost text.
+        _ai_generate "$prefix" 2>/dev/null | head -1 > "$_AI_TEMP_FILE"
         # Send SIGUSR1 to parent shell to trigger update
         kill -USR1 $$ 2>/dev/null
     } &!
     _AI_GENERATE_PID=$!
 }
 
-# Update loading animation in RPROMPT
-_ai_update_loading_animation() {
-    local dots=""
-    case $_AI_ANIMATION_DOTS in
-        1) dots=".  " ;;  # 1 dot + 2 spaces
-        2) dots=".. " ;;  # 2 dots + 1 space
-        3) dots="..." ;;  # 3 dots + 0 space
-    esac
-    RPROMPT="%F{110}🤖 Generating${dots} (Enter to cancel)%f"
+# Typewriter animation callback
+_ai_typewriter_tick() {
+    local dummy
+    if [[ -z "$2" || "$2" == "hup" ]]; then
+        read -u $1 dummy 2>/dev/null
+        (( _AI_TYPEWRITER_POS++ ))
+        local visible="${_AI_TYPEWRITER_TEXT[1,$_AI_TYPEWRITER_POS]}"
+        _ai_set_postdisplay "${visible}" "fg=143"
+
+        if (( _AI_TYPEWRITER_POS >= ${#_AI_TYPEWRITER_TEXT} || _AI_TYPEWRITER_POS >= 8 )); then
+            # Show full remaining text instantly and close typewriter
+            _ai_set_postdisplay "${_AI_TYPEWRITER_TEXT}" "fg=143"
+            if [[ -n "$_AI_TYPEWRITER_FD" ]]; then
+                zle -F "$_AI_TYPEWRITER_FD" 2>/dev/null
+                builtin exec {_AI_TYPEWRITER_FD}<&- 2>/dev/null
+                _AI_TYPEWRITER_FD=""
+            fi
+            if [[ -n "$_AI_TYPEWRITER_PID" ]]; then
+                kill -TERM "$_AI_TYPEWRITER_PID" 2>/dev/null
+                _AI_TYPEWRITER_PID=""
+            fi
+        fi
+    fi
+}
+
+_ai_start_typewriter() {
+    local text="$1"
+    _ai_cancel_animation
+    _AI_TYPEWRITER_TEXT="$text"
+    _AI_TYPEWRITER_POS=0
+
+    builtin exec {_AI_TYPEWRITER_FD}< <(
+        echo $sysparams[pid]
+        local count=${#text}
+        (( count > 8 )) && count=8
+        for (( i=1; i<=count; i++ )); do
+            sleep 0.025
+            echo "1"
+        done
+    )
+    read _AI_TYPEWRITER_PID <&$_AI_TYPEWRITER_FD
+    zle -F "$_AI_TYPEWRITER_FD" _ai_typewriter_tick
 }
 
 # Called by TRAPUSR1 when generation completes
 _ai_handle_completion() {
-    # Cancel animation first
+    # Cancel spinner animation first
     _ai_cancel_animation
 
     # Get result
@@ -303,20 +409,28 @@ _ai_handle_completion() {
         suggestion=""
     fi
 
-    # Store suggestion
+    # Store suggestion (full command returned by AI)
     _AI_CURRENT_SUGGESTION="$suggestion"
 
-    # Display result with Nord colors
     if [[ -n "$suggestion" ]]; then
-        # Green for suggestion, light gray for instruction
-        RPROMPT="%F{143}🤖 $suggestion%F{254} (Ctrl+↓)%f"
-    else
-        # Restore original RPROMPT
-        RPROMPT="$_AI_SAVED_RPROMPT"
-    fi
+        # Extract the suffix (part after what user already typed)
+        local suffix="${suggestion#$BUFFER}"
+        if [[ "$suffix" == "$suggestion" ]]; then
+            # Suggestion doesn't start with BUFFER — show full suggestion
+            suffix=" → $suggestion"
+        fi
 
-    # Force prompt redraw
-    zle && zle reset-prompt
+        # Start typewriter animation for smooth appearance
+        if (( ${#suffix} > 0 )); then
+            _ai_start_typewriter "$suffix"
+        else
+            _ai_set_postdisplay "${suffix}" "fg=143"
+        fi
+    else
+        # No suggestion — restore autosuggestions
+        _ai_clear_postdisplay
+        _ai_restore_autosuggest
+    fi
 }
 
 # Register ZLE widget for completion handler
@@ -334,21 +448,25 @@ _ai_accept_inline() {
         BUFFER="$_AI_CURRENT_SUGGESTION"
         CURSOR=${#BUFFER}
         _AI_CURRENT_SUGGESTION=""
-        # Restore original RPROMPT
-        RPROMPT="$_AI_SAVED_RPROMPT"
-        zle reset-prompt
+        _ai_clear_postdisplay
+        _ai_restore_autosuggest
     fi
 }
 
 _ai_clear_inline() {
     _AI_CURRENT_SUGGESTION=""
-    # Restore original RPROMPT
-    RPROMPT="$_AI_SAVED_RPROMPT"
-    zle reset-prompt
+    _ai_clear_postdisplay
+    _ai_restore_autosuggest
 }
 
 # Cancel any ongoing generation
 _ai_cancel_generation() {
+    # Only act if AI suggestion system is actually active
+    # (avoids clearing zsh-autosuggestions POSTDISPLAY on every keypress)
+    if [[ -z "$_AI_GENERATE_PID" && -z "$_AI_CURRENT_SUGGESTION" && -z "$_AI_SAVED_AUTOSUGGEST_STRATEGY" ]]; then
+        return
+    fi
+
     # Kill the generation process if it's running
     if [[ -n "$_AI_GENERATE_PID" ]]; then
         kill $_AI_GENERATE_PID 2>/dev/null
@@ -362,14 +480,10 @@ _ai_cancel_generation() {
         _AI_TEMP_FILE=""
     fi
 
-    # Restore original RPROMPT
-    if [[ -n "$_AI_SAVED_RPROMPT" ]]; then
-        RPROMPT="$_AI_SAVED_RPROMPT"
-        zle reset-prompt 2>/dev/null
-    fi
-
-    # Clear current suggestion
+    # Clear suggestion and POSTDISPLAY
     _AI_CURRENT_SUGGESTION=""
+    _ai_clear_postdisplay
+    _ai_restore_autosuggest
 
     # Cancel any scheduled animations
     _ai_cancel_animation
@@ -427,11 +541,10 @@ _ai_start_debounce() {
 
 # Hook into self-insert to trigger debounce on typing
 _ai_debounce_self_insert() {
-    # Clear any existing inline suggestion and restore RPROMPT
+    # Clear any existing inline suggestion and restore autosuggestions
     _AI_CURRENT_SUGGESTION=""
-    if [[ -n "$_AI_SAVED_RPROMPT" ]]; then
-        RPROMPT="$_AI_SAVED_RPROMPT"
-    fi
+    _ai_clear_postdisplay
+    _ai_restore_autosuggest
 
     zle .self-insert
     _ai_start_debounce
@@ -467,10 +580,48 @@ _ai_debounce_clear_screen() {
 # Widget and Keybinding
 # =============================================================================
 
+# --- Unified Ctrl+Right: accept AI suggestion or autosuggestion word ---
+_ai_accept_or_word() {
+    if [[ -n "$_AI_CURRENT_SUGGESTION" ]]; then
+        # AI suggestion active → accept it entirely
+        _ai_accept_inline
+    else
+        # No AI suggestion → delegate to history autosuggestion word-accept
+        _autosuggest_accept_word
+    fi
+}
+
+# --- Cancel AI generation on history navigation ---
+
+# Wrap up-line-or-beginning-search (autoloaded function, not builtin)
+_ai_cancel_and_up_search() {
+    _ai_cancel_generation
+    up-line-or-beginning-search "$@"
+}
+
+# Wrap down-line-or-beginning-search (autoloaded function, not builtin)
+_ai_cancel_and_down_search() {
+    _ai_cancel_generation
+    down-line-or-beginning-search "$@"
+}
+
+# Wrap history-incremental-search-backward (builtin widget)
+_ai_cancel_and_search_backward() {
+    _ai_cancel_generation
+    zle .history-incremental-search-backward
+}
+
+# Wrap history-incremental-search-forward (builtin widget)
+_ai_cancel_and_search_forward() {
+    _ai_cancel_generation
+    zle .history-incremental-search-forward
+}
+
 # Register widgets
 zle -N ai-show-inline _ai_show_inline
 zle -N ai-accept-inline _ai_accept_inline
 zle -N ai-clear-inline _ai_clear_inline
+zle -N ai-accept-or-word _ai_accept_or_word
 
 # Register debounce widgets (only if auto-debounce is enabled)
 if [[ "${ENABLE_AI_AUTO_DEBOUNCE}" == "true" ]]; then
@@ -500,12 +651,25 @@ else
     zle -N clear-screen _ai_clear_screen_no_debounce
 fi
 
+# --- History navigation wrappers (always active) ---
+# Re-register widget names to point to our wrapper functions that call the
+# original autoloaded functions by name (they remain callable as functions).
+zle -N up-line-or-beginning-search _ai_cancel_and_up_search
+zle -N down-line-or-beginning-search _ai_cancel_and_down_search
+
+# history-incremental-search-backward/forward are builtins — wrap with .prefix
+zle -N history-incremental-search-backward _ai_cancel_and_search_backward
+zle -N history-incremental-search-forward _ai_cancel_and_search_forward
+
 # Keybindings for inline mode
-bindkey '^[[1;5B' ai-accept-inline  # Ctrl+Down - Accept AI suggestion
-bindkey '^[[Z' ai-clear-inline      # Shift+Tab - Clear suggestion
-bindkey '^2' ai-show-inline         # Ctrl+2 - Manual trigger
-bindkey '^ ' ai-show-inline         # Ctrl+Space - Manual trigger
-bindkey '^@' ai-show-inline         # Ctrl+Space (alt) - Manual trigger
+bindkey '^[[1;5C' ai-accept-or-word   # Ctrl+Right - Accept AI suggestion or next word
+bindkey '\e[1;5C' ai-accept-or-word   # Ctrl+Right (alt)
+bindkey '^[Oc' ai-accept-or-word      # Ctrl+Right (rxvt)
+bindkey '^[[Z' ai-clear-inline        # Shift+Tab - Clear suggestion
+bindkey '^2' ai-show-inline           # Ctrl+2 - Manual trigger
+bindkey '^ ' ai-show-inline           # Ctrl+Space - Manual trigger
+bindkey '^@' ai-show-inline           # Ctrl+Space (alt) - Manual trigger
+# Note: Ctrl+Down (^[[1;5B) binding removed — Ctrl+Right is the unified key
 
 # =============================================================================
 # Help
@@ -518,17 +682,20 @@ AI Command Suggestions - Inline Mode
 How it works:
   1. Type partial command (3+ chars): git s
   2. Either wait 2 seconds (auto-debounce) or press Ctrl+2/Ctrl+Space
-  3. Suggestion appears after cursor in colors: "🤖 git status (Ctrl+↓ to accept)"
-  4. Press Ctrl+↓ to accept suggestion
-  5. Press Enter to cancel generation and execute your typed command
-  6. Continue typing to clear and reset timer
+  3. Spinner appears inline after cursor while generating
+  4. Suggestion appears as green ghost text after cursor
+  5. Press Ctrl+→ to accept suggestion (same key as word-accept from history)
+  6. Press Enter to cancel generation and execute your typed command
+  7. Navigate history (↑/↓/Ctrl+R) to cancel generation
+  8. Continue typing to clear and reset timer
 
 Features:
-  • Nord color scheme (cyan for generating, green for suggestions)
+  • Nord color scheme (cyan spinner, green suggestions)
   • NO latency - Enter key responds instantly during generation
   • Async generation - never blocks your typing
   • ULTRA-RICH context for maximum relevance
   • Automatic cleanup on typing/accepting/canceling
+  • Typewriter animation on suggestion appearance (when supported)
 
 Context provided to AI (ultra-enriched):
   • ALL files in directory (up to 50)
@@ -553,7 +720,7 @@ Available models:
   output token budget on internal reasoning and return empty completions here.
 
 Keybindings:
-  Ctrl+↓     - Accept inline AI suggestion
+  Ctrl+→     - Accept inline AI suggestion (or next word from history)
   Shift+Tab  - Clear inline AI suggestion
   Ctrl+2     - Trigger AI suggestion manually
   Ctrl+Space - Trigger AI suggestion manually
@@ -562,12 +729,13 @@ During generation:
   Enter      - Cancel generation and execute your command (NO LATENCY)
   Ctrl+C     - Cancel generation and return to prompt
   Ctrl+L     - Cancel generation and clear screen
+  ↑/↓        - Cancel generation and navigate history
+  Ctrl+R     - Cancel generation and search history
   Type       - Clear suggestion and reset debounce timer
 
 Colors (Nord palette):
-  Cyan (110)       - "Generating..." message
-  Green (143)      - Suggested command
-  Light gray (254) - Instructions "(Ctrl+↓ to accept)"
+  Cyan (110)       - Spinner / generating indicator
+  Green (143)      - Suggested command (ghost text)
 
 EOF
 }
