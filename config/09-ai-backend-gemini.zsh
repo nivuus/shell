@@ -37,7 +37,10 @@ _ai_backend_gemini_call() {
     local timeout_secs="${5:-15}"
 
     if [[ "$GEMINI_AUTH_MODE" == "cli" ]]; then
-        _ai_gemini_cli_call "$prompt" "$model" "$timeout_secs"
+        # Antigravity CLI uses its own model slugs (e.g. "gemini-3.5-flash-medium"),
+        # not the Generative Language API's model IDs (e.g. "gemini-3.5-flash-lite") —
+        # the two are not interchangeable, so cli mode gets its own override var.
+        _ai_gemini_cli_call "$prompt" "${GEMINI_CLI_MODEL:-gemini-3.5-flash-medium}" "$timeout_secs"
         return $?
     fi
 
@@ -92,7 +95,20 @@ _ai_gemini_cli_call() {
     cli_response=$(timeout "$timeout_secs" agy -p "$prompt" --model "$model" \
         --output-format json --print-timeout "${timeout_secs}s" 2>/dev/null)
 
-    [[ -z "$cli_response" ]] && return 1
+    if [[ -z "$cli_response" ]]; then
+        print -u2 -- "agy produced no output (timeout, network failure, or not logged in — run 'agy' interactively once to sign in)."
+        return 1
+    fi
+
+    local agy_status
+    agy_status=$(print -r -- "$cli_response" | jq -r '.status // empty' 2>/dev/null)
+
+    if [[ "$agy_status" != "SUCCESS" ]]; then
+        local agy_error
+        agy_error=$(print -r -- "$cli_response" | jq -r '.error // empty' 2>/dev/null)
+        print -u2 -- "agy call failed (status: ${agy_status:-unknown})${agy_error:+: $agy_error}"
+        return 1
+    fi
 
     local result
     result=$(print -r -- "$cli_response" | jq -r '.response // empty' 2>/dev/null)
