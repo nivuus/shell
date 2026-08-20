@@ -141,6 +141,18 @@ teardown() { rm -rf "$TMP"; }
     [ "$status" -eq 0 ]
 }
 
+@test "uninstall removes a zwc Nivuus itself compiled, even after a reinstall" {
+    printf 'export MINE=42\n' > "$HOME/.zshrc"
+    fs_fingerprint "$HOME" > "$TMP/before"
+    "$NIVUUS" install --yes --prefix "$HOME/.nivuus-shell"
+    zsh -i -c true || true
+    "$NIVUUS" install --yes --prefix "$HOME/.nivuus-shell2"
+    "$NIVUUS" uninstall --yes --purge
+    fs_fingerprint "$HOME" > "$TMP/after"
+    run diff "$TMP/before" "$TMP/after"
+    [ "$status" -eq 0 ]
+}
+
 @test "uninstall keeps a pre-existing empty ~/.cache" {
     mkdir -p "$HOME/.cache"
     printf 'export MINE=42\n' > "$HOME/.zshrc"

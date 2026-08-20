@@ -72,13 +72,27 @@ nivuus_manifest_begin() {
     # Marque la fin des entrées propres à CETTE installation posées avant
     # tout héritage (le bootstrap MKDIR ci-dessus, écrit avant que l'appelant
     # ait pu invoquer nivuus_manifest_inherit) -- distinct de la marque
-    # post-inherit posée par nivuus_manifest_watermark_capture. Entre les
-    # deux se trouvent, le cas échéant, les entrées HÉRITÉES d'une
+    # post-inherit posée par nivuus_manifest_inherit elle-même, plus bas.
+    # Entre les deux se trouvent, le cas échéant, les entrées HÉRITÉES d'une
     # installation précédente déjà committée : nivuus_manifest_abort doit les
-    # laisser intactes. Voir ce commentaire répété là-bas pour le schéma
-    # complet.
+    # laisser intactes. Voir le commentaire de nivuus_manifest_inherit pour
+    # le schéma complet.
     NIVUUS_MANIFEST_WATERMARK_PRE_INHERIT="$(wc -l < "$NIVUUS_MANIFEST_TMP" 2>/dev/null | tr -d ' ')"
     : "${NIVUUS_MANIFEST_WATERMARK_PRE_INHERIT:=0}"
+    # Valeur de repli SÛRE pour la marque post-inherit tant que
+    # nivuus_manifest_inherit n'a pas (encore, ou jamais) tourné : identique
+    # à PRE_INHERIT, donc "rien n'a été hérité" -- nivuus_manifest_abort
+    # rejouera alors tout ce qui suit, ce qui est correct puisqu'il n'y a
+    # justement rien d'hérité à protéger. Sans cette ligne, un appelant qui
+    # oublierait d'invoquer l'héritage (ou l'inverse : qui hérite sans que la
+    # marque n'ait jamais été (re)posée) laisserait
+    # NIVUUS_MANIFEST_WATERMARK_POST_INHERIT à une valeur non définie ou
+    # périmée d'un cycle begin précédent dans le même processus (les tests
+    # unitaires sourcent la bibliothèque directement et peuvent appeler
+    # nivuus_manifest_begin plusieurs fois) -- avec 0 comme secours le plus
+    # probable, exactement la valeur qui fait rejouer tout l'historique :
+    # le bug CRITICAL qu'on vient de fermer, en silence.
+    NIVUUS_MANIFEST_WATERMARK_POST_INHERIT="$NIVUUS_MANIFEST_WATERMARK_PRE_INHERIT"
 }
 
 nivuus_manifest_record() {
@@ -93,26 +107,30 @@ nivuus_manifest_record() {
     printf '%s\t%s\t%s\t%s\n' "$action" "$path" "$hash" "$ref" >> "$NIVUUS_MANIFEST_TMP"
 }
 
-nivuus_manifest_inherit() {
-    # Reprend les entrées d'un manifeste existant dans le manifeste en cours,
-    # pour qu'une réinstallation (idempotente sur les fichiers déjà en place)
-    # ne perde pas la trace de la première installation.
-    [ -f "$NIVUUS_MANIFEST" ] || return 0
-    grep -v '^#' "$NIVUUS_MANIFEST" >> "$NIVUUS_MANIFEST_TMP" || true
-}
-
-# Capture la ligne de partage entre "hérité d'une installation précédente"
-# et "écrit par l'installation en cours", APRÈS que nivuus_manifest_inherit
-# a tourné (à appeler juste après, par l'appelant). Avec la marque jumelle
-# posée par nivuus_manifest_begin (NIVUUS_MANIFEST_WATERMARK_PRE_INHERIT),
-# elle délimite la plage HÉRITÉE (donc à ne jamais rejouer sur abort) :
+# Reprend les entrées d'un manifeste existant dans le manifeste en cours,
+# pour qu'une réinstallation (idempotente sur les fichiers déjà en place) ne
+# perde pas la trace de la première installation. Pose elle-même, à la fin
+# et INCONDITIONNELLEMENT (même si $NIVUUS_MANIFEST n'existe pas -- rien à
+# hériter, la marque reste simplement égale à PRE_INHERIT), la marque
+# post-inherit : c'est l'unique fonction qui écrit des entrées héritées,
+# donc l'unique endroit où "l'héritage vient de se terminer" peut être
+# affirmé sans dépendre d'un appelant qui penserait à le signaler à part
+# (une fonction séparée, nivuus_manifest_watermark_capture, existait ici et
+# a été supprimée : un appelant qui oubliait de l'invoquer laissait la
+# marque à sa valeur par défaut -- 0, ou une valeur périmée d'un cycle
+# begin précédent dans le même processus -- qui fait justement tout
+# rejouer sur abort, silencieusement).
+#
+# Avec la marque jumelle posée par nivuus_manifest_begin
+# (NIVUUS_MANIFEST_WATERMARK_PRE_INHERIT), elle délimite la plage HÉRITÉE
+# (donc à ne jamais rejouer sur abort) :
 #
 #   1..PRE_INHERIT        entrées propres à CETTE installation (bootstrap
 #                          MKDIR de nivuus_manifest_begin), écrites AVANT que
 #                          l'appelant n'ait pu invoquer l'héritage
 #   PRE_INHERIT+1..POST    entrées héritées d'une installation précédente
-#                          déjà committée (copiées verbatim par
-#                          nivuus_manifest_inherit) -- À NE JAMAIS REJOUER
+#                          déjà committée (copiées verbatim ci-dessous) --
+#                          À NE JAMAIS REJOUER
 #   POST+1..fin            entrées propres à CETTE installation, écrites par
 #                          les étapes qui suivent
 #
@@ -120,7 +138,10 @@ nivuus_manifest_inherit() {
 # installation" -- sans quoi annuler une réinstallation qui échoue
 # rejouerait aussi tout ce qu'une précédente installation, déjà réussie et
 # committée, avait posé.
-nivuus_manifest_watermark_capture() {
+nivuus_manifest_inherit() {
+    if [ -f "$NIVUUS_MANIFEST" ]; then
+        grep -v '^#' "$NIVUUS_MANIFEST" >> "$NIVUUS_MANIFEST_TMP" || true
+    fi
     NIVUUS_MANIFEST_WATERMARK_POST_INHERIT="$(wc -l < "$NIVUUS_MANIFEST_TMP" 2>/dev/null | tr -d ' ')"
     : "${NIVUUS_MANIFEST_WATERMARK_POST_INHERIT:=0}"
 }
@@ -212,6 +233,21 @@ _nivuus_prior_modify_ref() {
         "$NIVUUS_MANIFEST_TMP" 2>/dev/null
 }
 
+# Nivuus a-t-il DÉJÀ touché ce chemin -- CREATE ou MODIFY, à cette
+# installation ou à une précédente héritée -- avant l'écriture en cours ?
+# Sert à distinguer un .zwc réellement préexistant à Nivuus (aucune entrée
+# antérieure : premier contact) d'un .zwc compilé par une session Nivuus
+# après un CREATE/MODIFY précédent (une entrée existe déjà : ce n'est pas
+# notre première visite, donc le .zwc trouvé maintenant est forcément le
+# nôtre, jamais celui de l'utilisateur).
+_nivuus_prior_entry_exists() {
+    local path="$1"
+    [ -f "$NIVUUS_MANIFEST_TMP" ] || return 1
+    awk -F"$NIVUUS_TAB" -v p="$path" \
+        '($1 == "CREATE" || $1 == "MODIFY") && $2 == p { found=1 } END { exit !found }' \
+        "$NIVUUS_MANIFEST_TMP" 2>/dev/null
+}
+
 # Coeur partagé : $1 = source, $2 = destination.
 _nivuus_place() {
     local src="$1" dst="$2" existed=0 backup='-' new_hash prior_ref
@@ -233,14 +269,23 @@ _nivuus_place() {
     fi
 
     # zsh peut compiler n'importe quel fichier qu'il source en un .zwc à
-    # côté. Si un .zwc est DÉJÀ là avant que Nivuus ne touche $dst, il
-    # préexistait à Nivuus (l'utilisateur avait zcompilé son propre fichier,
-    # par exemple) : ce n'est pas à nous de le supprimer un jour. On le
-    # journalise comme PRESERVE avant d'écrire quoi que ce soit, pour que
-    # nivuus_restore_entry (CREATE/MODIFY) sache plus tard ne jamais y
-    # toucher -- contrairement à un .zwc apparu APRÈS coup (compilé par une
-    # session zsh utilisant Nivuus), qui reste fondé à être nettoyé.
-    if [ -f "$dst.zwc" ] && ! _nivuus_zwc_preserved "$dst.zwc"; then
+    # côté. Si un .zwc est DÉJÀ là AU TOUT PREMIER contact de Nivuus avec
+    # $dst (aucune entrée CREATE/MODIFY antérieure, cette installation ou
+    # une précédente héritée), il préexistait à Nivuus (l'utilisateur avait
+    # zcompilé son propre fichier, par exemple) : ce n'est pas à nous de le
+    # supprimer un jour. On le journalise comme PRESERVE avant d'écrire quoi
+    # que ce soit, pour que nivuus_restore_entry (CREATE/MODIFY) sache plus
+    # tard ne jamais y toucher.
+    #
+    # Si Nivuus a DÉJÀ touché $dst avant (CREATE ou MODIFY antérieur), un
+    # .zwc trouvé maintenant ne peut être QUE le nôtre -- compilé par une
+    # session zsh entre-temps (config/99-cleanup.zsh, config/03-completion.zsh)
+    # -- jamais celui de l'utilisateur : sans ce garde-fou, une réinstallation
+    # qui change le contenu (upgrade, nouveau --prefix, etc.) marquerait à
+    # tort ce .zwc Nivuus comme intouchable pour toujours, exactement
+    # l'inverse de ce que "ne supprime que ce que Nivuus a créé" demande.
+    if [ -f "$dst.zwc" ] && ! _nivuus_zwc_preserved "$dst.zwc" \
+        && ! _nivuus_prior_entry_exists "$dst"; then
         nivuus_manifest_record PRESERVE "$dst.zwc" '-' '-'
     fi
 
@@ -458,14 +503,17 @@ nivuus_manifest_rollback() {
 # l'installation qui marchait.
 #
 # On ne rejoue donc que les deux zones qui appartiennent à CETTE
-# installation (voir le schéma dans nivuus_manifest_watermark_capture) :
-# les entrées 1..PRE_INHERIT (bootstrap MKDIR posé par nivuus_manifest_begin
-# avant que l'appelant n'ait pu hériter) et POST_INHERIT+1..fin (tout ce que
-# les étapes ont écrit ensuite). La plage du milieu -- ce que
+# installation (voir le schéma dans nivuus_manifest_inherit) : les entrées
+# 1..PRE_INHERIT (bootstrap MKDIR posé par nivuus_manifest_begin avant que
+# l'appelant n'ait pu hériter) et POST_INHERIT+1..fin (tout ce que les
+# étapes ont écrit ensuite). La plage du milieu -- ce que
 # nivuus_manifest_inherit a copié verbatim -- décrit une installation
-# antérieure déjà réussie et n'est jamais rejouée. Si aucune des deux
-# marques n'a été posée (0 par défaut), tout est rejoué : le cas d'une
-# première installation sans manifeste préexistant à hériter.
+# antérieure déjà réussie et n'est jamais rejouée. Les deux marques ont un
+# repli par défaut sûr (0, ou PRE_INHERIT pour POST -- posé par
+# nivuus_manifest_begin ET par nivuus_manifest_inherit, jamais laissé à la
+# charge d'un appelant qui pourrait l'oublier) : sans elles, tout est
+# rejoué, le cas d'une première installation sans manifeste préexistant à
+# hériter.
 nivuus_manifest_abort() {
     [ -f "$NIVUUS_MANIFEST_TMP" ] || return 0
     local pre="${NIVUUS_MANIFEST_WATERMARK_PRE_INHERIT:-0}" \

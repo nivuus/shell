@@ -223,8 +223,8 @@ teardown() { rm -rf "$TMP"; }
 }
 
 @test "purge survives an unreadable subdirectory under the cache" {
+    [ "$(id -u)" -eq 0 ] && skip "root ignore les bits de permission"
     "$NIVUUS" install --yes --prefix "$TMP/target"
-    mkdir -p "$NIVUUS_STATE_DIR"     # unused here; cache lives under $HOME
     mkdir -p "$HOME/.cache/nivuus-shell/blocked"
     chmod 000 "$HOME/.cache/nivuus-shell/blocked"
     run "$NIVUUS" uninstall --yes --purge

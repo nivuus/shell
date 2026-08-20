@@ -61,12 +61,12 @@ cmd_install() {
     confirm "Installer Nivuus Shell dans $prefix ?" || { log_info "Annulé."; return 0; }
 
     nivuus_manifest_begin user "$prefix"
+    # Hérite les entrées d'une installation précédente ET pose elle-même la
+    # marque post-inherit dont nivuus_manifest_abort a besoin pour ne
+    # défaire que sa propre part si CETTE installation échoue, jamais une
+    # installation précédente qui a réussi (voir le commentaire de
+    # nivuus_manifest_inherit).
     nivuus_manifest_inherit
-    # Marque la frontière entre ce qu'une précédente installation avait déjà
-    # posé (hérité ci-dessus) et ce que CETTE installation ajoute : si elle
-    # échoue, nivuus_manifest_abort ne doit défaire que sa propre part, pas
-    # réutiliser rétroactivement une installation précédente qui a réussi.
-    nivuus_manifest_watermark_capture
     # ~/.cache n'est créé par aucune étape d'installation : Nivuus n'y écrit
     # que plus tard, à l'exécution du shell (config/22-ai-errors.zsh,
     # config/20-terminal-title.zsh...), hors du manifeste. On journalise
