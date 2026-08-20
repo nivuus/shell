@@ -521,7 +521,11 @@ _nivuus_place() {
     fi
 
     if [ "$existed" -eq 1 ]; then
-        backup="$(nivuus_store_backup "$dst")"
+        # Le garde est essentiel : si la sauvegarde échoue, on abandonne AVANT
+        # d'écraser $dst. Sans lui, on enregistrerait un MODIFY dont la
+        # référence de backup est vide — la désinstallation ne pourrait plus
+        # restaurer l'original.
+        backup="$(nivuus_store_backup "$dst")" || return 1
     fi
 
     if [ -n "${NIVUUS_DRY_RUN:-}" ]; then
