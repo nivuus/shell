@@ -1960,3 +1960,18 @@ Reporté aux plans des phases suivantes, conformément au spec :
 - **Phase 5** — vrai one-liner `curl | sh` avec téléchargement du tarball de release, migration des installations existantes portant un `.git` parasite, refonte de `doctor`, documentation d'installation.
 
 `nivuus update` et `nivuus doctor` délèguent pour l'instant à l'existant (`nivuus-update`, `bin/healthcheck`) sans changement de comportement.
+
+### Deux comportements de l'ancien installeur disparus sans remplacement
+
+Relevé par la revue de la tâche 10, à trancher avant le lancement public :
+
+- **`create_local_config`** — l'ancien `install.sh` déposait un `~/.zsh_local` pré-rempli
+  (template commenté). Le nouveau n'en crée aucun. Conséquence assumée : `--purge` ne
+  supprime jamais ce fichier, puisque Nivuus ne l'a pas créé. Mais le bloc inséré dans
+  `.zshrc` invite l'utilisateur à « mettre ses personnalisations dans ~/.zsh_local », un
+  fichier qui n'existe pas. À réconcilier : soit créer le template (et l'enregistrer au
+  manifeste), soit reformuler le message.
+- **`suggest_optional_tools`** — les suggestions de fin d'installation (`eza`, `bat`,
+  `grc`…) ont disparu. Perte d'ergonomie de première utilisation, sans effet sur la
+  sûreté ni la réversibilité. À réintroduire en phase 3 avec la politique `--with-deps`,
+  ou à abandonner explicitement.
