@@ -90,7 +90,10 @@ nivuus_mkdir_p() {
     else
         mkdir -p "$dir"
     fi
-    printf '%s' "$missing" | while IFS= read -r level; do
+    # Enregistrés du plus superficiel au plus profond (ordre de création),
+    # afin que le rollback -- qui rejoue le journal à l'envers -- supprime
+    # bien les répertoires les plus profonds avant leurs parents.
+    printf '%s' "$missing" | sed '1!G;h;$!d' | while IFS= read -r level; do
         [ -n "$level" ] && nivuus_manifest_record MKDIR "$level" '-' '-'
     done
 }
@@ -134,4 +137,59 @@ nivuus_write_file() {
     result=$?
     rm -f "$tmp"
     return $result
+}
+
+nivuus_restore_entry() {
+    local action="$1" path="$2" hash="$3" ref="$4" current
+
+    case "$action" in
+        CREATE)
+            current="$(nivuus_hash_file "$path")"
+            if [ "$current" = "-" ]; then
+                return 0                      # déjà absent
+            elif [ "$current" = "$hash" ]; then
+                if [ -n "${NIVUUS_DRY_RUN:-}" ]; then log_dry "supprimerait $path"
+                else rm -f "$path"; fi
+            else
+                log_warn "Conservé (modifié depuis l'installation) : $path"
+            fi
+            ;;
+        MODIFY)
+            current="$(nivuus_hash_file "$path")"
+            if [ "$current" != "$hash" ]; then
+                log_warn "Conservé (modifié depuis l'installation) : $path"
+                log_warn "Sauvegarde d'origine disponible : $NIVUUS_BACKUP_DIR/$ref"
+                return 0
+            fi
+            if [ ! -f "$NIVUUS_BACKUP_DIR/$ref" ]; then
+                log_warn "Sauvegarde introuvable pour $path, fichier conservé"
+                return 0
+            fi
+            if [ -n "${NIVUUS_DRY_RUN:-}" ]; then log_dry "restaurerait $path"
+            else cp -p "$NIVUUS_BACKUP_DIR/$ref" "$path"; fi
+            ;;
+        MKDIR)
+            if [ -n "${NIVUUS_DRY_RUN:-}" ]; then
+                log_dry "supprimerait le répertoire (si vide) $path"
+            else
+                rmdir "$path" 2>/dev/null || true   # non vide : on le laisse
+            fi
+            ;;
+        CHSH)
+            if [ -n "${NIVUUS_DRY_RUN:-}" ]; then
+                log_dry "restaurerait le shell de connexion : $ref"
+            else
+                log_info "Shell de connexion d'origine : $ref"
+                log_info "Restaure-le avec : chsh -s $ref"
+            fi
+            ;;
+        PKG)
+            return 0    # jamais désinstallé
+            ;;
+    esac
+    return 0
+}
+
+nivuus_manifest_rollback() {
+    nivuus_manifest_each nivuus_restore_entry
 }
