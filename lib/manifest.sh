@@ -68,6 +68,17 @@ nivuus_manifest_begin() {
             [ -n "$level" ] && nivuus_manifest_record MKDIR "$level" '-' '-'
         done
     fi
+
+    # Marque la fin des entrées propres à CETTE installation posées avant
+    # tout héritage (le bootstrap MKDIR ci-dessus, écrit avant que l'appelant
+    # ait pu invoquer nivuus_manifest_inherit) -- distinct de la marque
+    # post-inherit posée par nivuus_manifest_watermark_capture. Entre les
+    # deux se trouvent, le cas échéant, les entrées HÉRITÉES d'une
+    # installation précédente déjà committée : nivuus_manifest_abort doit les
+    # laisser intactes. Voir ce commentaire répété là-bas pour le schéma
+    # complet.
+    NIVUUS_MANIFEST_WATERMARK_PRE_INHERIT="$(wc -l < "$NIVUUS_MANIFEST_TMP" 2>/dev/null | tr -d ' ')"
+    : "${NIVUUS_MANIFEST_WATERMARK_PRE_INHERIT:=0}"
 }
 
 nivuus_manifest_record() {
@@ -88,6 +99,30 @@ nivuus_manifest_inherit() {
     # ne perde pas la trace de la première installation.
     [ -f "$NIVUUS_MANIFEST" ] || return 0
     grep -v '^#' "$NIVUUS_MANIFEST" >> "$NIVUUS_MANIFEST_TMP" || true
+}
+
+# Capture la ligne de partage entre "hérité d'une installation précédente"
+# et "écrit par l'installation en cours", APRÈS que nivuus_manifest_inherit
+# a tourné (à appeler juste après, par l'appelant). Avec la marque jumelle
+# posée par nivuus_manifest_begin (NIVUUS_MANIFEST_WATERMARK_PRE_INHERIT),
+# elle délimite la plage HÉRITÉE (donc à ne jamais rejouer sur abort) :
+#
+#   1..PRE_INHERIT        entrées propres à CETTE installation (bootstrap
+#                          MKDIR de nivuus_manifest_begin), écrites AVANT que
+#                          l'appelant n'ait pu invoquer l'héritage
+#   PRE_INHERIT+1..POST    entrées héritées d'une installation précédente
+#                          déjà committée (copiées verbatim par
+#                          nivuus_manifest_inherit) -- À NE JAMAIS REJOUER
+#   POST+1..fin            entrées propres à CETTE installation, écrites par
+#                          les étapes qui suivent
+#
+# nivuus_manifest_abort ne rejoue que les deux zones "propres à cette
+# installation" -- sans quoi annuler une réinstallation qui échoue
+# rejouerait aussi tout ce qu'une précédente installation, déjà réussie et
+# committée, avait posé.
+nivuus_manifest_watermark_capture() {
+    NIVUUS_MANIFEST_WATERMARK_POST_INHERIT="$(wc -l < "$NIVUUS_MANIFEST_TMP" 2>/dev/null | tr -d ' ')"
+    : "${NIVUUS_MANIFEST_WATERMARK_POST_INHERIT:=0}"
 }
 
 nivuus_manifest_commit() {
@@ -378,23 +413,44 @@ nivuus_manifest_rollback() {
 
 # Annule une installation interrompue entre begin et commit (dépendance
 # manquante, .zshrc corrompu, disque plein...). $NIVUUS_MANIFEST_TMP décrit
-# déjà tout ce que les étapes qui ont réussi ont écrit sur le disque avant
-# l'échec, donc on le rejoue à l'envers comme n'importe quel manifeste, puis
-# on le supprime : sans cela, ~/.nivuus-shell et $NIVUUS_STATE_DIR restent
-# peuplés mais $NIVUUS_MANIFEST (le seul fichier qu'uninstall regarde)
-# n'existe jamais, et « nivuus uninstall » répond « rien à faire ».
+# tout ce que les étapes qui ont réussi ont écrit sur le disque avant
+# l'échec -- MAIS aussi, si nivuus_manifest_inherit a tourné (réinstallation),
+# tout ce qu'une précédente installation RÉUSSIE et déjà committée avait
+# posé. Rejouer le fichier en entier annulerait donc cette installation
+# précédente, saine, simplement parce que la nouvelle a échoué -- un
+# utilisateur qui relance `install` après avoir cassé son .zshrc perdrait
+# l'installation qui marchait.
+#
+# On ne rejoue donc que les deux zones qui appartiennent à CETTE
+# installation (voir le schéma dans nivuus_manifest_watermark_capture) :
+# les entrées 1..PRE_INHERIT (bootstrap MKDIR posé par nivuus_manifest_begin
+# avant que l'appelant n'ait pu hériter) et POST_INHERIT+1..fin (tout ce que
+# les étapes ont écrit ensuite). La plage du milieu -- ce que
+# nivuus_manifest_inherit a copié verbatim -- décrit une installation
+# antérieure déjà réussie et n'est jamais rejouée. Si aucune des deux
+# marques n'a été posée (0 par défaut), tout est rejoué : le cas d'une
+# première installation sans manifeste préexistant à hériter.
 nivuus_manifest_abort() {
     [ -f "$NIVUUS_MANIFEST_TMP" ] || return 0
+    local pre="${NIVUUS_MANIFEST_WATERMARK_PRE_INHERIT:-0}" \
+          post="${NIVUUS_MANIFEST_WATERMARK_POST_INHERIT:-0}" \
+          new_entries
+    new_entries="$(mktemp)"
+    {
+        [ "$pre" -gt 0 ] && sed -n "1,${pre}p" "$NIVUUS_MANIFEST_TMP"
+        tail -n "+$((post + 1))" "$NIVUUS_MANIFEST_TMP"
+    } > "$new_entries"
     # $NIVUUS_MANIFEST_TMP lui-même vit sous un des répertoires MKDIR qu'il
     # décrit (typiquement $NIVUUS_STATE_DIR) : tant qu'il existe, un rmdir
-    # sur ce niveau échoue "non vide". On capture donc les niveaux avant de
-    # rejouer, on le supprime, puis on retente ces niveaux -- exactement le
-    # même contournement que cmd_uninstall --purge applique au manifeste
-    # committé et à ses sauvegardes.
+    # sur ce niveau échoue "non vide". On capture donc les niveaux (parmi les
+    # seules entrées nouvelles) avant de rejouer, on le supprime, puis on
+    # retente ces niveaux -- exactement le même contournement que
+    # cmd_uninstall --purge applique au manifeste committé et à ses
+    # sauvegardes.
     local levels
-    levels="$(awk -F"$NIVUUS_TAB" '$1=="MKDIR"{print $2}' "$NIVUUS_MANIFEST_TMP" 2>/dev/null || true)"
-    nivuus_manifest_each nivuus_restore_entry "$NIVUUS_MANIFEST_TMP"
-    rm -f "$NIVUUS_MANIFEST_TMP"
+    levels="$(awk -F"$NIVUUS_TAB" '$1=="MKDIR"{print $2}' "$new_entries" 2>/dev/null || true)"
+    nivuus_manifest_each nivuus_restore_entry "$new_entries"
+    rm -f "$new_entries" "$NIVUUS_MANIFEST_TMP"
     if [ -n "$levels" ]; then
         printf '%s\n' "$levels" | sed '1!G;h;$!d' | while IFS= read -r level; do
             [ -z "$level" ] && continue

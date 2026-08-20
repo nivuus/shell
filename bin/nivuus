@@ -62,6 +62,11 @@ cmd_install() {
 
     nivuus_manifest_begin user "$prefix"
     nivuus_manifest_inherit
+    # Marque la frontière entre ce qu'une précédente installation avait déjà
+    # posé (hérité ci-dessus) et ce que CETTE installation ajoute : si elle
+    # échoue, nivuus_manifest_abort ne doit défaire que sa propre part, pas
+    # réutiliser rétroactivement une installation précédente qui a réussi.
+    nivuus_manifest_watermark_capture
     if ! nivuus_step_copy_tree "$NIVUUS_SRC_ROOT" "$prefix" \
         || ! nivuus_step_write_version "$NIVUUS_SRC_ROOT" "$prefix" \
         || ! nivuus_step_write_zshrc "$HOME/.zshrc" "$prefix"; then

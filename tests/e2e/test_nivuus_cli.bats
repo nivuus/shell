@@ -208,3 +208,16 @@ teardown() { rm -rf "$TMP"; }
     [ "$status" -eq 0 ]
     [[ "$output" != *"no such file or directory"* ]]
 }
+
+@test "an aborted reinstall leaves the previous installation intact" {
+    printf 'export MINE=42\n' > "$HOME/.zshrc"
+    "$NIVUUS" install --yes --prefix "$TMP/target"
+    [ -f "$TMP/target/config/00-core.zsh" ]
+    # l'utilisateur casse un marqueur : la 2e install doit échouer
+    grep -v '<<< nivuus shell <<<' "$HOME/.zshrc" > "$TMP/z" && mv "$TMP/z" "$HOME/.zshrc"
+    run "$NIVUUS" install --yes --prefix "$TMP/target"
+    [ "$status" -ne 0 ]
+    [ -f "$TMP/target/config/00-core.zsh" ]      # l'install #1 survit
+    run zsh -i -c true
+    [ "$status" -eq 0 ]                          # et le shell démarre
+}
