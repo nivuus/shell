@@ -90,7 +90,7 @@ assert_file_compiled() {
 }
 
 # Assert environment variable is set
-# Usage: assert_env_set "NORD_PATH"
+# Usage: assert_env_set "THEME_PATH"
 assert_env_set() {
     local var_name=$1
 

@@ -35,6 +35,28 @@ export ENABLE_AI_AUTO_DEBOUNCE="${ENABLE_AI_AUTO_DEBOUNCE:-true}"
 export AI_INLINE_MODE="${AI_INLINE_MODE:-true}"
 
 # =============================================================================
+# Theme & Prompt Configuration
+# =============================================================================
+# NIVUUS_THEME: name of a theme file in themes/ (or $NIVUUS_THEME_DIR) to load.
+#   Built-in: nord (default), dracula.
+# NIVUUS_THEME_DIR: extra directory to look up custom theme files in, e.g.
+#   ~/.config/nivuus-shell/themes/<name>.zsh
+# NIVUUS_THEME_FILE: explicit path to a theme file, takes priority over
+#   NIVUUS_THEME/NIVUUS_THEME_DIR.
+# NIVUUS_PROMPT_FORMAT / NIVUUS_RPROMPT_FORMAT: template strings for the left
+#   and right prompt. Available tokens: {ssh} {root} {status} {path} {venv}
+#   {cloud} {firebase} {git} {jobs}. See doc/PROMPT.md.
+export NIVUUS_THEME="${NIVUUS_THEME:-nord}"
+export NIVUUS_THEME_DIR="${NIVUUS_THEME_DIR:-$HOME/.config/nivuus-shell/themes}"
+export NIVUUS_THEME_FILE="${NIVUUS_THEME_FILE:-}"
+# NOTE: default templates use literal { } tokens, which zsh's ${VAR:-default}
+# brace-matching mishandles when nested in double quotes — set them via a
+# plain conditional assignment instead.
+[[ -z "$NIVUUS_PROMPT_FORMAT" ]] && NIVUUS_PROMPT_FORMAT='{ssh}{root}{status} {path}{venv}{cloud}{firebase}{git} '
+[[ -z "$NIVUUS_RPROMPT_FORMAT" ]] && NIVUUS_RPROMPT_FORMAT='{jobs}'
+export NIVUUS_PROMPT_FORMAT NIVUUS_RPROMPT_FORMAT
+
+# =============================================================================
 # User Local Configuration (load BEFORE modules for environment variables)
 # =============================================================================
 

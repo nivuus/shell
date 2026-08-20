@@ -1,9 +1,11 @@
 #!/usr/bin/env zsh
 # =============================================================================
-# Nivuus Prompt - Nord Theme
+# Nivuus Prompt
 # =============================================================================
-# Format: [SSH] [ROOT] STATUS PATH (VENV) CLOUD [FIREBASE] GIT     [JOBS]
-# Synchronous with Git caching (2s TTL)
+# Default format: [SSH] [ROOT] STATUS PATH (VENV) CLOUD [FIREBASE] GIT [JOBS]
+# Synchronous with Git caching (2s TTL). Layout is driven by the
+# NIVUUS_PROMPT_FORMAT / NIVUUS_RPROMPT_FORMAT template strings (see
+# doc/PROMPT.md); colors come from the loaded theme ($THEME_*).
 # =============================================================================
 
 # Enable prompt substitution
@@ -72,14 +74,14 @@ git_prompt_info() {
     # Check for modifications (using porcelain for reliability)
     local status_icon=""
     if [[ -n $(git status --porcelain 2>/dev/null) ]]; then
-        status_icon="%{%F{167}%}○%{%f%}"  # Red empty circle when dirty
+        status_icon="%{${THEME_ERROR}%}○%{%f%}"  # empty circle when dirty
     else
-        status_icon="%{%F{143}%}●%{%f%}"  # Green filled circle when clean
+        status_icon="%{${THEME_SUCCESS}%}●%{%f%}"  # filled circle when clean
     fi
 
-    # Build git prompt with Nord colors
-    # git:( in cyan bold, branch in red, ) in cyan bold, space, status icon (✓ or ✗)
-    local git_prompt=" %{%B%F{110}%}git:(%{%F{167}%}${branch}%{%B%F{110}%})%{%f%b%} ${status_icon}"
+    # Build git prompt with theme colors
+    # git:( in prefix color bold, branch in branch color, ) in prefix color bold, space, status icon
+    local git_prompt=" %{%B${THEME_GIT_PREFIX}%}git:(%{${THEME_GIT_BRANCH}%}${branch}%{%B${THEME_GIT_PREFIX}%})%{%f%b%} ${status_icon}"
 
     # Update cache
     _GIT_PROMPT_CACHE_DIR="$current_dir"
@@ -159,7 +161,7 @@ prompt_firebase() {
 
     # Build Firebase prompt (or empty if no project)
     local firebase_prompt=""
-    [[ -n "$project" ]] && firebase_prompt=" %{%F{208}%}[${project}]%{%f%}"
+    [[ -n "$project" ]] && firebase_prompt=" %{%F{${THEME_COLORS[orange]}}%}[${project}]%{%f%}"
 
     # Update cache
     _FIREBASE_PROMPT_CACHE_DIR="$current_dir"
@@ -193,8 +195,8 @@ prompt_python_venv() {
         venv_name="poetry"
     fi
 
-    # Python venv in purple/magenta brackets (Nord15 - 180)
-    [[ -n "$venv_name" ]] && echo " %{%F{180}%}(${venv_name})%{%f%}"
+    # Python venv in purple/magenta brackets
+    [[ -n "$venv_name" ]] && echo " %{%F{${THEME_COLORS[magenta]}}%}(${venv_name})%{%f%}"
 }
 
 # =============================================================================
@@ -208,13 +210,13 @@ prompt_cloud_context() {
 
     # AWS Profile
     if [[ -n "$AWS_PROFILE" ]] && [[ "$AWS_PROFILE" != "default" ]]; then
-        cloud_info+=" %{%F{214}%}aws:${AWS_PROFILE}%{%f%}"
+        cloud_info+=" %{%F{${THEME_COLORS[orange]}}%}aws:${AWS_PROFILE}%{%f%}"
     fi
 
     # GCP Project (if not already shown by Firebase)
     if [[ -n "$CLOUDSDK_CORE_PROJECT" ]] && [[ "${ENABLE_FIREBASE_PROMPT:-true}" != "true" ]]; then
         [[ -n "$cloud_info" ]] && cloud_info+=" "
-        cloud_info+="%{%F{110}%}gcp:${CLOUDSDK_CORE_PROJECT}%{%f%}"
+        cloud_info+="%{${THEME_GIT_PREFIX}%}gcp:${CLOUDSDK_CORE_PROJECT}%{%f%}"
     fi
 
     # Azure Subscription (with caching to avoid blocking prompt)
@@ -238,40 +240,76 @@ prompt_cloud_context() {
         fi
 
         [[ -n "$cloud_info" ]] && cloud_info+=" "
-        cloud_info+="%{%F{67}%}az:${az_sub_name}%{%f%}"
+        cloud_info+="%{${THEME_SSH}%}az:${az_sub_name}%{%f%}"
     fi
 
     echo "$cloud_info"
 }
 
 # =============================================================================
+# Prompt Segments (used by build_prompt via NIVUUS_PROMPT_FORMAT tokens)
+# =============================================================================
+
+prompt_segment_ssh() {
+    is_ssh && echo "%{%B%F{${THEME_COLORS[comment]}}%}[%{%B${THEME_SSH}%}\$(hostname)%{%B%F{${THEME_COLORS[comment]}}%}]%{%f%b%} "
+}
+
+prompt_segment_root() {
+    is_root && echo "%{${THEME_ROOT}%}#%{%f%} "
+}
+
+prompt_segment_status() {
+    echo "%(?:%{%B${THEME_SUCCESS}%}>:%{%B${THEME_ERROR}%}>) "
+}
+
+prompt_segment_path() {
+    echo "%{${THEME_PATH}%}%~%{%f%}"
+}
+
+# =============================================================================
 # Build Complete Prompt
 # =============================================================================
 
+# Maps {token} placeholders in a NIVUUS_PROMPT_FORMAT-style template to the
+# segment function that renders them. Add an entry here to expose a new
+# token to user-defined templates.
+typeset -gA _NIVUUS_PROMPT_TOKENS
+_NIVUUS_PROMPT_TOKENS=(
+    ssh      prompt_segment_ssh
+    root     prompt_segment_root
+    status   prompt_segment_status
+    path     prompt_segment_path
+    venv     prompt_python_venv
+    cloud    prompt_cloud_context
+    firebase prompt_firebase
+    git      git_prompt_info
+    jobs     background_jobs_info
+)
+
+# Expand a NIVUUS_PROMPT_FORMAT/NIVUUS_RPROMPT_FORMAT template: {token} is
+# replaced with a literal \$(function) call so evaluation stays lazy (each
+# prompt render, via PROMPT_SUBST) instead of happening once at build time.
+# Unknown tokens are left as-is.
+_nivuus_expand_prompt_template() {
+    local template="$1"
+    local token func
+    for token func in ${(kv)_NIVUUS_PROMPT_TOKENS}; do
+        template="${template//\{${token}\}/\$(${func})}"
+    done
+    echo "$template"
+}
+
 # Synchronous prompt building
 build_prompt() {
-    local prompt_parts=()
+    local template="$NIVUUS_PROMPT_FORMAT"
+    [[ -z "$template" ]] && template='{ssh}{root}{status} {path}{venv}{cloud}{firebase}{git} '
+    _nivuus_expand_prompt_template "$template"
+}
 
-    # SSH indicator
-    if is_ssh; then
-        prompt_parts+=("%{%B%F{240}%}[%{%B%F{67}%}\$(hostname)%{%B%F{240}%}]%{%f%b%} ")
-    fi
-
-    # Root indicator
-    if is_root; then
-        prompt_parts+=("%{%F{167}%}#%{%f%} ")
-    fi
-
-    # Status indicator
-    prompt_parts+=("%(?:%{%B%F{143}%}>:%{%B%F{167}%}>) ")
-
-    # Path
-    prompt_parts+=("%{%F{109}%}%~%{%f%}")
-
-    # Python venv, Cloud context, Firebase, and Git (synchronous)
-    prompt_parts+=("\$(prompt_python_venv)\$(prompt_cloud_context)\$(prompt_firebase)\$(git_prompt_info) ")
-
-    echo "${(j::)prompt_parts}"
+build_rprompt() {
+    local template="$NIVUUS_RPROMPT_FORMAT"
+    [[ -z "$template" ]] && template='{jobs}'
+    _nivuus_expand_prompt_template "$template"
 }
 
 # =============================================================================
@@ -283,7 +321,7 @@ background_jobs_info() {
 
     # Error indicator (from 22-ai-errors.zsh if loaded)
     if [[ "${ENABLE_AI_ERROR_INDICATOR:-true}" == "true" ]] && [[ "$_AI_ERROR_AVAILABLE" == "true" ]]; then
-        output+="%{%F{167}%}⚠%{%f%}"
+        output+="%{${THEME_ERROR}%}⚠%{%f%}"
     fi
 
     # Use ZSH native job tracking (more reliable than jobs command)
@@ -326,24 +364,24 @@ background_jobs_info() {
                 local names="${(j: :)running_names}"
                 # Truncate if too long
                 [[ ${#names} -gt 20 ]] && names="${names:0:17}..."
-                output+="%{%F{143}%}▶ %{%f%}%{%F{246}%}${names}%{%f%}"
+                output+="%{${THEME_SUCCESS}%}▶ %{%f%}%{${THEME_MUTED}%}${names}%{%f%}"
             fi
 
             if (( stopped > 0 )); then
                 [[ -n "$output" ]] && output+=" "
                 local names="${(j: :)stopped_names}"
                 [[ ${#names} -gt 20 ]] && names="${names:0:17}..."
-                output+="%{%F{167}%}⏸ %{%f%}%{%F{246}%}${names}%{%f%}"
+                output+="%{${THEME_ERROR}%}⏸ %{%f%}%{${THEME_MUTED}%}${names}%{%f%}"
             fi
         else
             # Show counts
             if (( running > 0 )); then
-                output+="%{%F{143}%}▶ ${running}%{%f%}"
+                output+="%{${THEME_SUCCESS}%}▶ ${running}%{%f%}"
             fi
 
             if (( stopped > 0 )); then
                 [[ -n "$output" ]] && output+=" "
-                output+="%{%F{167}%}⏸ ${stopped}%{%f%}"
+                output+="%{${THEME_ERROR}%}⏸ ${stopped}%{%f%}"
             fi
         fi
     fi
@@ -355,17 +393,19 @@ background_jobs_info() {
 # Set Prompt
 # =============================================================================
 
-# Main prompt
+# Main prompt: template is expanded once at shell startup into a string
+# containing literal \$(...) segment calls, which PROMPT_SUBST re-evaluates
+# on every render (same lazy-evaluation model as before this was configurable).
 PROMPT=$(build_prompt)
 
-# Right prompt with background jobs
-RPROMPT='$(background_jobs_info)'
+# Right prompt with background jobs (and any other RPROMPT_FORMAT tokens)
+RPROMPT=$(build_rprompt)
 
 # Continuation prompt
-PROMPT2="${NORD_PATH}%_>${NORD_RESET} "
+PROMPT2="${THEME_PATH}%_>${THEME_RESET} "
 
 # Selection prompt
-PROMPT3="${NORD_PATH}?#${NORD_RESET} "
+PROMPT3="${THEME_PATH}?#${THEME_RESET} "
 
 # Execution trace prompt
-PROMPT4="${NORD_PATH}+%N:%i>${NORD_RESET} "
+PROMPT4="${THEME_PATH}+%N:%i>${THEME_RESET} "

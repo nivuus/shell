@@ -220,12 +220,12 @@ _warn() {
 # Color Usage Tests
 # =============================================================================
 
-@test "Safety module uses Nord error color for dangers" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep 'NORD_ERROR' config/21-safety.zsh"
+@test "Safety module uses theme error color for dangers" {
+    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep 'THEME_ERROR' config/21-safety.zsh"
     [ "$status" -eq 0 ]
 }
 
-@test "Safety module uses Nord colors for messages" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -E '(NORD_PATH|NORD_FIREBASE|NORD_RESET)' config/21-safety.zsh"
+@test "Safety module uses theme colors for messages" {
+    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -E '(THEME_PATH|THEME_ACCENT|THEME_RESET)' config/21-safety.zsh"
     [ "$status" -eq 0 ]
 }

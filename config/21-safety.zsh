@@ -95,8 +95,8 @@ _nivuus_safety_confirm() {
 
     if msg=$(_nivuus_match_danger "$cmd"); then
         print -r ""
-        print -rP "⚠️  ${NORD_ERROR}DANGER:${NORD_RESET} $msg"
-        print -rP "Command: ${NORD_PATH}$cmd${NORD_RESET}"
+        print -rP "⚠️  ${THEME_ERROR}DANGER:${THEME_RESET} $msg"
+        print -rP "Command: ${THEME_PATH}$cmd${THEME_RESET}"
         print -rn "Type 'yes' to run this command (anything else cancels): "
         local response
         read -r response </dev/tty 2>/dev/null || read -r response
@@ -106,8 +106,8 @@ _nivuus_safety_confirm() {
 
     if msg=$(_nivuus_match_warning "$cmd"); then
         print -r ""
-        print -rP "⚠️  ${NORD_FIREBASE}WARNING:${NORD_RESET} $msg"
-        print -rP "Command: ${NORD_PATH}$cmd${NORD_RESET}"
+        print -rP "⚠️  ${THEME_ACCENT}WARNING:${THEME_RESET} $msg"
+        print -rP "Command: ${THEME_PATH}$cmd${THEME_RESET}"
         print -rn "Press Enter to run, or Ctrl-C to cancel... "
         read -r </dev/tty 2>/dev/null || read -r
         return 0
@@ -128,7 +128,7 @@ _nivuus_safety_accept_line() {
         # Take over the display to prompt interactively.
         zle -I
         if ! _nivuus_safety_confirm "$BUFFER"; then
-            print -rP "${NORD_ERROR}✗ Command cancelled${NORD_RESET}"
+            print -rP "${THEME_ERROR}✗ Command cancelled${THEME_RESET}"
             BUFFER=""
             zle reset-prompt
             return 0

@@ -17,11 +17,11 @@
     [ "$status" -eq 0 ]
 }
 
-@test "Nord colors are defined after loading theme" {
+@test "Theme colors are defined after loading theme" {
     source "$NIVUUS_SHELL_DIR/themes/nord.zsh"
-    [ -n "$NORD_PATH" ]
-    [ -n "$NORD_SUCCESS" ]
-    [ -n "$NORD_ERROR" ]
+    [ -n "$THEME_PATH" ]
+    [ -n "$THEME_SUCCESS" ]
+    [ -n "$THEME_ERROR" ]
 }
 
 @test "can load prompt module" {

@@ -5,8 +5,20 @@
 # Minimal, fast core configuration
 # =============================================================================
 
-# Load Nord theme
-source "$NIVUUS_SHELL_DIR/themes/nord.zsh"
+# Load theme (NIVUUS_THEME / NIVUUS_THEME_FILE / NIVUUS_THEME_DIR are set in
+# .zshrc and can be overridden in ~/.zsh_local before this file loads)
+export NIVUUS_THEME="${NIVUUS_THEME:-nord}"
+_nivuus_theme_file="${NIVUUS_THEME_FILE:-}"
+if [[ -z "$_nivuus_theme_file" && -n "$NIVUUS_THEME_DIR" && -f "$NIVUUS_THEME_DIR/${NIVUUS_THEME}.zsh" ]]; then
+    _nivuus_theme_file="$NIVUUS_THEME_DIR/${NIVUUS_THEME}.zsh"
+fi
+[[ -z "$_nivuus_theme_file" ]] && _nivuus_theme_file="$NIVUUS_SHELL_DIR/themes/${NIVUUS_THEME}.zsh"
+if [[ ! -f "$_nivuus_theme_file" ]]; then
+    echo "⚠️  Nivuus Shell: theme '${NIVUUS_THEME}' introuvable (${_nivuus_theme_file}), fallback sur nord" >&2
+    _nivuus_theme_file="$NIVUUS_SHELL_DIR/themes/nord.zsh"
+fi
+source "$_nivuus_theme_file"
+unset _nivuus_theme_file
 
 # =============================================================================
 # Basic Options

@@ -151,13 +151,13 @@
     [ "$status" -eq 0 ]
 }
 
-@test "Clean status uses green (143)" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -B 2 '●' config/05-prompt.zsh | grep '143'"
+@test "Clean status uses THEME_SUCCESS" {
+    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -B 2 '●' config/05-prompt.zsh | grep 'THEME_SUCCESS'"
     [ "$status" -eq 0 ]
 }
 
-@test "Dirty status uses red (167)" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -B 2 '○' config/05-prompt.zsh | grep '167'"
+@test "Dirty status uses THEME_ERROR" {
+    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -B 2 '○' config/05-prompt.zsh | grep 'THEME_ERROR'"
     [ "$status" -eq 0 ]
 }
 
@@ -165,8 +165,8 @@
 # Git Branch Display
 # =============================================================================
 
-@test "Git branch uses Nord red color" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep 'NORD_GIT_BRANCH' themes/nord.zsh"
+@test "Git branch uses the theme's red color" {
+    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep 'THEME_GIT_BRANCH' themes/nord.zsh"
     [ "$status" -eq 0 ]
 }
 
@@ -189,8 +189,8 @@
     [ "$status" -eq 0 ]
 }
 
-@test "Git prompt integrates Nord theme" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -c 'NORD_GIT' themes/nord.zsh"
+@test "Git prompt integrates the loaded theme" {
+    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -c 'THEME_GIT' themes/nord.zsh"
     [ "$status" -eq 0 ]
     count="${output}"
     [ "$count" -ge 2 ]

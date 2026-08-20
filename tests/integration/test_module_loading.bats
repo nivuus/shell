@@ -42,14 +42,14 @@
 # Dependency Tests
 # =============================================================================
 
-@test "Prompt module can access Nord colors" {
-    run zsh -c "source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/05-prompt.zsh' && echo \$NORD_SUCCESS"
+@test "Prompt module can access theme colors" {
+    run zsh -c "source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/05-prompt.zsh' && echo \$THEME_SUCCESS"
     [ "$status" -eq 0 ]
     [ -n "$output" ]
 }
 
-@test "Git module can access Nord colors" {
-    run zsh -c "source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/06-git.zsh' && echo \$NORD_GIT_BRANCH"
+@test "Git module can access theme colors" {
+    run zsh -c "source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/06-git.zsh' && echo \$THEME_GIT_BRANCH"
     [ "$status" -eq 0 ]
     [ -n "$output" ]
 }

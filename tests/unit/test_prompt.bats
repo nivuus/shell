@@ -86,9 +86,10 @@ run_zsh() {
     [ "$status" -eq 0 ]
 }
 
-@test "Git prompt uses Nord colors (110, 167, 143)" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -E '%F\{(110|167|143)\}' config/05-prompt.zsh | head -3"
+@test "Git prompt uses THEME_GIT_PREFIX/THEME_GIT_BRANCH/THEME_SUCCESS/THEME_ERROR" {
+    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -A 35 'git_prompt_info()' config/05-prompt.zsh | grep -cE 'THEME_GIT_PREFIX|THEME_GIT_BRANCH|THEME_SUCCESS|THEME_ERROR'"
     [ "$status" -eq 0 ]
+    [ "$output" -ge 3 ]
 }
 
 # =============================================================================
@@ -115,8 +116,8 @@ run_zsh() {
     [ "$status" -eq 0 ]
 }
 
-@test "Python prompt uses Nord purple (180)" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -A 20 'prompt_python_venv()' config/05-prompt.zsh | grep '180'"
+@test "Python prompt uses the theme's magenta color" {
+    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -A 22 'prompt_python_venv()' config/05-prompt.zsh | grep 'THEME_COLORS\[magenta\]'"
     [ "$status" -eq 0 ]
 }
 
@@ -217,28 +218,67 @@ run_zsh() {
 }
 
 # =============================================================================
-# Nord Color Usage Tests
+# Theme Color Usage Tests
+# =============================================================================
+# The prompt no longer hardcodes ANSI codes: it reads $THEME_* variables and
+# $THEME_COLORS[...] entries set by whichever themes/*.zsh is loaded.
+
+@test "Prompt uses THEME_GIT_PREFIX/THEME_GIT_BRANCH for git decorations" {
+    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -c 'THEME_GIT_PREFIX\|THEME_GIT_BRANCH' config/05-prompt.zsh"
+    [ "$status" -eq 0 ]
+    count="${output}"
+    [ "$count" -ge 2 ]
+}
+
+@test "Prompt uses THEME_ERROR for errors/dirty status" {
+    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -c 'THEME_ERROR' config/05-prompt.zsh"
+    [ "$status" -eq 0 ]
+    count="${output}"
+    [ "$count" -ge 2 ]
+}
+
+@test "Prompt uses THEME_SUCCESS for success" {
+    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -c 'THEME_SUCCESS' config/05-prompt.zsh"
+    [ "$status" -eq 0 ]
+    count="${output}"
+    [ "$count" -ge 2 ]
+}
+
+@test "Prompt contains no hardcoded ANSI-256 color literals" {
+    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -cE '%F\{[0-9]+\}' config/05-prompt.zsh"
+    [ "$status" -eq 1 ] || [ "${output}" -eq 0 ]
+}
+
+# =============================================================================
+# Theme Pluggability Tests
 # =============================================================================
 
-@test "Prompt uses Nord cyan (110) for decorations" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -c '110' config/05-prompt.zsh"
+@test "NIVUUS_THEME=dracula changes the loaded theme colors" {
+    run zsh -c "export NIVUUS_SHELL_DIR='$NIVUUS_SHELL_DIR' && export NIVUUS_THEME='dracula' && source '$NIVUUS_SHELL_DIR/config/00-core.zsh' >/dev/null 2>&1 && echo \"\$THEME_BAT_NAME\""
     [ "$status" -eq 0 ]
-    count="${output}"
-    [ "$count" -ge 2 ]
+    [[ "$output" == *"Dracula"* ]]
 }
 
-@test "Prompt uses Nord red (167) for branch/errors" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -c '167' config/05-prompt.zsh"
+@test "unknown NIVUUS_THEME falls back to nord" {
+    run zsh -c "export NIVUUS_SHELL_DIR='$NIVUUS_SHELL_DIR' && export NIVUUS_THEME='does-not-exist' && source '$NIVUUS_SHELL_DIR/config/00-core.zsh' >/dev/null 2>&1 && echo \"\$THEME_BAT_NAME\""
     [ "$status" -eq 0 ]
-    count="${output}"
-    [ "$count" -ge 2 ]
+    [[ "$output" == *"Nord"* ]]
 }
 
-@test "Prompt uses Nord green (143) for success" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -c '143' config/05-prompt.zsh"
+# =============================================================================
+# Prompt Format Template Tests
+# =============================================================================
+
+@test "NIVUUS_PROMPT_FORMAT customizes which segments build_prompt renders" {
+    run zsh -c "export NIVUUS_SHELL_DIR='$NIVUUS_SHELL_DIR' && export NIVUUS_PROMPT_FORMAT='{path}' && source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/05-prompt.zsh' >/dev/null 2>&1 && build_prompt"
     [ "$status" -eq 0 ]
-    count="${output}"
-    [ "$count" -ge 2 ]
+    [ "$output" = '$(prompt_segment_path)' ]
+}
+
+@test "default build_prompt output matches the documented default template" {
+    run zsh -c "export NIVUUS_SHELL_DIR='$NIVUUS_SHELL_DIR' && unset NIVUUS_PROMPT_FORMAT && source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/05-prompt.zsh' >/dev/null 2>&1 && build_prompt"
+    [ "$status" -eq 0 ]
+    [ "$output" = '$(prompt_segment_ssh)$(prompt_segment_root)$(prompt_segment_status) $(prompt_segment_path)$(prompt_python_venv)$(prompt_cloud_context)$(prompt_firebase)$(git_prompt_info) ' ]
 }
 
 # =============================================================================

@@ -342,6 +342,25 @@ create_local_config() {
 # export GEMINI_MODEL='gemini-3.1-flash-lite'
 
 # =============================================================================
+# Theme & Prompt
+# =============================================================================
+
+# Built-in themes: nord (default), dracula
+# export NIVUUS_THEME='dracula'
+
+# Point to a directory of custom theme files (name.zsh, same contract as
+# themes/nord.zsh) to use your own theme with NIVUUS_THEME
+# export NIVUUS_THEME_DIR="$HOME/.config/nivuus-shell/themes"
+
+# Or load one specific theme file directly
+# export NIVUUS_THEME_FILE="$HOME/my-theme.zsh"
+
+# Customize the prompt layout. Available tokens: {ssh} {root} {status}
+# {path} {venv} {cloud} {firebase} {git} {jobs} - see doc/PROMPT.md
+# export NIVUUS_PROMPT_FORMAT='{status} {path}{git} '
+# export NIVUUS_RPROMPT_FORMAT='{jobs}'
+
+# =============================================================================
 # Performance Tuning
 # =============================================================================
 

@@ -257,11 +257,12 @@ teardown() {
     assert "$result" is_not_empty
 }
 
-@test 'build_prompt uses Nord colors' {
-    result=$(build_prompt)
+@test 'build_prompt renders the path segment in the theme color' {
+    local template=$(build_prompt)
+    result=$(eval "print -rn -- \"$template\"")
 
-    # Should contain at least one Nord color code
-    assert_color "$result" 109  # cyan_light for path
+    # Should contain the active theme's cyan_light color (used for path)
+    assert_color "$result" "${THEME_COLORS[cyan_light]}"
 }
 
 @test 'build_prompt is fast (<100ms)' {
@@ -272,20 +273,52 @@ teardown() {
 # Color Variables Tests
 # =============================================================================
 
-@test 'NORD_PATH is set' {
-    assert_env_set "NORD_PATH"
+@test 'THEME_PATH is set' {
+    assert_env_set "THEME_PATH"
 }
 
-@test 'NORD_SUCCESS is set' {
-    assert_env_set "NORD_SUCCESS"
+@test 'THEME_SUCCESS is set' {
+    assert_env_set "THEME_SUCCESS"
 }
 
-@test 'NORD_ERROR is set' {
-    assert_env_set "NORD_ERROR"
+@test 'THEME_ERROR is set' {
+    assert_env_set "THEME_ERROR"
 }
 
-@test 'NORD_GIT_BRANCH is set' {
-    assert_env_set "NORD_GIT_BRANCH"
+@test 'THEME_GIT_BRANCH is set' {
+    assert_env_set "THEME_GIT_BRANCH"
+}
+
+# =============================================================================
+# Theme Pluggability Tests
+# =============================================================================
+
+@test 'dracula theme defines the same variable contract as nord' {
+    run zsh -c "source '$NIVUUS_SHELL_DIR/themes/dracula.zsh' && [[ -n \"\$THEME_PATH\" && -n \"\$THEME_SUCCESS\" && -n \"\$THEME_ERROR\" && -n \"\$THEME_BAT_NAME\" && \"\$THEME_BAT_NAME\" == 'Dracula' ]]"
+    [ "$status" -eq 0 ]
+}
+
+@test 'unknown NIVUUS_THEME falls back to nord with a warning' {
+    run zsh -c "export NIVUUS_SHELL_DIR='$NIVUUS_SHELL_DIR'; export NIVUUS_THEME='does-not-exist'; source '$NIVUUS_SHELL_DIR/config/00-core.zsh' >/tmp/nivuus_theme_fallback.$$ 2>&1; echo \$THEME_BAT_NAME; grep -qi 'fallback' /tmp/nivuus_theme_fallback.$$ && echo has_warning; rm -f /tmp/nivuus_theme_fallback.$$"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Nord"* ]]
+    [[ "$output" == *"has_warning"* ]]
+}
+
+# =============================================================================
+# Prompt Format Template Tests
+# =============================================================================
+
+@test 'NIVUUS_PROMPT_FORMAT restricts rendered segments to the given tokens' {
+    NIVUUS_PROMPT_FORMAT='{path}'
+    local template=$(build_prompt)
+    [[ "$template" == '$(prompt_segment_path)' ]]
+}
+
+@test 'unknown tokens in NIVUUS_PROMPT_FORMAT are left as literal text' {
+    NIVUUS_PROMPT_FORMAT='{path}[{nope}]'
+    local template=$(build_prompt)
+    [[ "$template" == '$(prompt_segment_path)[{nope}]' ]]
 }
 
 # Print summary and exit

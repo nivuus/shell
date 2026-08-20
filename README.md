@@ -1,6 +1,6 @@
 # Nivuus Shell
 
-> A modern, fast, AI-powered ZSH shell with Nord theme and intelligent features
+> A modern, fast, AI-powered ZSH shell with a configurable theme/prompt and intelligent features
 
 ![Version](https://img.shields.io/github/v/release/maximeallanic/nivuus-shell?label=version)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
@@ -11,7 +11,7 @@
 ## ✨ Features
 
 - ⚡ **Lightning Fast** - Sub-100ms startup time (lazy-loaded completion)
-- 🎨 **Nord Theme** - Beautiful, consistent color scheme
+- 🎨 **Configurable Theme & Prompt** - Nord by default, swap themes or the prompt layout via `~/.zsh_local`
 - 🤖 **AI-Powered** - Command suggestions via the Gemini API
 - 📝 **Modern Vim** - Ctrl+C/V/X/A shortcuts
 - 🔍 **Smart Navigation** - History prefix search with ↑/↓
@@ -221,11 +221,12 @@ nivuus-version --check  # Check for updates
 nivuus-update           # Install latest update
 ```
 
-## 🎨 Nord Theme
+## 🎨 Theme & Prompt
 
-Nivuus uses the beautiful [Nord color scheme](https://www.nordtheme.com/) throughout:
+Nivuus ships with the [Nord color scheme](https://www.nordtheme.com/) by default, but the theme
+and the prompt layout are both configurable — no code changes needed.
 
-### Prompt Format
+### Prompt Format (default)
 
 ```
 [hostname] > ~/path (venv) aws:prod [firebase-project] git:(branch)○     [jobs]
@@ -233,10 +234,10 @@ Nivuus uses the beautiful [Nord color scheme](https://www.nordtheme.com/) throug
 
 - **Green `>`** - Last command succeeded
 - **Red `>`** - Last command failed
-- **[hostname]** - Shows in SSH sessions (cyan)
-- **(venv)** - Active Python virtual environment (purple)
+- **[hostname]** - Shows in SSH sessions
+- **(venv)** - Active Python virtual environment
 - **aws:prod** - Cloud provider context (AWS/GCP/Azure)
-- **[project]** - Active Firebase project (yellow)
+- **[project]** - Active Firebase project
 - **git:(branch)○** - Git branch with status (○ dirty, ● clean)
 - **[jobs]** - Background jobs on the right (RPROMPT)
 
@@ -245,6 +246,16 @@ Nivuus uses the beautiful [Nord color scheme](https://www.nordtheme.com/) throug
 Edit `~/.zsh_local` to customize:
 
 ```bash
+# --- Theme ---
+export NIVUUS_THEME='dracula'          # Built-in: nord (default), dracula
+# export NIVUUS_THEME_DIR="$HOME/.config/nivuus-shell/themes"  # custom theme folder
+# export NIVUUS_THEME_FILE="$HOME/my-theme.zsh"                # or one specific file
+
+# --- Prompt layout ---
+# Tokens: {ssh} {root} {status} {path} {venv} {cloud} {firebase} {git} {jobs}
+export NIVUUS_PROMPT_FORMAT='{status} {path}{git} '
+export NIVUUS_RPROMPT_FORMAT='{jobs}'
+
 # Performance tuning
 export GIT_PROMPT_CACHE_TTL=5          # Git cache (default: 2s)
 export ENABLE_FIREBASE_PROMPT=false    # Disable Firebase info
@@ -269,6 +280,9 @@ export BAT_STYLE="plain"                # Options: plain, auto, numbers, grid, h
 export GOOGLE_API_KEY='your-api-key'   # https://aistudio.google.com/apikey
 export GEMINI_MODEL='gemini-3.1-flash-lite'
 ```
+
+See [PROMPT.md](doc/PROMPT.md) for the full list of prompt tokens and the theme file contract
+(to write your own theme, copy `themes/nord.zsh` or `themes/dracula.zsh`).
 
 ## 📊 Performance
 
@@ -415,7 +429,7 @@ nivuus-shell/
 ├── install.sh             # Installation script
 ├── config/                # Modular configuration
 │   ├── 00-core.zsh        # Core ZSH settings
-│   ├── 05-prompt.zsh      # Nord prompt
+│   ├── 05-prompt.zsh      # Configurable prompt (theme + format template)
 │   ├── 06-git.zsh         # Git aliases
 │   ├── 07-navigation.zsh  # Smart navigation
 │   ├── 08-vim.zsh         # Vim integration
@@ -424,7 +438,8 @@ nivuus-shell/
 │   ├── 20-autoupdate.zsh  # Auto-update system (release-based)
 │   └── ...                # Other modules
 ├── themes/
-│   └── nord.zsh           # Nord color palette
+│   ├── nord.zsh           # Default color palette
+│   └── dracula.zsh        # Second built-in theme / custom-theme template
 ├── bin/
 │   ├── healthcheck        # System diagnostics
 │   └── benchmark          # Performance testing

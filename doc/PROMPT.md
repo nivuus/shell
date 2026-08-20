@@ -2,6 +2,11 @@
 
 Documentation du format exact du prompt shell.
 
+> Le thème (couleurs) et le format (ordre/présence des segments) du prompt
+> sont **entièrement configurables** via `~/.zshrc` / `~/.zsh_local`, sans
+> modifier le code. Voir [Thème & Format Configurables](#thème--format-configurables)
+> plus bas. Le format visuel ci-dessous décrit le rendu **par défaut**.
+
 ## Format Visuel
 
 ### Local (succès)
@@ -81,7 +86,7 @@ Documentation du format exact du prompt shell.
 
 ### 5. Python Virtual Environment (Optionnel)
 **Format:** `(venv)`, `(conda:name)`, ou `(poetry)`
-**Couleur:** Purple (180)
+**Couleur:** `$THEME_COLORS[magenta]` du thème actif
 **Condition:**
 - Variable `ENABLE_PYTHON_VENV=true` (défaut)
 - Environnement virtuel actif détecté
@@ -99,9 +104,9 @@ export ENABLE_PYTHON_VENV=false
 ### 6. Cloud Provider Context (Optionnel)
 **Format:** `aws:profile`, `gcp:project`, ou `az:subscription`
 **Couleurs:**
-- **AWS** - Orange (214)
-- **GCP** - Cyan (110)
-- **Azure** - Blue (67)
+- **AWS** - `$THEME_COLORS[orange]`
+- **GCP** - `$THEME_GIT_PREFIX`
+- **Azure** - `$THEME_SSH`
 
 **Condition:**
 - Variable `ENABLE_CLOUD_PROMPT=true` (défaut)
@@ -119,7 +124,7 @@ export ENABLE_CLOUD_PROMPT=false
 
 ### 7. Projet Firebase (Optionnel)
 **Format:** `[project-name]`
-**Couleur:** Jaune
+**Couleur:** `$THEME_COLORS[orange]`
 **Condition:**
 - Projet Firebase actif dans le répertoire courant
 - Fichier `~/.config/configstore/firebase-tools.json` existe
@@ -133,11 +138,11 @@ export ENABLE_FIREBASE_PROMPT=false
 ### 8. Information Git
 **Format:** `git:(branch)●` ou `git:(branch)○`
 **Couleurs:**
-- `git:(` - Cyan
-- `branch` - Red
-- `)` - Cyan
-- `●` - Vert (repo propre)
-- `○` - Rouge (modifications non commitées)
+- `git:(` - `$THEME_GIT_PREFIX`
+- `branch` - `$THEME_GIT_BRANCH`
+- `)` - `$THEME_GIT_PREFIX`
+- `●` - `$THEME_SUCCESS` (repo propre)
+- `○` - `$THEME_ERROR` (modifications non commitées)
 
 **Comportement:**
 - Affiché uniquement dans un dépôt git
@@ -152,8 +157,8 @@ export ENABLE_FIREBASE_PROMPT=false
 ### Background Jobs
 **Format:** `[▶ name1 ⏸ name2]` ou `[▶ 3 ⏸ 1]`
 **Couleurs:**
-- `▶` + running jobs - Vert (143)
-- `⏸` + stopped jobs - Rouge (167)
+- `▶` + running jobs - `$THEME_SUCCESS`
+- `⏸` + stopped jobs - `$THEME_ERROR`
 
 **Comportement:**
 - Affiche les jobs en arrière-plan automatiquement
@@ -168,25 +173,33 @@ export ENABLE_FIREBASE_PROMPT=false
 
 ### Palette Utilisée
 
-| Élément | Couleur ZSH | Code |
-|---------|-------------|------|
-| SSH hostname | `$fg_bold[blue]` | Bleu (gras) |
-| SSH brackets | `$fg_bold[grey]` | Gris (gras) |
-| Root indicator | `$fg[red]` | Rouge |
-| Success status | `$fg_bold[green]` | Vert (gras) |
-| Error status | `$fg_bold[red]` | Rouge (gras) |
-| Path | `$fg[cyan]` | Cyan |
-| Firebase project | `%F{yellow}` | Jaune |
-| Git prefix | `$fg_bold[blue]` | Bleu (gras) |
-| Git branch | `$fg[red]` | Rouge |
-| Git clean (●) | `%F{143}` | Vert (143) |
-| Git dirty (○) | `%F{167}` | Rouge (167) |
-| Python venv | `%F{180}` | Purple (180) |
-| AWS context | `%F{214}` | Orange (214) |
-| GCP context | `%F{110}` | Cyan (110) |
-| Azure context | `%F{67}` | Blue (67) |
-| RPROMPT running | `%F{143}` | Vert (143) |
-| RPROMPT stopped | `%F{167}` | Rouge (167) |
+Le prompt ne code plus aucune couleur en dur : chaque segment lit une
+variable sémantique (`$THEME_*`) ou une entrée de `$THEME_COLORS[...]`,
+toutes deux définies par le thème actuellement chargé (`themes/nord.zsh` par
+défaut). Changer de thème change donc automatiquement toutes ces couleurs.
+
+| Élément | Variable |
+|---------|----------|
+| SSH hostname | `$THEME_SSH` |
+| SSH brackets | `$THEME_COLORS[comment]` |
+| Root indicator | `$THEME_ROOT` |
+| Success status | `$THEME_SUCCESS` |
+| Error status | `$THEME_ERROR` |
+| Path | `$THEME_PATH` |
+| Firebase project | `$THEME_COLORS[orange]` |
+| Git prefix | `$THEME_GIT_PREFIX` |
+| Git branch | `$THEME_GIT_BRANCH` |
+| Git clean (●) | `$THEME_SUCCESS` |
+| Git dirty (○) | `$THEME_ERROR` |
+| Python venv | `$THEME_COLORS[magenta]` |
+| AWS context | `$THEME_COLORS[orange]` |
+| GCP context | `$THEME_GIT_PREFIX` |
+| Azure context | `$THEME_SSH` |
+| RPROMPT running | `$THEME_SUCCESS` |
+| RPROMPT stopped | `$THEME_ERROR` |
+
+Valeurs par défaut (thème `nord`) dans `themes/nord.zsh`; un second thème
+livré, `dracula`, sert d'exemple pour écrire vos propres thèmes.
 
 ---
 
@@ -358,25 +371,74 @@ Le prompt est **entièrement synchrone** pour garantir la fiabilité :
 
 ---
 
-## Modification du Prompt
+## Thème & Format Configurables
 
-### Fichier de Configuration
-**Emplacement:** `config/05-prompt.zsh`
+Le thème (couleurs) et le format du prompt (quels segments, dans quel
+ordre) se configurent **sans toucher au code**, via des variables
+d'environnement définies dans `~/.zshrc` ou `~/.zsh_local` (chargé avant les
+modules `config/*.zsh`, donc avant que le thème et le prompt ne se
+construisent).
 
-### Exemple de Personnalisation
+### Changer de thème
 
 ```bash
-# Dans ~/.zshrc ou ~/.zsh_local
+# Thèmes livrés: nord (défaut), dracula
+export NIVUUS_THEME="dracula"
 
-# Modifier le cache git
-export GIT_PROMPT_CACHE_TTL=5
+# Ou un thème custom, dans un répertoire dédié
+export NIVUUS_THEME_DIR="$HOME/.config/nivuus-shell/themes"
+export NIVUUS_THEME="mon-theme"   # cherche $NIVUUS_THEME_DIR/mon-theme.zsh
 
-# Désactiver Firebase
-export ENABLE_FIREBASE_PROMPT=false
-
-# Personnaliser le prompt (après chargement)
-PROMPT='%F{green}➜%f %F{cyan}%~%f $(git_prompt_info) '
+# Ou un fichier de thème explicite (prioritaire sur NIVUUS_THEME)
+export NIVUUS_THEME_FILE="$HOME/mon-theme.zsh"
 ```
+
+Un thème inconnu déclenche un avertissement et un repli automatique sur
+`nord`. Pour écrire un thème custom, copiez `themes/nord.zsh` ou
+`themes/dracula.zsh` : chaque thème doit définir `THEME_COLORS` (assoc,
+codes ANSI-256), `THEME_HEX` (assoc, codes hex), les variables sémantiques
+`THEME_PATH`/`THEME_SUCCESS`/`THEME_ERROR`/`THEME_SSH`/`THEME_ROOT`/
+`THEME_GIT_PREFIX`/`THEME_GIT_BRANCH`/`THEME_ACCENT`/`THEME_MUTED`/
+`THEME_RESET`, `THEME_BAT_NAME`/`THEME_DELTA_SYNTAX` (thèmes bat/delta), et
+`LS_COLORS`/`GREP_COLORS`.
+
+### Changer le format du prompt
+
+`NIVUUS_PROMPT_FORMAT` (prompt gauche) et `NIVUUS_RPROMPT_FORMAT` (prompt
+droit) sont des templates : chaque `{token}` est remplacé par le rendu du
+segment correspondant. Tokens disponibles :
+
+| Token | Segment |
+|-------|---------|
+| `{ssh}` | Indicateur SSH `[hostname]` |
+| `{root}` | Indicateur root `#` |
+| `{status}` | `>` coloré selon le dernier exit code |
+| `{path}` | Répertoire courant |
+| `{venv}` | Environnement Python actif |
+| `{cloud}` | Contexte cloud (AWS/GCP/Azure) |
+| `{firebase}` | Projet Firebase actif |
+| `{git}` | Branche + statut git |
+| `{jobs}` | Jobs en arrière-plan (utilisé par défaut dans `NIVUUS_RPROMPT_FORMAT`) |
+
+Défauts (reproduisent le format actuel) :
+```bash
+export NIVUUS_PROMPT_FORMAT='{ssh}{root}{status} {path}{venv}{cloud}{firebase}{git} '
+export NIVUUS_RPROMPT_FORMAT='{jobs}'
+```
+
+Exemple minimal (juste le chemin et le git) :
+```bash
+export NIVUUS_PROMPT_FORMAT='{path}{git} '
+```
+
+Les tokens inconnus restent affichés tels quels (texte littéral), aucune
+erreur n'est levée. L'évaluation des segments reste paresseuse (via
+`PROMPT_SUBST`), donc pas de perte de performance par rapport au prompt
+figé précédent.
+
+### Fichier de Configuration
+**Emplacement:** `config/05-prompt.zsh` (moteur de template + segments),
+`themes/*.zsh` (couleurs)
 
 ### Recharger le Prompt
 ```bash
@@ -440,5 +502,5 @@ export TERM=xterm-256color
 
 ---
 
-**Fichier source:** `config/05-prompt.zsh`
-**Dernière mise à jour:** Janvier 2025
+**Fichiers source:** `config/05-prompt.zsh`, `themes/*.zsh`
+**Dernière mise à jour:** Août 2026

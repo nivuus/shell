@@ -15,20 +15,20 @@
 @test "Prompt contains path component" {
     run zsh -c "source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/05-prompt.zsh' && build_prompt"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"%~"* ]] || [[ "$output" == *"%/"* ]] || [[ "$output" == *"PWD"* ]]
+    [[ "$output" == *"prompt_segment_path"* ]]
 }
 
-@test "Prompt uses Nord colors" {
-    run zsh -c "source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/05-prompt.zsh' && build_prompt"
+@test "Prompt renders with theme colors" {
+    run zsh -c "source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/05-prompt.zsh' && eval \"print -rn -- \\\"\$(build_prompt)\\\"\""
     [ "$status" -eq 0 ]
-    # Should contain color codes
-    [[ "$output" == *"%F{"* ]] || [[ "$output" == *"\$NORD_"* ]]
+    # Should contain color codes once the embedded \$(...) segment calls are evaluated
+    [[ "$output" == *"%F{"* ]]
 }
 
 @test "Prompt ends with reset color" {
-    run zsh -c "source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/05-prompt.zsh' && build_prompt"
+    run zsh -c "source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/05-prompt.zsh' && eval \"print -rn -- \\\"\$(build_prompt)\\\"\""
     [ "$status" -eq 0 ]
-    [[ "$output" == *"%f"* ]] || [[ "$output" == *"\$NORD_RESET"* ]]
+    [[ "$output" == *"%f"* ]]
 }
 
 # =============================================================================
@@ -75,8 +75,8 @@
     [[ "$output" == *"poetry"* ]]
 }
 
-@test "Python venv uses Nord purple (180)" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -A 25 'prompt_python_venv' config/05-prompt.zsh | grep '180'"
+@test "Python venv uses the theme's magenta color" {
+    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -A 25 'prompt_python_venv' config/05-prompt.zsh | grep 'THEME_COLORS\[magenta\]'"
     [ "$status" -eq 0 ]
 }
 
@@ -213,27 +213,30 @@
 # Color Consistency Tests
 # =============================================================================
 
-@test "All prompt components use Nord colors" {
-    # Check that prompt uses Nord variables or color codes
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -c -E '(NORD_|%F\{(110|143|167|180|214|67))' config/05-prompt.zsh"
+@test "All prompt components use theme variables/colors" {
+    # Check that prompt uses THEME_* variables or THEME_COLORS[...] lookups
+    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -c -E '(THEME_[A-Z_]+|THEME_COLORS\[)' config/05-prompt.zsh"
     [ "$status" -eq 0 ]
     count="${output}"
     [ "$count" -ge 10 ]
 }
 
-@test "Success status uses Nord green (143)" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep '143' config/05-prompt.zsh | head -3"
+@test "Success status uses THEME_SUCCESS" {
+    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -c 'THEME_SUCCESS' config/05-prompt.zsh"
     [ "$status" -eq 0 ]
+    [ "${output}" -ge 1 ]
 }
 
-@test "Error status uses Nord red (167)" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep '167' config/05-prompt.zsh | head -3"
+@test "Error status uses THEME_ERROR" {
+    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -c 'THEME_ERROR' config/05-prompt.zsh"
     [ "$status" -eq 0 ]
+    [ "${output}" -ge 1 ]
 }
 
-@test "Decorations use Nord cyan (110)" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep '110' config/05-prompt.zsh | head -3"
+@test "Git decorations use THEME_GIT_PREFIX" {
+    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -c 'THEME_GIT_PREFIX' config/05-prompt.zsh"
     [ "$status" -eq 0 ]
+    [ "${output}" -ge 1 ]
 }
 
 # =============================================================================
@@ -255,4 +258,16 @@
     run zsh -c "source '$NIVUUS_SHELL_DIR/.zshrc' && echo \$PROMPT"
     [ "$status" -eq 0 ]
     [ -n "$output" ]
+}
+
+@test "Full shell honors NIVUUS_THEME=dracula end to end" {
+    run zsh -c "export NIVUUS_THEME=dracula && source '$NIVUUS_SHELL_DIR/.zshrc' && echo \$THEME_BAT_NAME"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Dracula"* ]]
+}
+
+@test "Full shell honors a custom NIVUUS_PROMPT_FORMAT end to end" {
+    run zsh -c "export NIVUUS_PROMPT_FORMAT='{path}' && source '$NIVUUS_SHELL_DIR/.zshrc' && print -P -- \"\$PROMPT\""
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"git:("* ]]
 }

@@ -6,7 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Nivuus Shell is a modern, performance-focused ZSH configuration framework with:
 - **Performance target**: <300ms startup time
-- **Theme**: Nord color scheme throughout (prompt, vim, all output)
+- **Theme**: Configurable via `NIVUUS_THEME` (default: Nord). Prompt colors, vim, and command
+  colorization all read from the loaded theme's `$THEME_*` variables — see "Theming & Prompt
+  Format" below.
 - **AI Integration**: direct Gemini REST API calls for command assistance (not GitHub Copilot, no gemini-cli dependency)
 - **Philosophy**: Pure ZSH, no external plugin frameworks (no Oh-My-Zsh, no Prezto)
 
@@ -50,7 +52,9 @@ sudo ./install.sh --system --non-interactive
 
 The shell loads in a specific order via `.zshrc`:
 
-1. **Theme First** (`themes/nord.zsh`) - Loads Nord color palette before any other module needs it
+1. **Theme First** (`config/00-core.zsh` resolves `NIVUUS_THEME`/`NIVUUS_THEME_FILE`/`NIVUUS_THEME_DIR`
+   and sources the matching `themes/*.zsh`, default `themes/nord.zsh`) - Loads the color palette
+   before any other module needs it
 2. **Numbered Modules** (`config/00-*.zsh` through `config/15-*.zsh`) - Sequential loading ensures dependencies are met
 3. **Cleanup Last** (`config/99-cleanup.zsh`) - Finalizes environment, compiles files, shows welcome
 
@@ -100,26 +104,34 @@ nvm() {
 
 ### Prompt System
 
-The prompt is built synchronously in `config/05-prompt.zsh` via `build_prompt()`:
+The prompt is built synchronously in `config/05-prompt.zsh` via `build_prompt()`/`build_rprompt()`,
+which expand the `NIVUUS_PROMPT_FORMAT`/`NIVUUS_RPROMPT_FORMAT` template strings (see
+`doc/PROMPT.md`). Default layout:
 
 ```
 [SSH] [ROOT] STATUS PATH (VENV) CLOUD [FIREBASE] GIT      [JOBS]
                                                            (RPROMPT)
 ```
 
+Each segment is a function (`prompt_segment_ssh`, `prompt_segment_root`, `prompt_segment_status`,
+`prompt_segment_path`, `prompt_python_venv`, `prompt_cloud_context`, `prompt_firebase`,
+`git_prompt_info`, `background_jobs_info`) mapped to a `{token}` in `_NIVUUS_PROMPT_TOKENS`. To
+add a new prompt component, write a function returning its rendered string and add it to that
+map — it's then usable in any user-defined `NIVUUS_PROMPT_FORMAT`.
+
 **Main Prompt (left)**:
 - **SSH detection**: Checks `$SSH_CLIENT`, `$SSH_TTY`, `$SESSION_TYPE`
 - **Root detection**: Checks `$EUID` and `whoami`
 - **Status color**: Uses previous command exit code (`$?`)
-- **Python venv**: Shows `(venv)`, `(conda:name)`, or `(poetry)` in purple (180)
+- **Python venv**: Shows `(venv)`, `(conda:name)`, or `(poetry)` in `$THEME_COLORS[magenta]`
 - **Cloud context**: Shows AWS/GCP/Azure active context
-  - AWS: `aws:profile` in orange (214)
-  - GCP: `gcp:project` in cyan (110)
-  - Azure: `az:subscription` in blue (67)
+  - AWS: `aws:profile` in `$THEME_COLORS[orange]`
+  - GCP: `gcp:project` in `$THEME_GIT_PREFIX`
+  - Azure: `az:subscription` in `$THEME_SSH`
 - **Firebase**: Optional, parses `~/.config/configstore/firebase-tools.json`
 - **Git info**: Cached with TTL, shows branch + status circles
-  - `○` (red, empty circle): dirty/modified
-  - `●` (green, filled circle): clean
+  - `○` (`$THEME_ERROR`, empty circle): dirty/modified
+  - `●` (`$THEME_SUCCESS`, filled circle): clean
 
 **Right Prompt (RPROMPT)**:
 - **Background jobs**: Shows running/stopped jobs via `background_jobs_info()`
@@ -127,10 +139,11 @@ The prompt is built synchronously in `config/05-prompt.zsh` via `build_prompt()`
 - Intelligent display:
   - ≤ 2 jobs: Shows names (`▶ vim ⏸ npm`)
   - \> 2 jobs: Shows counts (`▶ 3 ⏸ 1`)
-- Colors: green (143) for running, red (167) for stopped
+- Colors: `$THEME_SUCCESS` for running, `$THEME_ERROR` for stopped
 - Updates automatically on every prompt without manual `jobs` command
 
-All colors use Nord palette via `themes/nord.zsh` color mappings.
+All colors come from the loaded theme's `$THEME_*` variables / `$THEME_COLORS[...]` — never
+hardcode an ANSI-256 code or hex value directly in prompt/colorization code.
 
 ### Vim Integration
 
@@ -155,24 +168,39 @@ The vim system (`config/08-vim.zsh` + `.vimrc.nord`) uses environment detection:
 ### Never Use These
 
 - **Oh-My-Zsh** or similar frameworks - conflicts with modular architecture
-- **Powerlevel10k** - we have custom Nord prompt
+- **Powerlevel10k** - we have a custom, theme-configurable prompt (see "Theming & Prompt Format")
 - **Heavy plugins** - breaks <300ms target
 - **Bash syntax** in `.zsh` files - this is ZSH-specific
+- **Hardcoded ANSI-256/hex color codes** in prompt/colorization/syntax-highlighting code - always
+  go through the theme contract below, so the whole shell stays theme-agnostic
 
-### Nord Color Palette
+### Theming & Prompt Format
 
-When modifying prompts or adding colored output, use these variables from `themes/nord.zsh`:
+Nivuus Shell ships with a pluggable theme system and a template-driven prompt format — neither
+is hardcoded. See `doc/PROMPT.md` for the user-facing docs.
+
+**Theme contract** — every file in `themes/*.zsh` (loaded via `NIVUUS_THEME` /
+`NIVUUS_THEME_FILE` / `NIVUUS_THEME_DIR`, resolved in `config/00-core.zsh`) must define:
 
 ```zsh
-$NORD_PATH          # Cyan (paths)
-$NORD_SUCCESS       # Green (success indicators)
-$NORD_ERROR         # Red (errors, git dirty)
-$NORD_SSH           # Blue (SSH hostname)
-$NORD_GIT_PREFIX    # Cyan (git decorations)
-$NORD_GIT_BRANCH    # Red (branch names)
-$NORD_FIREBASE      # Yellow (Firebase project)
-$NORD_RESET         # Reset colors
+$THEME_COLORS[...]   # assoc array, ANSI-256 codes: bg_main, bg_light, bg_select, comment,
+                      # fg_main, fg_light, fg_bright, cyan_light, cyan, blue_light, blue,
+                      # red, orange, yellow, green, magenta
+$THEME_HEX[...]       # assoc array, same keys, hex codes (for fzf/eza/delta)
+$THEME_PATH $THEME_SUCCESS $THEME_ERROR $THEME_SSH $THEME_ROOT
+$THEME_GIT_PREFIX $THEME_GIT_BRANCH $THEME_ACCENT $THEME_MUTED $THEME_RESET
+$THEME_BAT_NAME       # e.g. "Nord", "Dracula" - passed to `bat --theme`
+$THEME_DELTA_SYNTAX    # passed to `git config delta.syntax-theme`
+$LS_COLORS $GREP_COLORS
 ```
+
+Built-in themes: `themes/nord.zsh` (default), `themes/dracula.zsh` (second example proving the
+contract is truly pluggable). Copy either one as a template for a custom theme.
+
+**Prompt format contract** — `config/05-prompt.zsh` expands `NIVUUS_PROMPT_FORMAT`/
+`NIVUUS_RPROMPT_FORMAT` template strings, replacing `{token}` with a call to the mapped segment
+function (`_NIVUUS_PROMPT_TOKENS`, see "Prompt System" above). Never reintroduce a hardcoded
+segment order in `build_prompt()` — add new segments as functions + token map entries instead.
 
 ### Config File Patterns
 
@@ -228,7 +256,7 @@ Test module in isolation:
 
 ```zsh
 export NIVUUS_SHELL_DIR="$(pwd)"
-source themes/nord.zsh          # Always load theme first
+source themes/nord.zsh          # Always load a theme first (nord or dracula)
 source config/XX-yourmodule.zsh # Then your module
 # Test functions/aliases here
 ```
@@ -260,14 +288,17 @@ Document in README.md under "Performance" section.
 
 Modify `config/05-prompt.zsh`:
 1. Add component function (e.g., `prompt_kubernetes()`)
-2. Call from `build_prompt()` in correct order
-3. Use Nord colors only
+2. Add it to `_NIVUUS_PROMPT_TOKENS` as a new `{token}`, and to the default
+   `NIVUUS_PROMPT_FORMAT`/`NIVUUS_RPROMPT_FORMAT` in `.zshrc` if it should show by default
+3. Use `$THEME_*` / `$THEME_COLORS[...]` only, never a hardcoded color code
 4. Keep synchronous (no async prompt updates)
 
 ## File Purpose Reference
 
-- **`.zshrc`**: Entry point, loads modules in order, measures startup time
-- **`themes/nord.zsh`**: Nord color palette, must load before all other modules
+- **`.zshrc`**: Entry point, loads modules in order, measures startup time, sets
+  `NIVUUS_THEME`/`NIVUUS_PROMPT_FORMAT`/`NIVUUS_RPROMPT_FORMAT` defaults
+- **`themes/nord.zsh`**: Default color palette, must load before all other modules
+- **`themes/dracula.zsh`**: Second built-in theme, also serves as a custom-theme template
 - **`config/03-completion.zsh`**: Lazy-loaded completion system (loads on first TAB) - saves ~300ms startup
 - **`config/05-prompt.zsh`**: Prompt builder, git caching, Firebase detection, Python venv, cloud context
 - **`config/08-vim.zsh`**: Vim wrapper functions, environment detection

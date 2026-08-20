@@ -17,8 +17,8 @@
     [ "$status" -eq 0 ]
 }
 
-@test "AWS uses orange color (214)" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -A 20 'prompt_cloud_context' config/05-prompt.zsh | grep '214'"
+@test "AWS uses the theme's orange color" {
+    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -A 20 'prompt_cloud_context' config/05-prompt.zsh | grep 'THEME_COLORS\[orange\]'"
     [ "$status" -eq 0 ]
 }
 
@@ -42,8 +42,8 @@
     [[ "$output" == *"gcp"* ]] && [[ "$output" == *"my-project"* ]]
 }
 
-@test "GCP uses cyan color (110)" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -A 20 'prompt_cloud_context' config/05-prompt.zsh | grep '110'"
+@test "GCP uses the theme's git-prefix (cyan) color" {
+    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -A 20 'prompt_cloud_context' config/05-prompt.zsh | grep 'THEME_GIT_PREFIX'"
     [ "$status" -eq 0 ]
 }
 
@@ -67,8 +67,8 @@
     [[ "$output" == *"az"* ]] && [[ "$output" == *"my-subscription"* ]]
 }
 
-@test "Azure uses blue color (67)" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -A 20 'prompt_cloud_context' config/05-prompt.zsh | grep '67'"
+@test "Azure uses the theme's blue (SSH) color" {
+    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -A 40 'prompt_cloud_context' config/05-prompt.zsh | grep 'THEME_SSH'"
     [ "$status" -eq 0 ]
 }
 
@@ -112,8 +112,8 @@
     [ "$status" -eq 0 ]
 }
 
-@test "Cloud context uses Nord colors" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -A 30 'prompt_cloud_context' config/05-prompt.zsh | grep -c '%F{'"
+@test "Cloud context uses theme colors" {
+    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -A 40 'prompt_cloud_context' config/05-prompt.zsh | grep -cE 'THEME_[A-Z_]+|THEME_COLORS\['"
     [ "$status" -eq 0 ]
     count="${output}"
     [ "$count" -ge 3 ]

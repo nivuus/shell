@@ -30,8 +30,8 @@ setup() {
     ! [[ "$output" == *"⚠️"*"Nivuus Shell"* ]]
 }
 
-@test "Nord colors are available" {
-    run zsh -c "source '$NIVUUS_SHELL_DIR/.zshrc' && echo \$NORD_SUCCESS"
+@test "Theme colors are available" {
+    run zsh -c "source '$NIVUUS_SHELL_DIR/.zshrc' && echo \$THEME_SUCCESS"
     [ "$status" -eq 0 ]
     [ -n "$output" ]
 }
