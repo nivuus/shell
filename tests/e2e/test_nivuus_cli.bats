@@ -99,3 +99,28 @@ teardown() { rm -rf "$TMP"; }
     [ "$status" -eq 0 ]
     [[ "$output" == *"aucune installation"* ]] || [[ "$output" == *"Aucune installation"* ]]
 }
+
+@test "purge does not delete HOME when NIVUUS_STATE_DIR points at it" {
+    printf 'precious\n' > "$HOME/.zsh_history"
+    printf 'export MINE=1\n' > "$HOME/.zshrc"
+    NIVUUS_STATE_DIR="$HOME" "$NIVUUS" install --yes --prefix "$TMP/target"
+    NIVUUS_STATE_DIR="$HOME" "$NIVUUS" uninstall --yes --purge
+    [ -d "$HOME" ]
+    [ -f "$HOME/.zsh_history" ]
+    [ "$(cat "$HOME/.zsh_history")" = "precious" ]
+}
+
+@test "purge keeps a zsh_local it did not create" {
+    printf 'my own settings\n' > "$HOME/.zsh_local"
+    "$NIVUUS" install --yes --prefix "$TMP/target"
+    "$NIVUUS" uninstall --yes --purge
+    [ -f "$HOME/.zsh_local" ]
+    [ "$(cat "$HOME/.zsh_local")" = "my own settings" ]
+}
+
+@test "install --prefix without a value fails with a readable message" {
+    run "$NIVUUS" install --yes --prefix
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"--prefix"* ]]
+    [[ "$output" != *"unbound variable"* ]]
+}

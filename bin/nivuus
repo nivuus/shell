@@ -26,8 +26,9 @@ Options :
   --yes       Ne pose aucune question.
   --prefix    Répertoire d'installation (défaut : ~/.nivuus-shell).
   --minimal   Mode serveur/container : pas de chsh, pas d'extras.
-  --purge     (uninstall) supprime aussi ~/.zsh_local et l'état.
-              ~/.zsh_history n'est JAMAIS supprimé.
+  --purge     (uninstall) supprime aussi l'état Nivuus (manifeste, sauvegardes).
+              Ne supprime que ce que Nivuus a créé : ~/.zsh_local (si présent
+              mais non créé par Nivuus) et ~/.zsh_history ne sont JAMAIS supprimés.
 EOF
 }
 
@@ -46,7 +47,11 @@ cmd_install() {
             --dry-run) export NIVUUS_DRY_RUN=1 ;;
             --yes|-y)  ASSUME_YES=1 ;;
             --minimal) export NIVUUS_MINIMAL=1 ;;
-            --prefix)  shift; prefix="$1" ;;
+            --prefix)
+                shift
+                [ $# -gt 0 ] || { log_error "L'option --prefix attend un chemin."; return 2; }
+                prefix="$1"
+                ;;
             *) log_error "Option inconnue : $1"; return 2 ;;
         esac
         shift
@@ -96,9 +101,18 @@ cmd_uninstall() {
     nivuus_manifest_rollback
 
     if [ -n "$purge" ] && [ -z "${NIVUUS_DRY_RUN:-}" ]; then
-        rm -f "$HOME/.zsh_local"
-        rm -rf "$NIVUUS_STATE_DIR"
-        log_info "Configuration personnelle supprimée (--purge). L'historique est conservé."
+        # On ne supprime QUE ce que Nivuus a créé, jamais un répertoire en bloc.
+        if [ -f "$HOME/.zsh_local" ]; then
+            log_info "~/.zsh_local n'a pas été créé par Nivuus : conservé. Supprime-le à la main si tu le souhaites."
+        fi
+        rm -f "$NIVUUS_MANIFEST"
+        if [ -d "$NIVUUS_BACKUP_DIR" ]; then
+            # Les sauvegardes sont nommées par leur sha256 : rien d'autre ne peut s'y trouver.
+            find "$NIVUUS_BACKUP_DIR" -type f -name '*[0-9a-f]' -maxdepth 1 -exec rm -f {} +
+            rmdir "$NIVUUS_BACKUP_DIR" 2>/dev/null || true
+        fi
+        rmdir "$NIVUUS_STATE_DIR" 2>/dev/null || true
+        log_info "État Nivuus supprimé (--purge). L'historique et les fichiers non créés par Nivuus sont conservés."
     elif [ -z "${NIVUUS_DRY_RUN:-}" ]; then
         rm -f "$NIVUUS_MANIFEST"
     fi
