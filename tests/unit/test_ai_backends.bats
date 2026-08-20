@@ -82,3 +82,58 @@ _ai_backend_gemini_call "hello"
 '
     [ "$status" -eq 1 ]
 }
+
+# --- OpenAI backend ---
+
+@test "openai backend parses choices content via curl+jq" {
+    # The implementation runs curl under the external `timeout` binary, which
+    # execs "curl" via a fresh PATH lookup -- a shell function named `curl`
+    # in this process is invisible to that subprocess. So the mock must be a
+    # real executable on PATH, not a shell function.
+    local mock_bin="$BATS_TEST_TMPDIR/bin"
+    mkdir -p "$mock_bin"
+    cat > "$mock_bin/curl" <<'MOCK'
+#!/usr/bin/env bash
+printf '%s' '{"choices":[{"message":{"content":"mocked openai response"}}]}'
+MOCK
+    chmod +x "$mock_bin/curl"
+
+    run zsh -c '
+export PATH="'"$mock_bin"':$PATH"
+export OPENAI_API_KEY=test-key
+source "'"$NIVUUS_SHELL_DIR"'/config/09-ai-core.zsh"
+source "'"$NIVUUS_SHELL_DIR"'/config/09-ai-backend-openai.zsh"
+_ai_backend_openai_call "hello" "gpt-5.6-luna" 100 0.3 5
+'
+    [ "$status" -eq 0 ]
+    [ "$output" = "mocked openai response" ]
+}
+
+@test "openai backend fails when no API key is configured" {
+    run zsh -c '
+unset OPENAI_API_KEY
+source "'"$NIVUUS_SHELL_DIR"'/config/09-ai-core.zsh"
+source "'"$NIVUUS_SHELL_DIR"'/config/09-ai-backend-openai.zsh"
+_ai_backend_openai_call "hello"
+'
+    [ "$status" -eq 1 ]
+}
+
+@test "openai backend fails clearly when jq is missing" {
+    local no_jq_dir="$BATS_TEST_TMPDIR/no-jq-openai"
+    mkdir -p "$no_jq_dir"
+    local bin real
+    for bin in curl timeout grep cut sed; do
+        real=$(command -v "$bin") || continue
+        ln -sf "$real" "$no_jq_dir/$bin"
+    done
+    run zsh -c '
+export PATH="'"$no_jq_dir"'"
+export OPENAI_API_KEY=test-key
+source "'"$NIVUUS_SHELL_DIR"'/config/09-ai-core.zsh"
+source "'"$NIVUUS_SHELL_DIR"'/config/09-ai-backend-openai.zsh"
+_ai_backend_openai_call "hello"
+'
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"requires jq"* ]]
+}
