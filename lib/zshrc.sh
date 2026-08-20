@@ -34,9 +34,17 @@ EOF
 nivuus_zshrc_strip() {
     local file="$1"
     [ -f "$file" ] || return 0
+    # Un éditeur côté Windows (WSL) peut ré-enregistrer tout le fichier en
+    # CRLF, marqueurs Nivuus compris. awk ne coupe les enregistrements que
+    # sur \n : un \r de fin traînerait alors dans $0 et l'égalité stricte
+    # avec les marqueurs (générés en LF) ne matcherait plus jamais -- le
+    # bloc ne serait alors plus jamais retiré, dupliqué à chaque réinstall.
+    # On compare donc une version de la ligne débarrassée de son \r final,
+    # sans toucher au \r effectivement imprimé pour les lignes hors bloc.
     awk -v b="$NIVUUS_BLOCK_BEGIN" -v e="$NIVUUS_BLOCK_END" '
-        $0 == b { skip = 1; next }
-        $0 == e { skip = 0; next }
+        { line = $0; sub(/\r$/, "", line) }
+        line == b { skip = 1; next }
+        line == e { skip = 0; next }
         !skip   { print }
     ' "$file"
 }

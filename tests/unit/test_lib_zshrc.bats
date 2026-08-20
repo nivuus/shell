@@ -105,6 +105,60 @@ teardown() { rm -rf "$TMP"; }
     [ "$status" -eq 0 ]
 }
 
+@test "merge is idempotent even when the whole file was re-saved as CRLF" {
+    # A Windows-side editor on WSL can re-save the entire file with CRLF
+    # line endings, block markers included. grep -qF (state) still matches
+    # a substring so it correctly reports "present", but strip used to
+    # compare $0 to the marker with strict equality: the trailing \r never
+    # matched, the block was never stripped, and it doubled on every
+    # subsequent install.
+    nivuus_zshrc_block "$DIR" > "$TMP/.zshrc"
+    printf 'export MINE=42\n' >> "$TMP/.zshrc"
+    sed -i 's/$/\r/' "$TMP/.zshrc"
+
+    run nivuus_zshrc_state "$TMP/.zshrc"
+    [ "$output" = "present" ]
+
+    nivuus_zshrc_merge "$TMP/.zshrc" "$DIR" > "$TMP/twice"
+    run grep -c ">>> nivuus shell >>>" "$TMP/twice"
+    [ "$output" = "1" ]
+
+    cp "$TMP/twice" "$TMP/.zshrc"
+    nivuus_zshrc_merge "$TMP/.zshrc" "$DIR" > "$TMP/thrice"
+    run grep -c ">>> nivuus shell >>>" "$TMP/thrice"
+    [ "$output" = "1" ]
+}
+
+@test "strip on a CRLF file removes the block despite the trailing \\r" {
+    nivuus_zshrc_block "$DIR" > "$TMP/.zshrc"
+    printf 'export KEEP=1\n' >> "$TMP/.zshrc"
+    sed -i 's/$/\r/' "$TMP/.zshrc"
+
+    run nivuus_zshrc_strip "$TMP/.zshrc"
+    [[ "$output" != *"nivuus shell"* ]]
+    [[ "$output" == *"export KEEP=1"* ]]
+}
+
+@test "state on an empty file is absent, not corrupt" {
+    : > "$TMP/.zshrc"
+    run nivuus_zshrc_state "$TMP/.zshrc"
+    [ "$output" = "absent" ]
+}
+
+@test "merge on an empty file yields the block alone" {
+    : > "$TMP/.zshrc"
+    run nivuus_zshrc_merge "$TMP/.zshrc" "$DIR"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *">>> nivuus shell >>>"* ]]
+}
+
+@test "strip on an empty file is a no-op" {
+    : > "$TMP/.zshrc"
+    run nivuus_zshrc_strip "$TMP/.zshrc"
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+}
+
 @test "detect_framework finds oh-my-zsh" {
     printf 'source $ZSH/oh-my-zsh.sh\n' > "$TMP/.zshrc"
     run nivuus_zshrc_detect_framework "$TMP/.zshrc"
