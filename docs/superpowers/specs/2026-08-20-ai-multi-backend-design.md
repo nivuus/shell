@@ -38,9 +38,12 @@ subscription quota without any external binary. Rejected because:
   this path (see `google-gemini/gemini-cli` issues #25189, #25167, #4723,
   #26105).
 
-The only ToS-compliant way to spend subscription quota is to invoke the
-official `gemini` binary, which owns that OAuth relationship itself. See
-"Gemini `cli` auth mode" below.
+The only ToS-compliant way to spend subscription quota is to invoke an
+official Google binary that owns that OAuth relationship itself. As of
+2026-06-18, Google discontinued `gemini-cli` for Google AI Pro/Ultra and
+free-tier accounts, migrating them to **Antigravity CLI** (`agy`) — so that
+is the binary this project shells out to, not `gemini-cli`. See "Gemini
+`cli` auth mode" below.
 
 ## Architecture
 
@@ -75,6 +78,42 @@ _ai_backend_<name>_call PROMPT [MODEL] [MAX_TOKENS] [TEMPERATURE] [TIMEOUT_SECS]
   `ANTHROPIC_API_KEY`. `_ai_get_api_key` resolves the one matching
   `$AI_BACKEND` (Gemini keeps its existing gemini-cli-config fallback).
 
+### Backend-aware model resolution across existing consumers
+
+Today, `10-ai.zsh`, `19-ai-suggestions.zsh` (`AI_SUGGESTION_MODEL`),
+`20-terminal-title.zsh` (`AI_TITLE_MODEL`), and `22-ai-errors.zsh`
+(`AI_ERROR_MODEL`) each hardcode `gemini-3.1-flash-lite` (or
+`${GEMINI_MODEL:-gemini-3.1-flash-lite}`) as their fallback model, and pass
+it explicitly to `_ai_api_call`. Left as-is, switching `AI_BACKEND=openai`
+would still send a Gemini model name to the OpenAI API and fail. Fix:
+
+- `09-ai-core.zsh` gains `_ai_resolve_model()`, which returns the correct
+  default model for the currently active `$AI_BACKEND`:
+  ```
+  _ai_resolve_model() {
+      case "$AI_BACKEND" in
+          openai) print -r -- "${OPENAI_MODEL:-gpt-5.6-luna}" ;;
+          anthropic) print -r -- "${ANTHROPIC_MODEL:-claude-haiku-4-5}" ;;
+          *) print -r -- "${GEMINI_MODEL:-gemini-3.5-flash-lite}" ;;
+      esac
+  }
+  ```
+- `10-ai.zsh`: all 7 call sites drop the explicit
+  `"${GEMINI_MODEL:-$AI_DEFAULT_MODEL}"` argument; `_ai_api_call` fills in
+  the model itself via `_ai_resolve_model` whenever the MODEL argument is
+  empty.
+- `19-ai-suggestions.zsh`, `20-terminal-title.zsh`, `22-ai-errors.zsh` keep
+  their dedicated override vars (a user may want a different model for
+  suggestions than for the general default), but their fallback changes
+  from the hardcoded Gemini string to `$(_ai_resolve_model)`, e.g.:
+  ```
+  typeset -g AI_SUGGESTION_MODEL="${AI_SUGGESTION_MODEL:-$(_ai_resolve_model)}"
+  ```
+- `AI_DEFAULT_MODEL` (currently in `09-ai-core.zsh`) is removed —
+  superseded by `_ai_resolve_model`.
+- `_ai_api_call`: when its MODEL argument is empty, call
+  `_ai_resolve_model` before dispatching to the backend function.
+
 ### OpenAI backend
 
 ```
@@ -101,29 +140,35 @@ OpenAI and Anthropic backends require `jq` — no grep-based fallback parser
 grep-parsing unreliable. If `jq` is missing, fail with a clear message
 rather than attempting a fragile parse.
 
-### Gemini `cli` auth mode
+### Gemini `cli` auth mode (Antigravity CLI)
 
 - New var `GEMINI_AUTH_MODE`: `api-key` (default) | `cli`.
-- When `cli` and the `gemini` binary is present in `$PATH`,
+- When `cli` and the `agy` binary (Antigravity CLI) is present in `$PATH`,
   `_ai_backend_gemini_call` shells out instead of calling `curl`:
   ```
-  timeout "$timeout_secs" gemini -p "$prompt" --model "$model" \
-      --output-format json
+  timeout "$timeout_secs" agy -p "$prompt" --model "$model" \
+      --output-format json --print-timeout "${timeout_secs}s"
   ```
-  and parses the response text field via `jq`.
-- If `GEMINI_AUTH_MODE=cli` but `gemini` is not on `$PATH`, fail with a
-  message pointing at installing gemini-cli or switching back to
+  and parses `.response` via `jq` (confirmed against
+  `antigravity.google/docs/cli/headless`: JSON envelope has `response`,
+  `status`, `usage`, `duration_seconds`; non-zero exit / non-`SUCCESS`
+  `status` on failure).
+- If `GEMINI_AUTH_MODE=cli` but `agy` is not on `$PATH`, fail with a
+  message pointing at installing Antigravity CLI or switching back to
   `api-key`.
-- `gemini-cli`'s own OAuth/token storage/refresh (`~/.gemini/tokens.json`)
-  is untouched — this project only invokes the already-authenticated
-  binary, no OAuth code lives in this repo.
+- Antigravity CLI's own OAuth/token storage/refresh is untouched — this
+  project only invokes the already-authenticated binary (one-time
+  interactive `agy` login by the user), no OAuth code lives in this repo.
 - `_ai_get_api_key` is not called at all in `cli` mode.
+- Note: `gemini-cli` was discontinued for Google AI Pro/Ultra and free-tier
+  accounts on 2026-06-18, migrated to Antigravity CLI — this is why `agy`
+  is the shell-out target, not the `gemini` binary.
 
 ### `aihelp` output
 
 Displays the active `AI_BACKEND`, the active model, and — depending on
 `GEMINI_AUTH_MODE` when the backend is `gemini` — either the API key status
-or a `gemini --version` check; for `openai`/`anthropic`, the matching API
+or an `agy --version` check; for `openai`/`anthropic`, the matching API
 key status.
 
 ## Testing
@@ -134,7 +179,7 @@ key status.
 - Dispatcher test: `AI_BACKEND=openai` routes to
   `_ai_backend_openai_call`; unset defaults to `gemini`; unknown value
   errors clearly.
-- Gemini `cli` mode: fake `gemini` script placed on `PATH` in the test,
+- Gemini `cli` mode: fake `agy` script placed on `PATH` in the test,
   assert invocation shape and JSON parsing; separate case for binary
   absent.
 - `tests/integration/test_ai_workflow.bats`: update for the new `aihelp`
