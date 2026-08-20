@@ -46,6 +46,14 @@ nivuus_manifest_record() {
     printf '%s\t%s\t%s\t%s\n' "$action" "$path" "$hash" "$ref" >> "$NIVUUS_MANIFEST_TMP"
 }
 
+nivuus_manifest_inherit() {
+    # Reprend les entrées d'un manifeste existant dans le manifeste en cours,
+    # pour qu'une réinstallation (idempotente sur les fichiers déjà en place)
+    # ne perde pas la trace de la première installation.
+    [ -f "$NIVUUS_MANIFEST" ] || return 0
+    grep -v '^#' "$NIVUUS_MANIFEST" >> "$NIVUUS_MANIFEST_TMP" || true
+}
+
 nivuus_manifest_commit() {
     if [ -n "${NIVUUS_DRY_RUN:-}" ]; then
         rm -f "$NIVUUS_MANIFEST_TMP"
@@ -55,13 +63,20 @@ nivuus_manifest_commit() {
 }
 
 nivuus_manifest_each() {
-    local callback="$1"
+    local callback="$1" seen
     [ -f "$NIVUUS_MANIFEST" ] || return 0
+    seen="$(mktemp)"
     # tail -r n'existe pas partout ; on inverse avec sed.
+    # Un chemin peut apparaître plusieurs fois (installations répétées héritées
+    # via nivuus_manifest_inherit) : on ne rejoue que l'entrée la plus récente
+    # (la première rencontrée une fois le fichier inversé) pour chaque chemin.
     { grep -v '^#' "$NIVUUS_MANIFEST" || true; } | sed '1!G;h;$!d' | while IFS="$NIVUUS_TAB" read -r a p h r; do
         [ -n "$a" ] || continue
+        if grep -qxF "$p" "$seen" 2>/dev/null; then continue; fi
+        printf '%s\n' "$p" >> "$seen"
         "$callback" "$a" "$p" "$h" "$r"
     done
+    rm -f "$seen"
 }
 
 nivuus_store_backup() {
