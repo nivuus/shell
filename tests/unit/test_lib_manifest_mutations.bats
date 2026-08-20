@@ -82,3 +82,34 @@ teardown() { rm -rf "$TMP"; }
     printf 'content' | nivuus_write_file "$TMP/never-written"
     [ ! -e "$TMP/never-written" ]
 }
+
+@test "reinstalling over an already-nivuus'd file carries the original backup ref forward" {
+    printf 'pristine' > "$TMP/dst"
+    printf 'nivuus-v1' > "$TMP/src"
+    nivuus_install_file "$TMP/src" "$TMP/dst"
+    nivuus_manifest_commit
+    pristine_hash="$(printf 'pristine' | { command -v sha256sum >/dev/null && sha256sum || shasum -a 256; } | cut -d' ' -f1)"
+    [ -f "$NIVUUS_BACKUP_DIR/$pristine_hash" ]
+
+    # Une seconde "installation" (nouveau manifeste qui hérite du premier,
+    # comme le fait bin/nivuus) écrit un contenu différent sur le même
+    # chemin -- ce que ferait un vrai second install si l'utilisateur avait
+    # entre-temps édité le fichier de façon à changer sa forme finale.
+    nivuus_manifest_begin user "$TMP/install"
+    nivuus_manifest_inherit
+    printf 'nivuus-v2-different' > "$TMP/src2"
+    nivuus_install_file "$TMP/src2" "$TMP/dst"
+    nivuus_manifest_commit
+
+    # Le pointeur de sauvegarde le plus récent doit toujours désigner la
+    # sauvegarde ORIGINALE (pristine), jamais une sauvegarde de la version
+    # déjà nivuusée -- sinon un rollback restaurerait un état géré par
+    # Nivuus au lieu du fichier d'avant Nivuus.
+    latest_ref="$(grep '^MODIFY' "$NIVUUS_MANIFEST" | tail -n1 | cut -f4)"
+    [ "$latest_ref" = "$pristine_hash" ]
+    [ -f "$NIVUUS_BACKUP_DIR/$pristine_hash" ]
+    [ "$(cat "$NIVUUS_BACKUP_DIR/$pristine_hash")" = "pristine" ]
+
+    nivuus_manifest_rollback
+    [ "$(cat "$TMP/dst")" = "pristine" ]
+}

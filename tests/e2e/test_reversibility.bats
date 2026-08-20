@@ -105,6 +105,20 @@ teardown() { rm -rf "$TMP"; }
     [[ "$output" == *"POST_UNINSTALL_OK"* ]]
 }
 
+@test "reinstalling after the user edits their zshrc still restores the pristine original on uninstall" {
+    printf 'export MINE=42\n' > "$HOME/.zshrc"
+    "$NIVUUS" install --yes --prefix "$HOME/.nivuus-shell"
+    # The user edits their own file while Nivuus is installed, in a way
+    # that changes the byte layout the next merge produces (prepending,
+    # not appending, so the second install is not a no-op on .zshrc).
+    sed -i '1i alias early=1' "$HOME/.zshrc"
+    "$NIVUUS" install --yes --prefix "$HOME/.nivuus-shell"
+    "$NIVUUS" uninstall --yes --purge
+    # The original backup must never have been overwritten by the
+    # already-nivuus'd version taken at the second install.
+    [ "$(cat "$HOME/.zshrc")" = "export MINE=42" ]
+}
+
 @test "uninstall keeps a pre-existing ~/.local/state with foreign content" {
     mkdir -p "$HOME/.local/state/someapp"
     printf 'foreign\n' > "$HOME/.local/state/someapp/data"

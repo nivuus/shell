@@ -76,7 +76,7 @@ cmd_install() {
 }
 
 cmd_uninstall() {
-    local purge='' f name mkdir_levels level
+    local purge='' f name mkdir_levels level header kept_refs
     while [ $# -gt 0 ]; do
         case "$1" in
             --dry-run) export NIVUUS_DRY_RUN=1 ;;
@@ -99,6 +99,10 @@ cmd_uninstall() {
     confirm "Désinstaller Nivuus Shell et restaurer la configuration d'origine ?" \
         || { log_info "Annulé."; return 0; }
 
+    # Ligne d'en-tête, gardée au cas où le manifeste doive être réécrit
+    # (entrées non appliquées : voir NIVUUS_ROLLBACK_SURVIVORS ci-dessous).
+    header="$(head -n1 "$NIVUUS_MANIFEST")"
+    NIVUUS_ROLLBACK_SURVIVORS="$(mktemp)"
     nivuus_manifest_rollback
 
     if [ -n "$purge" ] && [ -z "${NIVUUS_DRY_RUN:-}" ]; then
@@ -130,7 +134,16 @@ cmd_uninstall() {
         # toujours non vide, donc ceci ne supprime jamais rien de préexistant
         # ni de non enregistré.
         mkdir_levels="$(awk -F"$NIVUUS_TAB" '$1=="MKDIR"{print $2}' "$NIVUUS_MANIFEST" 2>/dev/null || true)"
-        rm -f "$NIVUUS_MANIFEST"
+        # Sauvegardes encore référencées par une entrée que le rollback n'a
+        # PAS pu appliquer (fichier divergé, sauvegarde déjà absente...) :
+        # on vient d'en afficher le chemin à l'utilisateur comme point de
+        # récupération, --purge ne doit pas l'invalider dans la foulée.
+        kept_refs="$(awk -F"$NIVUUS_TAB" '$4 != "-" {print $4}' "$NIVUUS_ROLLBACK_SURVIVORS" 2>/dev/null || true)"
+        if [ -s "$NIVUUS_ROLLBACK_SURVIVORS" ]; then
+            { printf '%s\n' "$header"; cat "$NIVUUS_ROLLBACK_SURVIVORS"; } > "$NIVUUS_MANIFEST"
+        else
+            rm -f "$NIVUUS_MANIFEST"
+        fi
         if [ -d "$NIVUUS_BACKUP_DIR" ]; then
             for f in "$NIVUUS_BACKUP_DIR"/*; do
                 [ -f "$f" ] || continue
@@ -140,6 +153,9 @@ cmd_uninstall() {
                     *[!0-9a-f]*) continue ;;
                 esac
                 [ ${#name} -eq 64 ] || continue
+                if [ -n "$kept_refs" ] && printf '%s\n' "$kept_refs" | grep -qxF "$name"; then
+                    continue
+                fi
                 rm -f "$f"
             done
             rmdir "$NIVUUS_BACKUP_DIR" 2>/dev/null || true
@@ -152,8 +168,13 @@ cmd_uninstall() {
         fi
         log_info "État Nivuus supprimé (--purge). L'historique et les fichiers non créés par Nivuus sont conservés."
     elif [ -z "${NIVUUS_DRY_RUN:-}" ]; then
-        rm -f "$NIVUUS_MANIFEST"
+        if [ -s "$NIVUUS_ROLLBACK_SURVIVORS" ]; then
+            { printf '%s\n' "$header"; cat "$NIVUUS_ROLLBACK_SURVIVORS"; } > "$NIVUUS_MANIFEST"
+        else
+            rm -f "$NIVUUS_MANIFEST"
+        fi
     fi
+    rm -f "$NIVUUS_ROLLBACK_SURVIVORS"
 
     if [ -n "${NIVUUS_DRY_RUN:-}" ]; then
         log_info "Aucune modification effectuée (--dry-run)."

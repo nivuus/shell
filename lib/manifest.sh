@@ -145,9 +145,22 @@ nivuus_mkdir_p() {
     done
 }
 
+# Cherche, dans le manifeste en cours de construction (déjà peuplé par
+# nivuus_manifest_inherit avec les entrées d'une installation précédente),
+# la première entrée MODIFY pour ce chemin -- la plus ancienne, donc celle
+# qui pointe vers la sauvegarde d'origine de l'utilisateur, avant que
+# Nivuus n'y touche jamais. Vide si aucune.
+_nivuus_prior_modify_ref() {
+    local path="$1"
+    [ -f "$NIVUUS_MANIFEST_TMP" ] || return 0
+    awk -F"$NIVUUS_TAB" -v p="$path" \
+        '$1 == "MODIFY" && $2 == p { print $4; exit }' \
+        "$NIVUUS_MANIFEST_TMP" 2>/dev/null
+}
+
 # Coeur partagé : $1 = source, $2 = destination.
 _nivuus_place() {
-    local src="$1" dst="$2" existed=0 backup='-' new_hash
+    local src="$1" dst="$2" existed=0 backup='-' new_hash prior_ref
 
     [ -f "$dst" ] && existed=1
     if [ "$existed" -eq 1 ] && [ "$(nivuus_hash_file "$src")" = "$(nivuus_hash_file "$dst")" ]; then
@@ -155,7 +168,17 @@ _nivuus_place() {
     fi
 
     if [ "$existed" -eq 1 ]; then
-        backup="$(nivuus_store_backup "$dst")" || return 1
+        # Une réinstallation ne doit JAMAIS écraser la sauvegarde d'origine :
+        # si une entrée MODIFY existe déjà pour ce chemin, $dst est une
+        # version déjà "nivuusée" (potentiellement éditée par l'utilisateur
+        # depuis), pas le fichier pristine. En sauvegarder une nouvelle copie
+        # perdrait la seule trace du contenu d'avant Nivuus.
+        prior_ref="$(_nivuus_prior_modify_ref "$dst")"
+        if [ -n "$prior_ref" ] && [ "$prior_ref" != "-" ]; then
+            backup="$prior_ref"
+        else
+            backup="$(nivuus_store_backup "$dst")" || return 1
+        fi
     fi
 
     if [ -n "${NIVUUS_DRY_RUN:-}" ]; then
@@ -186,6 +209,19 @@ nivuus_write_file() {
     return $result
 }
 
+# Trace une entrée que le rollback n'a PAS pu appliquer (fichier divergé,
+# sauvegarde manquante...) pour que l'appelant (bin/nivuus) puisse :
+#   - garder le manifeste (le rejouer plus tard reste possible) plutôt que
+#     le supprimer alors qu'il décrit encore un état non résolu ;
+#   - épargner, lors d'un --purge, toute sauvegarde encore référencée par
+#     une entrée non appliquée (sinon le pointeur qu'on vient d'afficher à
+#     l'utilisateur devient un mensonge quelques lignes plus loin).
+# Sans effet si l'appelant n'a pas préparé NIVUUS_ROLLBACK_SURVIVORS.
+_nivuus_record_survivor() {
+    [ -n "${NIVUUS_ROLLBACK_SURVIVORS:-}" ] || return 0
+    printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" >> "$NIVUUS_ROLLBACK_SURVIVORS"
+}
+
 nivuus_restore_entry() {
     local action="$1" path="$2" hash="$3" ref="$4" current
 
@@ -209,6 +245,7 @@ nivuus_restore_entry() {
                 fi
             else
                 log_warn "Conservé (modifié depuis l'installation) : $path"
+                _nivuus_record_survivor "$action" "$path" "$hash" "$ref"
             fi
             ;;
         MODIFY)
@@ -216,10 +253,12 @@ nivuus_restore_entry() {
             if [ "$current" != "$hash" ]; then
                 log_warn "Conservé (modifié depuis l'installation) : $path"
                 log_warn "Sauvegarde d'origine disponible : $NIVUUS_BACKUP_DIR/$ref"
+                _nivuus_record_survivor "$action" "$path" "$hash" "$ref"
                 return 0
             fi
             if [ ! -f "$NIVUUS_BACKUP_DIR/$ref" ]; then
                 log_warn "Sauvegarde introuvable pour $path, fichier conservé"
+                _nivuus_record_survivor "$action" "$path" "$hash" "$ref"
                 return 0
             fi
             if [ -n "${NIVUUS_DRY_RUN:-}" ]; then
@@ -242,7 +281,12 @@ nivuus_restore_entry() {
             if [ -n "${NIVUUS_DRY_RUN:-}" ]; then
                 log_dry "supprimerait le répertoire (si vide) $path"
             else
-                rmdir "$path" 2>/dev/null || true   # non vide : on le laisse
+                # Non vide : on le laisse. $NIVUUS_STATE_DIR (et ses parents)
+                # échouent systématiquement ici -- le manifeste et les
+                # sauvegardes qu'on est en train de lire y vivent encore --
+                # ce n'est pas une divergence à tracer : bin/nivuus rejoue
+                # ces niveaux une seconde fois une fois l'état supprimé.
+                rmdir "$path" 2>/dev/null || true
             fi
             ;;
         CHSH)
@@ -263,6 +307,11 @@ nivuus_restore_entry() {
     return 0
 }
 
+# Rejoue le manifeste à l'envers. Si l'appelant a défini
+# NIVUUS_ROLLBACK_SURVIVORS (chemin d'un fichier existant, vide ou non), les
+# entrées que le rollback n'a pas pu appliquer y sont écrites au format TSV
+# du manifeste -- l'appelant peut alors les rejouer dans un nouveau manifeste
+# plutôt que de perdre leur trace (voir _nivuus_record_survivor).
 nivuus_manifest_rollback() {
     nivuus_manifest_each nivuus_restore_entry
 }
