@@ -32,6 +32,15 @@ typeset -ga _AI_SPINNER_CHARS=(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏)
 typeset -g _AI_ANIM_FD=""
 typeset -g _AI_ANIM_PID=""
 
+# Pending ghost-text render, consumed by the _ai_apply_postdisplay widget
+typeset -g _AI_RENDER_TEXT=""
+typeset -g _AI_RENDER_STYLE=""
+typeset -g _AI_LAST_HIGHLIGHT=""
+
+# Debounce timer state via zle -F
+typeset -g _AI_DEBOUNCE_FD=""
+typeset -g _AI_DEBOUNCE_PID=""
+
 # Typewriter animation state via zle -F
 typeset -g _AI_TYPEWRITER_FD=""
 typeset -g _AI_TYPEWRITER_PID=""
@@ -276,30 +285,43 @@ _ai_restore_autosuggest() {
     fi
 }
 
-# Helper: set POSTDISPLAY with a color using region_highlight
-# POSTDISPLAY is plain text; color is applied via region_highlight P-prefix
-_ai_set_postdisplay() {
-    local text="$1"
-    local style="$2"  # e.g., "fg=143" or "fg=110"
+# Widget that actually writes the ghost text. POSTDISPLAY and region_highlight
+# are ZLE parameters: they only exist inside a widget. Assigning them from a
+# `zle -F` fd handler silently creates ordinary shell variables and displays
+# nothing, so every render goes through this widget (same approach as
+# zsh-autosuggestions' async response handler).
+_ai_apply_postdisplay() {
+    POSTDISPLAY="$_AI_RENDER_TEXT"
 
-    POSTDISPLAY="$text"
-
-    # Remove any previous AI POSTDISPLAY highlight entries (P-prefixed)
-    region_highlight=("${(@)region_highlight:#P*}")
-
-    # Add highlight for the full POSTDISPLAY range
-    if [[ -n "$text" && -n "$style" ]]; then
-        region_highlight+=("P0 ${#text} ${style}")
+    # Drop our previous entry, keeping the ones owned by other plugins.
+    # Matching on the exact entry (rather than a memo= tag) keeps this working
+    # on zsh < 5.9, and is what zsh-autosuggestions does for the same reason.
+    if [[ -n "$_AI_LAST_HIGHLIGHT" ]]; then
+        region_highlight=("${(@)region_highlight:#$_AI_LAST_HIGHLIGHT}")
+        _AI_LAST_HIGHLIGHT=""
     fi
 
-    zle && zle -R
+    # Highlight the POSTDISPLAY range. Offsets are relative to $BUFFER and
+    # extend past its end into the ghost text.
+    if [[ -n "$POSTDISPLAY" && -n "$_AI_RENDER_STYLE" ]]; then
+        _AI_LAST_HIGHLIGHT="${#BUFFER} $(( ${#BUFFER} + ${#POSTDISPLAY} )) ${_AI_RENDER_STYLE}"
+        region_highlight+=("$_AI_LAST_HIGHLIGHT")
+    fi
+
+    zle -R
+}
+zle -N _ai_apply_postdisplay
+
+# Helper: set the ghost text with a color. Safe from widgets and fd handlers.
+_ai_set_postdisplay() {
+    _AI_RENDER_TEXT="$1"
+    _AI_RENDER_STYLE="$2"  # e.g., "fg=143" or "fg=110"
+    zle && zle _ai_apply_postdisplay
 }
 
-# Helper: clear POSTDISPLAY and its highlights
+# Helper: clear the ghost text and its highlight
 _ai_clear_postdisplay() {
-    POSTDISPLAY=""
-    region_highlight=("${(@)region_highlight:#P*}")
-    zle && zle -R
+    _ai_set_postdisplay "" ""
 }
 
 _ai_show_inline() {
@@ -494,37 +516,42 @@ _ai_cancel_generation() {
 
 
 # =============================================================================
-# Debounce System (using zsh/sched)
+# Debounce System (fd timer driven by zle -F)
 # =============================================================================
-
-# Load scheduling module
-zmodload zsh/sched 2>/dev/null
+# The delay is NOT scheduled with zsh/sched: a `zle -F` handler registered from
+# inside a sched callback never fires, because ZLE is already blocked in its
+# select() over the previous set of descriptors and does not pick up the new one
+# until the next keypress. Triggering the suggestion from a sched callback
+# therefore killed the spinner and the typewriter. An fd timer registered from
+# the self-insert widget keeps the whole chain (timer -> suggestion -> spinner
+# -> typewriter) inside contexts where zle -F is honoured.
 
 _ai_cancel_debounce() {
-    # Get list of scheduled jobs and their IDs
-    local -a job_ids
-    local line job_num
-
-    # Parse sched output to find our trigger jobs
-    while IFS= read -r line; do
-        if [[ "$line" == *"_ai_debounce_trigger"* ]]; then
-            # Extract job number (first field, strip leading spaces)
-            job_num=$(echo "$line" | awk '{print $1}')
-            if [[ -n "$job_num" ]]; then
-                job_ids+=($job_num)
-            fi
-        fi
-    done < <(sched 2>/dev/null)
-
-    # Cancel all found jobs
-    for job_num in $job_ids; do
-        sched -$job_num 2>/dev/null
-    done
+    if [[ -n "$_AI_DEBOUNCE_FD" ]]; then
+        zle -F "$_AI_DEBOUNCE_FD" 2>/dev/null
+        builtin exec {_AI_DEBOUNCE_FD}<&- 2>/dev/null
+        _AI_DEBOUNCE_FD=""
+    fi
+    if [[ -n "$_AI_DEBOUNCE_PID" ]]; then
+        kill -TERM "$_AI_DEBOUNCE_PID" 2>/dev/null
+        _AI_DEBOUNCE_PID=""
+    fi
 }
 
+# Fires once the debounce delay has elapsed
 _ai_debounce_trigger() {
-    # This runs after the debounce delay (scheduled via sched)
-    # Call inline widget
+    local dummy fd="$1"
+    [[ -n "$2" && "$2" != "hup" ]] && return
+
+    read -u $fd dummy 2>/dev/null
+
+    # Release the timer before running the widget so that _ai_show_inline's own
+    # _ai_cancel_debounce call has nothing left to tear down
+    zle -F "$fd" 2>/dev/null
+    builtin exec {fd}<&- 2>/dev/null
+    _AI_DEBOUNCE_FD=""
+    _AI_DEBOUNCE_PID=""
+
     zle && zle ai-show-inline
 }
 
@@ -538,8 +565,13 @@ _ai_start_debounce() {
     # Cancel any existing debounce timer
     _ai_cancel_debounce
 
-    # Schedule the trigger function
-    sched "+${AI_DEBOUNCE_DELAY}" _ai_debounce_trigger
+    builtin exec {_AI_DEBOUNCE_FD}< <(
+        echo $sysparams[pid]
+        sleep "$AI_DEBOUNCE_DELAY"
+        echo go
+    )
+    read _AI_DEBOUNCE_PID <&$_AI_DEBOUNCE_FD
+    zle -F "$_AI_DEBOUNCE_FD" _ai_debounce_trigger
 }
 
 # Hook into self-insert to trigger debounce on typing
