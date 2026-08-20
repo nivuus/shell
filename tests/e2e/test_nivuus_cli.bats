@@ -153,15 +153,58 @@ teardown() { rm -rf "$TMP"; }
     [ -f "$NIVUUS_STATE_DIR/backups/backup.db" ]
 }
 
-@test "a plain (non-purge) uninstall keeps the manifest when it had to preserve a diverged file" {
+@test "a plain (non-purge) uninstall keeps the manifest when a backup went missing" {
+    # A diverged .zshrc that still contains the Nivuus block is now resolved
+    # by stripping the block (see the strip-related tests below), so it no
+    # longer leaves an unresolved survivor. Exercise IMPORTANT 6 with a
+    # genuinely unresolved case instead: the recorded backup file itself is
+    # gone (e.g. the user cleaned ~/.local/state by hand), independently of
+    # whether .zshrc itself diverged.
     printf 'export MINE=42\n' > "$HOME/.zshrc"
     "$NIVUUS" install --yes --prefix "$TMP/target"
-    printf 'user edit after install\n' >> "$HOME/.zshrc"
+    rm -f "$NIVUUS_STATE_DIR"/backups/*
     run "$NIVUUS" uninstall --yes
     [ "$status" -eq 0 ]
-    [[ "$output" == *"Conservé"* ]]
+    [[ "$output" == *"introuvable"* ]]
     # The journal explaining why -- and where the backup is -- must survive
     # so the uninstall can be retried; it must not be deleted just because
     # this one file could not be reverted.
     [ -f "$NIVUUS_STATE_DIR/manifest.tsv" ]
+}
+
+@test "a diverged zshrc without the Nivuus block is conserved, not stripped" {
+    printf 'export MINE=42\n' > "$HOME/.zshrc"
+    "$NIVUUS" install --yes --prefix "$TMP/target"
+    # The user removes the whole Nivuus block themselves: nothing left for
+    # us to strip surgically, so the old conservative behaviour must apply.
+    printf 'export MINE=42\nsomething else entirely\n' > "$HOME/.zshrc"
+    run "$NIVUUS" uninstall --yes
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Conservé"* ]]
+    [ "$(cat "$HOME/.zshrc")" = "$(printf 'export MINE=42\nsomething else entirely')" ]
+}
+
+@test "uninstall strips the block from a zshrc the user edited after install" {
+    printf 'export MINE=42\n' > "$HOME/.zshrc"
+    "$NIVUUS" install --yes --prefix "$TMP/target"
+    printf 'alias foo=bar\n' >> "$HOME/.zshrc"
+    "$NIVUUS" install --yes --prefix "$TMP/target"
+    "$NIVUUS" uninstall --yes --purge
+    run grep -c "nivuus" "$HOME/.zshrc"
+    [ "$status" -ne 0 ]                       # plus aucun bloc
+    run grep -c "export MINE=42" "$HOME/.zshrc"
+    [ "$output" = "1" ]                       # la ligne d'origine survit
+    run grep -c "alias foo=bar" "$HOME/.zshrc"
+    [ "$output" = "1" ]                       # l'édition de l'utilisateur survit
+}
+
+@test "a shell still starts cleanly after uninstalling an edited install" {
+    printf 'export MINE=42\n' > "$HOME/.zshrc"
+    "$NIVUUS" install --yes --prefix "$TMP/target"
+    printf 'alias foo=bar\n' >> "$HOME/.zshrc"
+    "$NIVUUS" install --yes --prefix "$TMP/target"
+    "$NIVUUS" uninstall --yes --purge
+    run zsh -i -c true
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"no such file or directory"* ]]
 }

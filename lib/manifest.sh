@@ -233,6 +233,17 @@ _nivuus_record_survivor() {
     printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" >> "$NIVUUS_ROLLBACK_SURVIVORS"
 }
 
+# Épargne une sauvegarde d'un --purge sans pour autant garder toute son
+# entrée MODIFY comme "survivante" (voir _nivuus_record_survivor) : utilisé
+# quand l'entrée a été résolue autrement (ex : bloc Nivuus retiré
+# chirurgicalement d'un fichier divergé) mais que le message qu'on vient
+# d'afficher pointe encore vers cette sauvegarde -- elle doit donc rester
+# vraie. Sans effet si l'appelant n'a pas préparé NIVUUS_KEPT_BACKUP_REFS.
+_nivuus_keep_backup_ref() {
+    [ -n "${NIVUUS_KEPT_BACKUP_REFS:-}" ] || return 0
+    [ -n "$1" ] && [ "$1" != "-" ] && printf '%s\n' "$1" >> "$NIVUUS_KEPT_BACKUP_REFS"
+}
+
 nivuus_restore_entry() {
     local action="$1" path="$2" hash="$3" ref="$4" current
 
@@ -262,6 +273,44 @@ nivuus_restore_entry() {
         MODIFY)
             current="$(nivuus_hash_file "$path")"
             if [ "$current" != "$hash" ]; then
+                # Le fichier a divergé depuis l'installation (l'utilisateur
+                # l'a édité) : on ne veut ni écraser son édition avec une
+                # restauration complète, ni le laisser tel quel si c'est
+                # $HOME/.zshrc -- le bloc Nivuus qu'il contient encore
+                # sourcerait un répertoire qu'on est en train de supprimer,
+                # cassant le prochain démarrage du shell. S'il s'agit d'un
+                # fichier à bloc délimité (ex : .zshrc) et que ce bloc est
+                # proprement présent, on le retire chirurgicalement --
+                # nivuus_zshrc_strip existe précisément pour ça -- et on
+                # laisse le reste, y compris les lignes ajoutées par
+                # l'utilisateur, strictement intact. Dépendance douce (via
+                # command -v) : lib/manifest.sh reste utilisable seule (voir
+                # les tests unitaires qui la sourcent sans lib/zshrc.sh) et
+                # ne connaît rien du format .zshrc au-delà de ce cas précis.
+                if command -v nivuus_zshrc_state >/dev/null 2>&1 \
+                    && [ "$(nivuus_zshrc_state "$path")" = "present" ]; then
+                    if [ -n "${NIVUUS_DRY_RUN:-}" ]; then
+                        log_dry "retirerait le bloc Nivuus de $path (contenu divergé, le reste est conservé)"
+                    else
+                        local stripped
+                        stripped="$(mktemp)"
+                        nivuus_zshrc_strip "$path" > "$stripped"
+                        # Écrit le contenu réduit DANS le fichier existant
+                        # (redirection, pas mv) pour préserver ses
+                        # permissions et son inode -- exactement ce que ferait
+                        # une édition normale de ce fichier par l'utilisateur.
+                        cat "$stripped" > "$path"
+                        rm -f "$stripped"
+                        touch "$path"
+                        [ -f "$path.zwc" ] && rm -f "$path.zwc"
+                    fi
+                    log_warn "$path a été modifié depuis l'installation : seul le bloc Nivuus en a été retiré, tes propres lignes sont intactes."
+                    if [ -f "$NIVUUS_BACKUP_DIR/$ref" ] && [ "$ref" != "-" ]; then
+                        _nivuus_keep_backup_ref "$ref"
+                        log_warn "Sauvegarde d'origine (avant Nivuus) toujours disponible : $NIVUUS_BACKUP_DIR/$ref"
+                    fi
+                    return 0    # résolu : ce n'est pas un survivant
+                fi
                 log_warn "Conservé (modifié depuis l'installation) : $path"
                 log_warn "Sauvegarde d'origine disponible : $NIVUUS_BACKUP_DIR/$ref"
                 _nivuus_record_survivor "$action" "$path" "$hash" "$ref"

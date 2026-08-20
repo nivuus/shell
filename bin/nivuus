@@ -111,6 +111,12 @@ cmd_uninstall() {
     # (entrées non appliquées : voir NIVUUS_ROLLBACK_SURVIVORS ci-dessous).
     header="$(head -n1 "$NIVUUS_MANIFEST")"
     NIVUUS_ROLLBACK_SURVIVORS="$(mktemp)"
+    # Sauvegardes qu'une entrée résolue autrement (ex : bloc Nivuus retiré
+    # d'un .zshrc divergé plutôt que restauration complète) veut malgré tout
+    # protéger d'un --purge -- distinct des survivants : l'entrée elle-même
+    # N'A PAS besoin d'être rejouée plus tard, seule sa sauvegarde doit
+    # rester valide pour le pointeur qu'on vient d'afficher.
+    NIVUUS_KEPT_BACKUP_REFS="$(mktemp)"
     nivuus_manifest_rollback
 
     if [ -n "$purge" ] && [ -z "${NIVUUS_DRY_RUN:-}" ]; then
@@ -146,7 +152,11 @@ cmd_uninstall() {
         # PAS pu appliquer (fichier divergé, sauvegarde déjà absente...) :
         # on vient d'en afficher le chemin à l'utilisateur comme point de
         # récupération, --purge ne doit pas l'invalider dans la foulée.
-        kept_refs="$(awk -F"$NIVUUS_TAB" '$4 != "-" {print $4}' "$NIVUUS_ROLLBACK_SURVIVORS" 2>/dev/null || true)"
+        kept_refs="$(
+            { awk -F"$NIVUUS_TAB" '$4 != "-" {print $4}' "$NIVUUS_ROLLBACK_SURVIVORS" 2>/dev/null
+              cat "$NIVUUS_KEPT_BACKUP_REFS" 2>/dev/null
+            } || true
+        )"
         if [ -s "$NIVUUS_ROLLBACK_SURVIVORS" ]; then
             { printf '%s\n' "$header"; cat "$NIVUUS_ROLLBACK_SURVIVORS"; } > "$NIVUUS_MANIFEST"
         else
@@ -182,7 +192,7 @@ cmd_uninstall() {
             rm -f "$NIVUUS_MANIFEST"
         fi
     fi
-    rm -f "$NIVUUS_ROLLBACK_SURVIVORS"
+    rm -f "$NIVUUS_ROLLBACK_SURVIVORS" "$NIVUUS_KEPT_BACKUP_REFS"
 
     if [ -n "${NIVUUS_DRY_RUN:-}" ]; then
         log_info "Aucune modification effectuée (--dry-run)."
