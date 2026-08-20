@@ -160,7 +160,9 @@ EOF
 # =============================================================================
 
 @test "AI commands use gemini model variable" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep 'GEMINI_MODEL' config/10-ai.zsh"
+    # GEMINI_MODEL is now resolved centrally by _ai_resolve_model() in
+    # config/09-ai-core.zsh (config/10-ai.zsh only calls _ai_resolve_model).
+    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep 'GEMINI_MODEL' config/09-ai-core.zsh"
     [ "$status" -eq 0 ]
 }
 
