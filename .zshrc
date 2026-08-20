@@ -78,6 +78,9 @@ config_files=(
     07-navigation.zsh
     08-vim.zsh
     09-ai-core.zsh
+    09-ai-backend-gemini.zsh
+    09-ai-backend-openai.zsh
+    09-ai-backend-anthropic.zsh
     09-nodejs.zsh
     09-python.zsh
     10-ai.zsh

@@ -156,12 +156,13 @@ The vim system (`config/08-vim.zsh` + `.vimrc.nord`) uses environment detection:
 
 ### AI Command System
 
-`config/10-ai.zsh` calls the Gemini REST API directly via the shared helper in `config/09-ai-core.zsh` (`_ai_api_call`, `_ai_get_api_key`) - no `gemini-cli` binary dependency:
+`config/09-ai-core.zsh` is a multi-backend dispatcher (`_ai_api_call`, `_ai_get_api_key`, `_ai_resolve_model`) routing to `config/09-ai-backend-{gemini,openai,anthropic}.zsh` based on `AI_BACKEND` (default `gemini`). `config/10-ai.zsh` and friends call the dispatcher, never a backend file directly:
 
-- **No fallback**: If `GOOGLE_API_KEY` is not set (and no `~/.gemini-cli/config.json` apiKey is found), shows setup instructions
-- **Model config**: `GEMINI_MODEL` unset by default (falls back to `gemini-3.1-flash-lite` in `config/09-ai-core.zsh`)
+- **Backend selection**: `AI_BACKEND=gemini|openai|anthropic`; per-backend model override `GEMINI_MODEL`/`OPENAI_MODEL`/`ANTHROPIC_MODEL`; per-backend key `GOOGLE_API_KEY`/`OPENAI_API_KEY`/`ANTHROPIC_API_KEY`
+- **No fallback**: If the active backend's key is not set (Gemini also checks `~/.gemini-cli/config.json`), shows setup instructions
+- **Gemini `cli` auth mode**: `GEMINI_AUTH_MODE=cli` shells out to Antigravity CLI (`agy`) instead of the REST API, to use a Google AI Pro/Ultra subscription's quota
 - Functions (`??`, `?git`, `?gh`, `why`, `explain`, `ask`) call `_ai_api_call` from `config/09-ai-core.zsh`
-- `config/19-ai-suggestions.zsh`, `config/20-terminal-title.zsh` and `config/22-ai-errors.zsh` share the same helper
+- `config/19-ai-suggestions.zsh`, `config/20-terminal-title.zsh` and `config/22-ai-errors.zsh` share the same dispatcher
 
 ## Critical Implementation Details
 
@@ -304,7 +305,8 @@ Modify `config/05-prompt.zsh`:
 - **`config/08-vim.zsh`**: Vim wrapper functions, environment detection
 - **`config/09-nodejs.zsh`**: NVM lazy loading, auto-switch with .nvmrc, project detection
 - **`config/09-python.zsh`**: Python virtual environment detection and management (venv/conda/poetry)
-- **`config/09-ai-core.zsh`**: Shared Gemini REST API helper (`_ai_api_call`, `_ai_get_api_key`)
+- **`config/09-ai-core.zsh`**: Multi-backend AI dispatcher (`_ai_api_call`, `_ai_get_api_key`, `_ai_resolve_model`)
+- **`config/09-ai-backend-gemini.zsh`** / **`09-ai-backend-openai.zsh`** / **`09-ai-backend-anthropic.zsh`**: Per-provider REST (and, for Gemini, Antigravity CLI) implementations
 - **`config/10-ai.zsh`**: AI command wrappers (`??`, `?git`, `?gh`, `why`, `explain`, `ask`), calls the Gemini API directly
 - **`config/21-safety.zsh`**: Command safety checks, dangerous pattern detection, safe alternatives
 - **`config/99-cleanup.zsh`**: Compilation, welcome messages, final cleanup

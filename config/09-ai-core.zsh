@@ -1,76 +1,74 @@
 #!/usr/bin/env zsh
 # =============================================================================
-# AI Core - Shared Gemini API Helper
+# AI Core - Backend Dispatcher
 # =============================================================================
-# All AI features call the Gemini REST API directly (no gemini-cli dependency).
+# Routes AI calls to the active backend (gemini/openai/anthropic).
 # Shared by config/10-ai.zsh, config/19-ai-suggestions.zsh,
 # config/20-terminal-title.zsh and config/22-ai-errors.zsh.
 # =============================================================================
 
-typeset -g GEMINI_MODEL="${GEMINI_MODEL:-}"
-typeset -g AI_DEFAULT_MODEL="${GEMINI_MODEL:-gemini-3.1-flash-lite}"
+typeset -g AI_BACKEND="${AI_BACKEND:-gemini}"
 
-# Resolve the Google API key: explicit env var first, then fall back to the
-# apiKey stored by a previously installed gemini-cli, for a smooth migration.
-_ai_get_api_key() {
-    if [[ -n "$GOOGLE_API_KEY" ]]; then
-        print -r -- "$GOOGLE_API_KEY"
-        return 0
-    fi
-
-    local config_file="$HOME/.gemini-cli/config.json"
-    if [[ -f "$config_file" ]]; then
-        local key=$(grep -o '"apiKey"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" | cut -d'"' -f4)
-        if [[ -n "$key" ]]; then
-            print -r -- "$key"
-            return 0
-        fi
-    fi
-
-    return 1
+# Return the default model for the active backend, honoring per-backend
+# overrides (GEMINI_MODEL / OPENAI_MODEL / ANTHROPIC_MODEL).
+_ai_resolve_model() {
+    case "$AI_BACKEND" in
+        openai) print -r -- "${OPENAI_MODEL:-gpt-5.6-luna}" ;;
+        anthropic) print -r -- "${ANTHROPIC_MODEL:-claude-haiku-4-5}" ;;
+        *) print -r -- "${GEMINI_MODEL:-gemini-3.5-flash-lite}" ;;
+    esac
 }
 
-# Call the Gemini generateContent API and print the response text.
-# Usage: _ai_api_call "$prompt" "$model" [max_tokens] [temperature] [timeout_secs]
+# Escape a string for embedding in a JSON string value.
+_ai_json_escape() {
+    local s="$1"
+    s="${s//\\/\\\\}"
+    s="${s//\"/\\\"}"
+    s="${s//$'\n'/\\n}"
+    s="${s//$'\r'/}"
+    s="${s//$'\t'/\\t}"
+    print -r -- "$s"
+}
+
+# Resolve the API key/credential for the active backend.
+_ai_get_api_key() {
+    case "$AI_BACKEND" in
+        openai)
+            [[ -n "$OPENAI_API_KEY" ]] || return 1
+            print -r -- "$OPENAI_API_KEY"
+            ;;
+        anthropic)
+            [[ -n "$ANTHROPIC_API_KEY" ]] || return 1
+            print -r -- "$ANTHROPIC_API_KEY"
+            ;;
+        *)
+            _ai_gemini_get_api_key
+            ;;
+    esac
+}
+
+# Call the active backend and print the response text.
+# Usage: _ai_api_call PROMPT [MODEL] [MAX_TOKENS] [TEMPERATURE] [TIMEOUT_SECS]
 _ai_api_call() {
     local prompt="$1"
-    local model="${2:-$AI_DEFAULT_MODEL}"
+    local model="${2:-$(_ai_resolve_model)}"
     local max_tokens="${3:-1024}"
     local temperature="${4:-0.3}"
     local timeout_secs="${5:-15}"
 
-    local api_key
-    api_key=$(_ai_get_api_key) || return 1
-
-    local api_url="https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${api_key}"
-
-    # Build JSON payload (escape backslashes, quotes, then control chars, in that order)
-    local escaped_prompt="${prompt//\\/\\\\}"
-    escaped_prompt="${escaped_prompt//\"/\\\"}"
-    escaped_prompt="${escaped_prompt//$'\n'/\\n}"
-    escaped_prompt="${escaped_prompt//$'\r'/}"
-    escaped_prompt="${escaped_prompt//$'\t'/\\t}"
-    local json_payload="{\"contents\":[{\"parts\":[{\"text\":\"$escaped_prompt\"}]}],\"generationConfig\":{\"temperature\":${temperature},\"maxOutputTokens\":${max_tokens}}}"
-
-    local api_response=$(timeout "$timeout_secs" curl -s -X POST "$api_url" \
-        -H 'Content-Type: application/json' \
-        -d "$json_payload" 2>/dev/null)
-
-    [[ -z "$api_response" ]] && return 1
-
-    # jq handles embedded quotes/escapes correctly; grep-based extraction
-    # breaks as soon as the text itself contains a `"`.
-    # Use `print -r --` (not `echo`) to feed the response through unmodified:
-    # zsh's builtin `echo` expands backslash escapes (e.g. \n) by default,
-    # which corrupts JSON strings containing literal `\n` sequences.
-    local result=""
-    if command -v jq &>/dev/null; then
-        result=$(print -r -- "$api_response" | jq -r '.candidates[0].content.parts[0].text // empty' 2>/dev/null)
-    else
-        result=$(print -r -- "$api_response" | grep -o '"text"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4 | sed 's/\\n/\n/g; s/\\"/"/g')
-    fi
-
-    [[ -z "$result" ]] && return 1
-
-    print -r -- "$result"
+    case "$AI_BACKEND" in
+        openai)
+            _ai_backend_openai_call "$prompt" "$model" "$max_tokens" "$temperature" "$timeout_secs"
+            ;;
+        anthropic)
+            _ai_backend_anthropic_call "$prompt" "$model" "$max_tokens" "$temperature" "$timeout_secs"
+            ;;
+        gemini)
+            _ai_backend_gemini_call "$prompt" "$model" "$max_tokens" "$temperature" "$timeout_secs"
+            ;;
+        *)
+            print -u2 -- "AI_BACKEND: unknown backend '$AI_BACKEND' (expected gemini, openai, or anthropic)"
+            return 1
+            ;;
+    esac
 }

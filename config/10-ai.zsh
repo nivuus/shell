@@ -47,7 +47,7 @@ AI Terminal Titles:
   Help:    ai-title-help
 
 Configuration:
-  Model: ${GEMINI_MODEL:-$AI_DEFAULT_MODEL}
+  Model: $(_ai_resolve_model)
   API key: $key_status
 
 Setup:
@@ -91,22 +91,22 @@ fi
 _nivuus_ai_suggest() {
     local query="$*"
     if [[ -z "$query" ]]; then
-        _ai_api_call "Suggest useful zsh commands and shell tricks" "${GEMINI_MODEL:-$AI_DEFAULT_MODEL}"
+        _ai_api_call "Suggest useful zsh commands and shell tricks"
     else
-        _ai_api_call "Suggest zsh commands for: $query" "${GEMINI_MODEL:-$AI_DEFAULT_MODEL}"
+        _ai_api_call "Suggest zsh commands for: $query"
     fi
 }
 
 # Git-specific help
 _nivuus_git_help() {
     local query="$*"
-    _ai_api_call "Git command help: $query. Provide the exact command to run." "${GEMINI_MODEL:-$AI_DEFAULT_MODEL}"
+    _ai_api_call "Git command help: $query. Provide the exact command to run."
 }
 
 # GitHub CLI help
 _nivuus_gh_help() {
     local query="$*"
-    _ai_api_call "GitHub CLI (gh) help: $query. Provide the exact command to run." "${GEMINI_MODEL:-$AI_DEFAULT_MODEL}"
+    _ai_api_call "GitHub CLI (gh) help: $query. Provide the exact command to run."
 }
 
 # Explain a command
@@ -118,7 +118,7 @@ why() {
         return 1
     fi
 
-    _ai_api_call "Explain this command concisely: $cmd" "${GEMINI_MODEL:-$AI_DEFAULT_MODEL}"
+    _ai_api_call "Explain this command concisely: $cmd"
 }
 
 # Detailed explanation
@@ -130,7 +130,7 @@ explain() {
         return 1
     fi
 
-    _ai_api_call "Provide a detailed explanation of this command, including each option: $cmd" "${GEMINI_MODEL:-$AI_DEFAULT_MODEL}"
+    _ai_api_call "Provide a detailed explanation of this command, including each option: $cmd"
 }
 
 # General question
@@ -142,7 +142,7 @@ ask() {
         return 1
     fi
 
-    _ai_api_call "$question" "${GEMINI_MODEL:-$AI_DEFAULT_MODEL}"
+    _ai_api_call "$question"
 }
 
 # =============================================================================

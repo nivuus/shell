@@ -19,7 +19,7 @@ fi
 
 : ${AI_ERROR_CACHE_DIR:="$HOME/.cache/nivuus-shell/ai-errors"}
 : ${AI_ERROR_CACHE_TTL:=86400}  # 24 hours
-: ${AI_ERROR_MODEL:="${GEMINI_MODEL:-gemini-3.1-flash-lite}"}
+: ${AI_ERROR_MODEL:="$(_ai_resolve_model)"}
 
 # Create cache directory
 mkdir -p "$AI_ERROR_CACHE_DIR"

@@ -20,7 +20,7 @@ export NIVUUS_AI_SUGGESTIONS_LOADED=1
 typeset -g AI_SUGGESTION_MIN_CHARS="${AI_SUGGESTION_MIN_CHARS:-3}"
 typeset -g AI_DEBOUNCE_DELAY="${AI_DEBOUNCE_DELAY:-2}"  # Debounce delay in seconds
 typeset -g ENABLE_AI_AUTO_DEBOUNCE="${ENABLE_AI_AUTO_DEBOUNCE:-false}"  # Auto-trigger after typing
-typeset -g AI_SUGGESTION_MODEL="${AI_SUGGESTION_MODEL:-gemini-3.1-flash-lite}"  # Model for suggestions
+typeset -g AI_SUGGESTION_MODEL="${AI_SUGGESTION_MODEL:-$(_ai_resolve_model)}"  # Model for suggestions
 
 # Cache
 typeset -gA _AI_CACHE
