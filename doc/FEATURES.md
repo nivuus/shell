@@ -457,6 +457,8 @@ curl -fsSL https://github.com/maximeallanic/nivuus-shell/releases/latest/downloa
 
 Install for all users on the system.
 
+> **Note:** `--system` is temporarily unavailable (it now exits with an error). Use the per-user installation above instead.
+
 ### Options
 ```bash
 ./install.sh --help              # Show all options

@@ -53,6 +53,7 @@ git clone https://github.com/maximeallanic/nivuus-shell.git
 cd nivuus-shell
 sudo ./install.sh --system
 ```
+> **Note:** `--system` is temporarily unavailable (it now exits with an error). Per-user installation above is unaffected.
 
 ### Restart Your Terminal
 
