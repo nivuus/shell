@@ -66,7 +66,7 @@ nivuus_manifest_each() {
 
 nivuus_store_backup() {
     local path="$1" hash
-    hash="$(nivuus_hash_file "$path")" || return 1
+    hash="$(nivuus_hash_file "$path")"
     [ "$hash" = "-" ] && { printf '%s\n' '-'; return 0; }
     if [ -z "${NIVUUS_DRY_RUN:-}" ] && [ ! -f "$NIVUUS_BACKUP_DIR/$hash" ]; then
         cp -p "$path" "$NIVUUS_BACKUP_DIR/$hash"
@@ -110,11 +110,11 @@ _nivuus_place() {
 
     if [ -n "${NIVUUS_DRY_RUN:-}" ]; then
         if [ "$existed" -eq 1 ]; then log_dry "modifierait $dst"; else log_dry "créerait $dst"; fi
-        new_hash="$(nivuus_hash_file "$src")" || return 1
+        new_hash="$(nivuus_hash_file "$src")"
     else
         nivuus_mkdir_p "$(dirname "$dst")"
         cp -p "$src" "$dst"
-        new_hash="$(nivuus_hash_file "$dst")" || return 1
+        new_hash="$(nivuus_hash_file "$dst")"
     fi
 
     if [ "$existed" -eq 1 ]; then

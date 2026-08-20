@@ -73,3 +73,9 @@ teardown() { rm -rf "$TMP"; }
     [ ! -e "$TMP/never" ]
     [ ! -e "$TMP/never-dir" ]
 }
+
+@test "dry-run write_file does not create the destination" {
+    export NIVUUS_DRY_RUN=1
+    printf 'content' | nivuus_write_file "$TMP/never-written"
+    [ ! -e "$TMP/never-written" ]
+}
