@@ -61,6 +61,12 @@ Configuration:
   Model: $(_ai_resolve_model)
   Status: $status_line
 
+Antigravity daemon (GEMINI_AUTH_MODE=cli only):
+  Keeps one agy process alive: ~5.5s first call, ~1s after
+  Manage:  ai-daemon [status|start|stop|restart|logs]
+  Disable: export AGY_DAEMON_ENABLED=false
+  Recycle: export AGY_DAEMON_MAX_TURNS=8   # turns before a fresh process
+
 Setup:
   Gemini:    export GOOGLE_API_KEY='...' (get one: https://aistudio.google.com/apikey)
              or export GEMINI_AUTH_MODE=cli (uses Antigravity CLI + your AI Pro/Ultra subscription)

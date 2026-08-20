@@ -161,6 +161,8 @@ The vim system (`config/08-vim.zsh` + `.vimrc.nord`) uses environment detection:
 - **Backend selection**: `AI_BACKEND=gemini|openai|anthropic`; per-backend model override `GEMINI_MODEL`/`OPENAI_MODEL`/`ANTHROPIC_MODEL`; per-backend key `GOOGLE_API_KEY`/`OPENAI_API_KEY`/`ANTHROPIC_API_KEY`
 - **No fallback**: If the active backend's key is not set (Gemini also checks `~/.gemini-cli/config.json`), shows setup instructions
 - **Gemini `cli` auth mode**: `GEMINI_AUTH_MODE=cli` shells out to Antigravity CLI (`agy`) instead of the REST API, to use a Google AI Pro/Ultra subscription's quota
+- **agy daemon** (`config/09-ai-agy-daemon.zsh`): in `cli` mode, calls go through one long-lived `agy --input-format stream-json` process instead of a fresh `agy -p` each time. A cold one-shot costs 3-6s of session startup for a ~2s model turn; the daemon brings that to ~1s per call (~5.5s for the first). One daemon per model, shared by every shell through a FIFO pair in `$XDG_RUNTIME_DIR/nivuus-agy-$UID/<model>/`, serialized with `flock`, prewarmed from `config/99-cleanup.zsh`, recycled every `AGY_DAEMON_MAX_TURNS` turns (the conversation grows ~6k input tokens per turn). Any failure falls back to the one-shot path. Manage with `ai-daemon`, disable with `AGY_DAEMON_ENABLED=false`
+- **agy CLI gotchas**: `-p` takes an optional value, so `agy -p --input-format ...` silently makes `"--input-format"` the *prompt* — always use `--print=""` when the prompt comes from stdin. The stream-json input schema is `{"event":"user","message":{"role":"user","content":"..."}}` (`event`, not `type`)
 - Functions (`??`, `?git`, `?gh`, `why`, `explain`, `ask`) call `_ai_api_call` from `config/09-ai-core.zsh`
 - `config/19-ai-suggestions.zsh`, `config/20-terminal-title.zsh` and `config/22-ai-errors.zsh` share the same dispatcher
 
@@ -306,6 +308,7 @@ Modify `config/05-prompt.zsh`:
 - **`config/09-nodejs.zsh`**: NVM lazy loading, auto-switch with .nvmrc, project detection
 - **`config/09-python.zsh`**: Python virtual environment detection and management (venv/conda/poetry)
 - **`config/09-ai-core.zsh`**: Multi-backend AI dispatcher (`_ai_api_call`, `_ai_get_api_key`, `_ai_resolve_model`)
+- **`config/09-ai-agy-daemon.zsh`**: Persistent Antigravity CLI process (`_agy_daemon_call`, `ai-daemon`) - removes agy's 3-6s per-call startup
 - **`config/09-ai-backend-gemini.zsh`** / **`09-ai-backend-openai.zsh`** / **`09-ai-backend-anthropic.zsh`**: Per-provider REST (and, for Gemini, Antigravity CLI) implementations
 - **`config/10-ai.zsh`**: AI command wrappers (`??`, `?git`, `?gh`, `why`, `explain`, `ask`), calls the Gemini API directly
 - **`config/21-safety.zsh`**: Command safety checks, dangerous pattern detection, safe alternatives

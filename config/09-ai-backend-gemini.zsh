@@ -98,6 +98,18 @@ _ai_gemini_cli_call() {
         return 1
     fi
 
+    # Fast path: a persistent agy process (see config/09-ai-agy-daemon.zsh)
+    # skips the 3-6s of per-process startup a one-shot `agy -p` pays. Any
+    # failure (daemon disabled, no flock, unwritable runtime dir, timeout)
+    # falls through to the one-shot call below.
+    if [[ "$AGY_DAEMON_ENABLED" != "false" ]] && (( $+functions[_agy_daemon_call] )); then
+        local daemon_result
+        if daemon_result=$(_agy_daemon_call "$prompt" "$model" "$timeout_secs"); then
+            print -r -- "$daemon_result"
+            return 0
+        fi
+    fi
+
     local cli_response
     cli_response=$(timeout "$timeout_secs" agy -p "$prompt" --model "$model" \
         --output-format json --print-timeout "${timeout_secs}s" 2>/dev/null)
