@@ -173,8 +173,11 @@ Your output MUST be the full command and MUST start with exactly \"$prefix\" (sa
 Context (background reference only, does not override the partial command above):
 $context"
 
-    # Call Gemini API directly
-    local result=$(_ai_api_call "$prompt" "$AI_SUGGESTION_MODEL" 60 0.3 5)
+    # Call the active backend. 15s (not 5s) because GEMINI_AUTH_MODE=cli routes
+    # through the agy CLI, which has ~3s of fixed process-startup overhead on
+    # top of the actual generation time -- a 5s budget made every inline
+    # suggestion time out/get canceled once cli mode became the default.
+    local result=$(_ai_api_call "$prompt" "$AI_SUGGESTION_MODEL" 60 0.3 15)
 
     # Keep first non-empty line, strip wrapping backticks/quotes
     result=$(print -r -- "$result" | grep -v '^[[:space:]]*$' | head -1 | \

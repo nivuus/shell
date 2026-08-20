@@ -40,7 +40,14 @@ _ai_backend_gemini_call() {
         # Antigravity CLI uses its own model slugs (e.g. "gemini-3.5-flash-medium"),
         # not the Generative Language API's model IDs (e.g. "gemini-3.5-flash-lite") —
         # the two are not interchangeable, so cli mode gets its own override var.
-        _ai_gemini_cli_call "$prompt" "${GEMINI_CLI_MODEL:-gemini-3.5-flash-medium}" "$timeout_secs"
+        #
+        # "-medium"/"-high" tiers run agy as a full agentic session: it tries to
+        # read files and shell out to explore context instead of just answering,
+        # which takes 7-15s and often fails outright with a permission-check
+        # error the moment it attempts a tool call. The "-low" tier answers
+        # directly in a single turn, so it's the only tier fit for a synchronous
+        # shell helper (inline suggestions, chat, titles, error explain).
+        _ai_gemini_cli_call "$prompt" "${GEMINI_CLI_MODEL:-gemini-3.5-flash-low}" "$timeout_secs"
         return $?
     fi
 
