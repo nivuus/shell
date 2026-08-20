@@ -1,0 +1,126 @@
+#!/usr/bin/env bash
+# bin/nivuus — point d'entrée unique de gestion de Nivuus Shell.
+set -euo pipefail
+
+NIVUUS_SRC_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=/dev/null
+. "$NIVUUS_SRC_ROOT/lib/log.sh"
+. "$NIVUUS_SRC_ROOT/lib/detect.sh"
+. "$NIVUUS_SRC_ROOT/lib/manifest.sh"
+. "$NIVUUS_SRC_ROOT/lib/zshrc.sh"
+. "$NIVUUS_SRC_ROOT/lib/steps.sh"
+
+usage() {
+    cat <<'EOF'
+nivuus — gestion de Nivuus Shell
+
+Usage :
+  nivuus install   [--dry-run] [--yes] [--prefix DIR] [--minimal]
+  nivuus uninstall [--dry-run] [--yes] [--purge]
+  nivuus update
+  nivuus doctor
+  nivuus help
+
+Options :
+  --dry-run   N'écrit rien ; affiche ce qui serait fait.
+  --yes       Ne pose aucune question.
+  --prefix    Répertoire d'installation (défaut : ~/.nivuus-shell).
+  --minimal   Mode serveur/container : pas de chsh, pas d'extras.
+  --purge     (uninstall) supprime aussi ~/.zsh_local et l'état.
+              ~/.zsh_history n'est JAMAIS supprimé.
+EOF
+}
+
+confirm() {
+    [ -n "${ASSUME_YES:-}" ] && return 0
+    nivuus_is_tty || return 0
+    printf '%s [Y/n] ' "$1"
+    local reply; read -r reply
+    case "$reply" in [Nn]*) return 1 ;; *) return 0 ;; esac
+}
+
+cmd_install() {
+    local prefix="$HOME/.nivuus-shell"
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --dry-run) export NIVUUS_DRY_RUN=1 ;;
+            --yes|-y)  ASSUME_YES=1 ;;
+            --minimal) export NIVUUS_MINIMAL=1 ;;
+            --prefix)  shift; prefix="$1" ;;
+            *) log_error "Option inconnue : $1"; return 2 ;;
+        esac
+        shift
+    done
+
+    nivuus_step_check_required_deps || return 1
+    confirm "Installer Nivuus Shell dans $prefix ?" || { log_info "Annulé."; return 0; }
+
+    nivuus_manifest_begin user "$prefix"
+    nivuus_step_copy_tree "$NIVUUS_SRC_ROOT" "$prefix"
+    nivuus_step_write_version "$NIVUUS_SRC_ROOT" "$prefix"
+    nivuus_step_write_zshrc "$HOME/.zshrc" "$prefix" || { log_error "Installation interrompue."; return 1; }
+    nivuus_manifest_commit
+
+    if [ -n "${NIVUUS_DRY_RUN:-}" ]; then
+        log_info "Aucune modification effectuée (--dry-run)."
+    else
+        log_ok "Nivuus Shell installé dans $prefix"
+        log_info "Lance « exec zsh » pour démarrer."
+    fi
+}
+
+cmd_uninstall() {
+    local purge=''
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --dry-run) export NIVUUS_DRY_RUN=1 ;;
+            --yes|-y)  ASSUME_YES=1 ;;
+            --purge)   purge=1 ;;
+            *) log_error "Option inconnue : $1"; return 2 ;;
+        esac
+        shift
+    done
+
+    : "${NIVUUS_STATE_DIR:=${XDG_STATE_HOME:-$HOME/.local/state}/nivuus}"
+    NIVUUS_MANIFEST="$NIVUUS_STATE_DIR/manifest.tsv"
+    NIVUUS_BACKUP_DIR="$NIVUUS_STATE_DIR/backups"
+
+    if [ ! -f "$NIVUUS_MANIFEST" ]; then
+        log_info "Aucune installation Nivuus tracée ; rien à faire."
+        return 0
+    fi
+
+    confirm "Désinstaller Nivuus Shell et restaurer la configuration d'origine ?" \
+        || { log_info "Annulé."; return 0; }
+
+    nivuus_manifest_rollback
+
+    if [ -n "$purge" ] && [ -z "${NIVUUS_DRY_RUN:-}" ]; then
+        rm -f "$HOME/.zsh_local"
+        rm -rf "$NIVUUS_STATE_DIR"
+        log_info "Configuration personnelle supprimée (--purge). L'historique est conservé."
+    elif [ -z "${NIVUUS_DRY_RUN:-}" ]; then
+        rm -f "$NIVUUS_MANIFEST"
+    fi
+
+    if [ -n "${NIVUUS_DRY_RUN:-}" ]; then
+        log_info "Aucune modification effectuée (--dry-run)."
+    else
+        log_ok "Nivuus Shell désinstallé."
+    fi
+}
+
+main() {
+    local cmd="${1:-help}"
+    [ $# -gt 0 ] && shift
+    case "$cmd" in
+        install)   cmd_install "$@" ;;
+        uninstall) cmd_uninstall "$@" ;;
+        update)    exec zsh -ic 'nivuus-update' ;;
+        doctor)    exec "$NIVUUS_SRC_ROOT/bin/healthcheck" ;;
+        help|--help|-h) usage ;;
+        *) log_error "Sous-commande inconnue : $cmd"; usage >&2; return 2 ;;
+    esac
+}
+
+main "$@"
