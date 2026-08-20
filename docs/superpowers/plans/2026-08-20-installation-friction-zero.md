@@ -225,7 +225,7 @@ git commit -m "feat(lib): add portable sha256 hashing"
 **Interfaces:**
 - Consumes: `nivuus_hash_file` (Task 2), `log_error` (Task 1)
 - Produces:
-  - `nivuus_manifest_begin <mode> <install_dir>` — initialise un manifeste temporaire ; définit `NIVUUS_STATE_DIR`, `NIVUUS_MANIFEST`, `NIVUUS_BACKUP_DIR` s'ils ne le sont pas déjà.
+  - `nivuus_manifest_begin <mode> <install_dir>` — initialise un manifeste temporaire ; `NIVUUS_STATE_DIR` n'est défini que s'il ne l'est pas déjà (`:=`), tandis que `NIVUUS_MANIFEST` et `NIVUUS_BACKUP_DIR` en sont toujours dérivés.
   - `nivuus_manifest_record <action> <path> <hash> <ref>` — ajoute une ligne ; refuse (code 1) un chemin contenant une tabulation ou un saut de ligne.
   - `nivuus_manifest_commit` — remplace atomiquement le manifeste définitif par le temporaire.
   - `nivuus_manifest_each <callback>` — appelle `callback action path hash ref` pour chaque entrée, en **ordre inverse** d'écriture (pour que la désinstallation défasse dans l'ordre inverse de l'installation).
