@@ -29,6 +29,28 @@
     [ "$status" -eq 0 ]
 }
 
+@test "aihelp shows the active backend and model" {
+    run zsh -c "export AI_BACKEND=openai OPENAI_API_KEY=test-key; source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh'; source '$NIVUUS_SHELL_DIR/config/09-ai-backend-gemini.zsh'; source '$NIVUUS_SHELL_DIR/config/09-ai-backend-openai.zsh'; source '$NIVUUS_SHELL_DIR/config/09-ai-backend-anthropic.zsh'; source '$NIVUUS_SHELL_DIR/config/10-ai.zsh'; aihelp"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Backend: openai"* ]]
+    [[ "$output" == *"gpt-5.6-luna"* ]]
+}
+
+@test "aihelp shows agy status in gemini cli auth mode" {
+    local fake_bin_dir="$BATS_TEST_TMPDIR/fake-agy-aihelp"
+    mkdir -p "$fake_bin_dir"
+    cat > "$fake_bin_dir/agy" <<'EOF'
+#!/usr/bin/env bash
+[[ "$1" == "--version" ]] && echo "agy 1.0.0"
+EOF
+    chmod +x "$fake_bin_dir/agy"
+
+    run zsh -c "export PATH='$fake_bin_dir:\$PATH' GEMINI_AUTH_MODE=cli; source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh'; source '$NIVUUS_SHELL_DIR/config/09-ai-backend-gemini.zsh'; source '$NIVUUS_SHELL_DIR/config/09-ai-backend-openai.zsh'; source '$NIVUUS_SHELL_DIR/config/09-ai-backend-anthropic.zsh'; source '$NIVUUS_SHELL_DIR/config/10-ai.zsh'; aihelp"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Antigravity CLI"* ]]
+    [[ "$output" == *"✓"* ]]
+}
+
 # =============================================================================
 # AI Suggestions Module Tests
 # =============================================================================

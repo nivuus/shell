@@ -1,8 +1,9 @@
 #!/usr/bin/env zsh
 # =============================================================================
-# AI-Powered Commands - Gemini API Integration
+# AI-Powered Commands - Multi-Backend Integration
 # =============================================================================
-# Talks directly to the Gemini REST API (no gemini-cli dependency)
+# Talks to the active AI backend (Gemini/OpenAI/Anthropic) via
+# config/09-ai-core.zsh - no gemini-cli dependency for API-key mode.
 # =============================================================================
 
 # =============================================================================
@@ -10,16 +11,23 @@
 # =============================================================================
 
 aihelp() {
-    local key_status
-    if _ai_get_api_key &>/dev/null; then
-        key_status="✓ Configured"
+    local status_line
+
+    if [[ "$AI_BACKEND" == "gemini" && "$GEMINI_AUTH_MODE" == "cli" ]]; then
+        if command -v agy &>/dev/null; then
+            status_line="✓ Antigravity CLI (agy) found"
+        else
+            status_line="✗ Antigravity CLI (agy) not found"
+        fi
+    elif _ai_get_api_key &>/dev/null; then
+        status_line="✓ Configured"
     else
-        key_status="✗ Not configured"
+        status_line="✗ Not configured"
     fi
 
     # Use /bin/cat to bypass bat alias
     /bin/cat <<EOF
-Nivuus AI Commands (powered by Gemini)
+Nivuus AI Commands
 
 General:
   ??                     - Get command suggestions
@@ -41,18 +49,21 @@ AI Suggestions (Interactive):
   Help:    ai_suggestions_help
 
 AI Terminal Titles:
-  Creative terminal titles powered by Gemini
+  Creative terminal titles powered by AI
   Enable:  export ENABLE_AI_TERMINAL_TITLES=true
   Stats:   ai-title-stats
   Help:    ai-title-help
 
 Configuration:
+  Backend: $AI_BACKEND
   Model: $(_ai_resolve_model)
-  API key: $key_status
+  Status: $status_line
 
 Setup:
-  Get a key: https://aistudio.google.com/apikey
-  export GOOGLE_API_KEY='your-api-key'
+  Gemini:    export GOOGLE_API_KEY='...' (get one: https://aistudio.google.com/apikey)
+             or export GEMINI_AUTH_MODE=cli (uses Antigravity CLI + your AI Pro/Ultra subscription)
+  OpenAI:    export AI_BACKEND=openai OPENAI_API_KEY='...'
+  Anthropic: export AI_BACKEND=anthropic ANTHROPIC_API_KEY='...'
 EOF
 }
 
