@@ -22,6 +22,10 @@ teardown() { rm -rf "$TMP"; }
 }
 
 @test "manifest_record appends a tab-separated line" {
+    # Le répertoire d'état est déjà présent : nivuus_manifest_begin ne
+    # journalise donc aucun MKDIR de bootstrap, ce test reste focalisé sur
+    # manifest_record lui-même.
+    mkdir -p "$NIVUUS_STATE_DIR/backups"
     nivuus_manifest_begin user "$TMP/install"
     nivuus_manifest_record CREATE "/tmp/a" "deadbeef" "-"
     nivuus_manifest_commit
@@ -46,6 +50,7 @@ teardown() { rm -rf "$TMP"; }
 }
 
 @test "manifest_each iterates entries in reverse order, skipping the header" {
+    mkdir -p "$NIVUUS_STATE_DIR/backups"
     nivuus_manifest_begin user "$TMP/install"
     nivuus_manifest_record MKDIR "/tmp/d" "-" "-"
     nivuus_manifest_record CREATE "/tmp/a" "x" "-"
@@ -64,6 +69,7 @@ teardown() { rm -rf "$TMP"; }
 }
 
 @test "manifest_each on a header-only manifest yields nothing and returns 0" {
+    mkdir -p "$NIVUUS_STATE_DIR/backups"
     nivuus_manifest_begin user "$TMP/install"
     nivuus_manifest_commit
     collect() { printf '%s:%s ' "$1" "$2"; }

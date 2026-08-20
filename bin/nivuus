@@ -76,7 +76,7 @@ cmd_install() {
 }
 
 cmd_uninstall() {
-    local purge='' f name
+    local purge='' f name mkdir_levels level
     while [ $# -gt 0 ]; do
         case "$1" in
             --dry-run) export NIVUUS_DRY_RUN=1 ;;
@@ -106,6 +106,16 @@ cmd_uninstall() {
         if [ -f "$HOME/.zsh_local" ]; then
             log_info "~/.zsh_local n'a pas été créé par Nivuus : conservé. Supprime-le à la main si tu le souhaites."
         fi
+        # ~/.local, ~/.local/state et l'état Nivuus lui-même sont journalisés
+        # en MKDIR par nivuus_manifest_begin, comme toute autre mutation :
+        # rien n'est deviné ici. Mais nivuus_manifest_rollback (déjà exécuté
+        # ci-dessus) ne peut pas les vider : le manifeste et les sauvegardes
+        # qu'il vient de lire vivent dedans. On capture donc la liste avant
+        # de les effacer, puis on la rejoue une seconde fois une fois l'état
+        # supprimé. rmdir échoue silencieusement sur un répertoire absent ou
+        # toujours non vide, donc ceci ne supprime jamais rien de préexistant
+        # ni de non enregistré.
+        mkdir_levels="$(awk -F"$NIVUUS_TAB" '$1=="MKDIR"{print $2}' "$NIVUUS_MANIFEST" 2>/dev/null || true)"
         rm -f "$NIVUUS_MANIFEST"
         if [ -d "$NIVUUS_BACKUP_DIR" ]; then
             for f in "$NIVUUS_BACKUP_DIR"/*; do
@@ -120,12 +130,12 @@ cmd_uninstall() {
             done
             rmdir "$NIVUUS_BACKUP_DIR" 2>/dev/null || true
         fi
-        rmdir "$NIVUUS_STATE_DIR" 2>/dev/null || true
-        # Ne retire les parents que s'ils sont devenus vides : rmdir échoue
-        # silencieusement sur un répertoire non vide, donc rien d'autre créé
-        # par l'utilisateur sous ~/.local n'est jamais supprimé.
-        rmdir "$(dirname "$NIVUUS_STATE_DIR")" 2>/dev/null || true   # ex: ~/.local/state
-        rmdir "$(dirname "$(dirname "$NIVUUS_STATE_DIR")")" 2>/dev/null || true   # ex: ~/.local
+        if [ -n "$mkdir_levels" ]; then
+            printf '%s\n' "$mkdir_levels" | sed '1!G;h;$!d' | while IFS= read -r level; do
+                [ -z "$level" ] && continue
+                rmdir "$level" 2>/dev/null || true
+            done
+        fi
         log_info "État Nivuus supprimé (--purge). L'historique et les fichiers non créés par Nivuus sont conservés."
     elif [ -z "${NIVUUS_DRY_RUN:-}" ]; then
         rm -f "$NIVUUS_MANIFEST"

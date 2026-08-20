@@ -45,10 +45,13 @@ teardown() { rm -rf "$TMP"; }
 }
 
 @test "mkdir_p records MKDIR only for levels it creates" {
+    # nivuus_manifest_begin (setup) journalise déjà ses propres MKDIR de
+    # bootstrap pour $NIVUUS_STATE_DIR : on ne compte ici que les entrées
+    # sous le répertoire propre à ce test.
     nivuus_mkdir_p "$TMP/a/b"
     [ -d "$TMP/a/b" ]
     nivuus_manifest_commit
-    run grep -c "^MKDIR" "$NIVUUS_MANIFEST"
+    run grep -c "^MKDIR.*$TMP/a" "$NIVUUS_MANIFEST"
     [ "$output" = "2" ]
 }
 
@@ -56,7 +59,7 @@ teardown() { rm -rf "$TMP"; }
     mkdir -p "$TMP/exists"
     nivuus_mkdir_p "$TMP/exists"
     nivuus_manifest_commit
-    run grep -c "^MKDIR" "$NIVUUS_MANIFEST"
+    run grep -c "^MKDIR.*$TMP/exists" "$NIVUUS_MANIFEST"
     [ "$status" -ne 0 ]
 }
 

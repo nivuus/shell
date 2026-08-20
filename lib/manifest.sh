@@ -16,8 +16,22 @@ nivuus_hash_file() {
 
 NIVUUS_TAB="$(printf '\t')"
 
+# Collecte les niveaux manquants pour atteindre $1, du plus profond au plus
+# superficiel (un chemin par ligne). Ne crée rien : pure lecture, partagée
+# entre nivuus_mkdir_p et nivuus_manifest_begin pour ne pas dupliquer la
+# logique de détection.
+_nivuus_missing_levels() {
+    local d="$1" missing=''
+    while [ ! -d "$d" ] && [ "$d" != "/" ] && [ -n "$d" ]; do
+        missing="$missing$d
+"
+        d="$(dirname "$d")"
+    done
+    printf '%s' "$missing"
+}
+
 nivuus_manifest_begin() {
-    local mode="$1" install_dir="$2"
+    local mode="$1" install_dir="$2" missing=''
     : "${NIVUUS_STATE_DIR:=${XDG_STATE_HOME:-$HOME/.local/state}/nivuus}"
     NIVUUS_MANIFEST="$NIVUUS_STATE_DIR/manifest.tsv"
     NIVUUS_BACKUP_DIR="$NIVUUS_STATE_DIR/backups"
@@ -26,12 +40,34 @@ nivuus_manifest_begin() {
     if [ -n "${NIVUUS_DRY_RUN:-}" ]; then
         NIVUUS_MANIFEST_TMP="$(mktemp)"
     else
-        mkdir -p "$NIVUUS_STATE_DIR" "$NIVUUS_BACKUP_DIR"
+        # $NIVUUS_BACKUP_DIR est un enfant de $NIVUUS_STATE_DIR : relever ses
+        # niveaux manquants couvre aussi ceux de $NIVUUS_STATE_DIR et de ses
+        # parents XDG (~/.local/state, ~/.local). C'est la SEULE mutation du
+        # projet qui doit précéder l'ouverture du manifeste ; on journalise
+        # donc ces niveaux nous-mêmes juste après, comme nivuus_mkdir_p le
+        # ferait, pour qu'un uninstall --purge ne supprime jamais un
+        # répertoire XDG préexistant.
+        missing="$(_nivuus_missing_levels "$NIVUUS_BACKUP_DIR")"
+        mkdir -p "$NIVUUS_BACKUP_DIR"
     fi
 
     printf '#nivuus-manifest v1\tinstalled_at=%s\tmode=%s\tdir=%s\n' \
         "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$mode" "$install_dir" \
         > "$NIVUUS_MANIFEST_TMP"
+
+    if [ -n "$missing" ]; then
+        # Du plus superficiel au plus profond (ordre de création), pour que
+        # le rollback -- qui rejoue le journal à l'envers -- supprime bien
+        # les répertoires les plus profonds avant leurs parents.
+        # $(...) a tronqué le(s) saut(s) de ligne finaux de $missing : si un
+        # seul niveau manquait, la chaîne capturée n'en contient plus aucun et
+        # le "while read" ci-dessous perdrait cette unique ligne (son premier
+        # read renverrait un statut non nul sans exécuter le corps). On
+        # rajoute donc un saut de ligne terminal avant de dépiler.
+        printf '%s\n' "$missing" | sed '1!G;h;$!d' | while IFS= read -r level; do
+            [ -n "$level" ] && nivuus_manifest_record MKDIR "$level" '-' '-'
+        done
+    fi
 }
 
 nivuus_manifest_record() {
@@ -90,14 +126,8 @@ nivuus_store_backup() {
 }
 
 nivuus_mkdir_p() {
-    local dir="$1" missing='' d
-    d="$dir"
-    # Collecte les niveaux manquants, du plus profond au plus superficiel.
-    while [ ! -d "$d" ] && [ "$d" != "/" ] && [ -n "$d" ]; do
-        missing="$missing$d
-"
-        d="$(dirname "$d")"
-    done
+    local dir="$1" missing
+    missing="$(_nivuus_missing_levels "$dir")"
     [ -n "$missing" ] || return 0
 
     if [ -n "${NIVUUS_DRY_RUN:-}" ]; then
@@ -107,8 +137,10 @@ nivuus_mkdir_p() {
     fi
     # Enregistrés du plus superficiel au plus profond (ordre de création),
     # afin que le rollback -- qui rejoue le journal à l'envers -- supprime
-    # bien les répertoires les plus profonds avant leurs parents.
-    printf '%s' "$missing" | sed '1!G;h;$!d' | while IFS= read -r level; do
+    # bien les répertoires les plus profonds avant leurs parents. $(...) a
+    # tronqué le saut de ligne final (voir nivuus_manifest_begin) : on le
+    # rajoute pour ne jamais perdre le cas d'un seul niveau manquant.
+    printf '%s\n' "$missing" | sed '1!G;h;$!d' | while IFS= read -r level; do
         [ -n "$level" ] && nivuus_manifest_record MKDIR "$level" '-' '-'
     done
 }

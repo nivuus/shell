@@ -70,3 +70,25 @@ teardown() { rm -rf "$TMP"; }
     run diff "$TMP/before" "$TMP/after"
     [ "$status" -eq 0 ]
 }
+
+@test "uninstall keeps a pre-existing empty ~/.local" {
+    mkdir -p "$HOME/.local"
+    printf 'export MINE=1\n' > "$HOME/.zshrc"
+    fs_fingerprint "$HOME" > "$TMP/before"
+    "$NIVUUS" install --yes --prefix "$HOME/.nivuus-shell"
+    "$NIVUUS" uninstall --yes --purge
+    fs_fingerprint "$HOME" > "$TMP/after"
+    run diff "$TMP/before" "$TMP/after"
+    [ "$status" -eq 0 ]
+}
+
+@test "uninstall keeps a pre-existing ~/.local/state with foreign content" {
+    mkdir -p "$HOME/.local/state/someapp"
+    printf 'foreign\n' > "$HOME/.local/state/someapp/data"
+    fs_fingerprint "$HOME" > "$TMP/before"
+    "$NIVUUS" install --yes --prefix "$HOME/.nivuus-shell"
+    "$NIVUUS" uninstall --yes --purge
+    fs_fingerprint "$HOME" > "$TMP/after"
+    run diff "$TMP/before" "$TMP/after"
+    [ "$status" -eq 0 ]
+}
