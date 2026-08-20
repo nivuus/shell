@@ -115,6 +115,39 @@ jobs:
             echo "$startup_output" >> $GITHUB_STEP_SUMMARY
           fi
 
+  e2e:
+    name: Installation E2E
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install ZSH
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zsh
+
+      - name: Install bats
+        run: |
+          sudo apt-get install -y bats
+
+      - name: Setup test environment
+        run: |
+          echo "NIVUUS_SHELL_DIR=$GITHUB_WORKSPACE" >> $GITHUB_ENV
+
+      - name: Library unit tests
+        run: |
+          bats tests/unit/test_lib_*.bats
+
+      - name: Install / uninstall E2E
+        run: |
+          bats tests/e2e/test_nivuus_cli.bats tests/e2e/test_install_sh_compat.bats
+
+      - name: Reversibility (HOME must be bit-identical)
+        run: |
+          bats tests/e2e/test_reversibility.bats
+
   lint:
     name: Syntax Validation
     runs-on: ubuntu-latest
