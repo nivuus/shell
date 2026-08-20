@@ -110,8 +110,16 @@ _ai_gemini_cli_call() {
         fi
     fi
 
+    # agy indexes its working directory. Running it from the user's project
+    # costs ~1s of wall clock per call (6.4s vs 5.4s median, measured) for
+    # context none of our prompts use, so the one-shot call runs from an empty
+    # scratch directory -- the same trick the daemon uses. Falls back to the
+    # current directory if that scratch dir cannot be created.
+    local workspace="${AGY_DAEMON_RUNTIME_DIR:-${XDG_RUNTIME_DIR:-/tmp}/nivuus-agy-${UID}}/workspace"
+    mkdir -p "$workspace" 2>/dev/null || workspace="$PWD"
+
     local cli_response
-    cli_response=$(timeout "$timeout_secs" agy -p "$prompt" --model "$model" \
+    cli_response=$(cd "$workspace" && timeout "$timeout_secs" agy -p "$prompt" --model "$model" \
         --output-format json --print-timeout "${timeout_secs}s" 2>/dev/null)
 
     if [[ -z "$cli_response" ]]; then

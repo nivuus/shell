@@ -40,7 +40,7 @@ if [[ "$mode" == "daemon" ]]; then
     exit 0
 fi
 
-echo "oneshot $$" >> "$AGY_FAKE_LOG"
+echo "oneshot $$ cwd=$PWD" >> "$AGY_FAKE_LOG"
 printf '{"status":"SUCCESS","response":"oneshot:%s"}\n' "$prompt"
 INNEREOF
     chmod +x "$FAKE_BIN/agy"
@@ -129,6 +129,33 @@ _ai_backend_gemini_call 'ping' 'ignored-api-model' 100 0.3 10
     run zsh -c "$(_preamble)
 export GEMINI_AUTH_MODE=cli
 # An unwritable runtime dir makes daemon startup fail.
+export AGY_DAEMON_RUNTIME_DIR=/proc/nivuus-cannot-create
+_ai_backend_gemini_call 'ping' 'ignored-api-model' 100 0.3 10
+"
+    [ "$status" -eq 0 ]
+    [[ "$output" == oneshot:* ]]
+}
+
+@test "one-shot fallback runs agy from a neutral directory, not the caller's cwd" {
+    # agy indexes its working directory: launching from a git repo costs ~1s of
+    # wall clock per call (measured), for context none of our prompts use.
+    local caller_dir="$BATS_TEST_TMPDIR/project"
+    mkdir -p "$caller_dir"
+
+    run zsh -c "$(_preamble)
+export GEMINI_AUTH_MODE=cli AGY_DAEMON_ENABLED=false
+cd '$caller_dir'
+_ai_backend_gemini_call 'ping' 'ignored-api-model' 100 0.3 10
+"
+    [ "$status" -eq 0 ]
+    [[ "$output" == oneshot:* ]]
+    [[ "$(cat "$AGY_FAKE_LOG")" != *"cwd=$caller_dir"* ]]
+    [[ "$(cat "$AGY_FAKE_LOG")" == *"cwd=$AGY_DAEMON_RUNTIME_DIR"* ]]
+}
+
+@test "one-shot fallback still answers when the neutral directory cannot be created" {
+    run zsh -c "$(_preamble)
+export GEMINI_AUTH_MODE=cli AGY_DAEMON_ENABLED=false
 export AGY_DAEMON_RUNTIME_DIR=/proc/nivuus-cannot-create
 _ai_backend_gemini_call 'ping' 'ignored-api-model' 100 0.3 10
 "
