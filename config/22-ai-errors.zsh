@@ -6,10 +6,10 @@
 # Press Ctrl+E after an error to get intelligent help
 # =============================================================================
 
-# Skip if explicitly disabled or gemini-cli not available
+# Skip if explicitly disabled or the Gemini API key is not configured
 [[ "${ENABLE_AI_ERROR_EXPLANATION:-true}" != "true" ]] && return
 
-if ! command -v gemini &>/dev/null; then
+if ! _ai_get_api_key &>/dev/null; then
     return
 fi
 
@@ -19,7 +19,7 @@ fi
 
 : ${AI_ERROR_CACHE_DIR:="$HOME/.cache/nivuus-shell/ai-errors"}
 : ${AI_ERROR_CACHE_TTL:=86400}  # 24 hours
-: ${AI_ERROR_MODEL:="${GEMINI_MODEL:-gemini-1.5-flash}"}
+: ${AI_ERROR_MODEL:="${GEMINI_MODEL:-gemini-3.1-flash-lite}"}
 
 # Create cache directory
 mkdir -p "$AI_ERROR_CACHE_DIR"
@@ -70,7 +70,7 @@ _ai_error_cache_set() {
     local content="$2"
     local cache_file="$AI_ERROR_CACHE_DIR/$cache_key"
 
-    echo "$content" > "$cache_file"
+    print -r -- "$content" > "$cache_file"
 }
 
 # =============================================================================
@@ -156,8 +156,8 @@ Please provide:
 Keep your response concise, practical, and focused on actionable solutions.
 Format your response in a clear, readable way suitable for terminal display."
 
-    # Call gemini-cli
-    gemini --model "$AI_ERROR_MODEL" ask "$prompt" 2>/dev/null
+    # Call the Gemini API
+    _ai_api_call "$prompt" "$AI_ERROR_MODEL"
 }
 
 # =============================================================================
@@ -210,8 +210,8 @@ _ai_explain_error_widget() {
     if [[ -n "$analysis" ]]; then
         print "$analysis"
     else
-        print -P "%F{167}Failed to analyze error. Is gemini-cli configured correctly?%f"
-        print -P "%F{246}Run: gemini --help%f"
+        print -P "%F{167}Failed to analyze error. Is GOOGLE_API_KEY configured correctly?%f"
+        print -P "%F{246}Get a key: https://aistudio.google.com/apikey%f"
     fi
 
     print ""
@@ -308,14 +308,14 @@ CONFIGURATION:
   export ENABLE_AI_ERROR_EXPLANATION=false    # Disable feature
   export ENABLE_AI_ERROR_INDICATOR=false      # Hide ⚠ in RPROMPT
   export AI_ERROR_CACHE_TTL=86400             # Cache duration (seconds)
-  export AI_ERROR_MODEL=gemini-1.5-flash      # Gemini model to use
+  export AI_ERROR_MODEL=gemini-3.1-flash-lite # Gemini model to use
 
 CACHE MANAGEMENT:
   ai-error-clear-cache    Clear cached explanations
   ai-error-stats          Show statistics
 
 NOTES:
-  - Requires gemini-cli to be installed and configured
+  - Requires GOOGLE_API_KEY to be set (https://aistudio.google.com/apikey)
   - Errors are cached for 24 hours to avoid redundant API calls
   - Only non-zero exit codes are captured
   - The ⚠ indicator in RPROMPT shows when an error is available

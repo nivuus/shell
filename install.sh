@@ -332,11 +332,14 @@ create_local_config() {
 # This file is for your personal customizations
 
 # =============================================================================
-# AI Configuration (gemini-cli)
+# AI Configuration (Gemini API)
 # =============================================================================
 
-# Configure Gemini model (requires gemini-cli installed)
-# export GEMINI_MODEL='gemini-2.0-flash'
+# Required for AI features - get a key at https://aistudio.google.com/apikey
+# export GOOGLE_API_KEY='your-api-key'
+
+# Optional: override the default Gemini model
+# export GEMINI_MODEL='gemini-3.1-flash-lite'
 
 # =============================================================================
 # Performance Tuning
@@ -407,7 +410,7 @@ suggest_optional_tools() {
     local suggestions=()
 
     # AI tools
-    command -v gemini-cli &>/dev/null || suggestions+=("gemini-cli: npm install -g @google/gemini-cli (AI commands)")
+    [[ -n "$GOOGLE_API_KEY" ]] || suggestions+=("GOOGLE_API_KEY: get a key at https://aistudio.google.com/apikey (AI commands)")
 
     # Modern command replacements (colorization)
     command -v eza &>/dev/null || suggestions+=("eza: cargo install eza (colorized ls)")

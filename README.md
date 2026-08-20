@@ -12,7 +12,7 @@
 
 - ⚡ **Lightning Fast** - Sub-100ms startup time (lazy-loaded completion)
 - 🎨 **Nord Theme** - Beautiful, consistent color scheme
-- 🤖 **AI-Powered** - Command suggestions via gemini-cli
+- 🤖 **AI-Powered** - Command suggestions via the Gemini API
 - 📝 **Modern Vim** - Ctrl+C/V/X/A shortcuts
 - 🔍 **Smart Navigation** - History prefix search with ↑/↓
 - 📦 **Auto Node.js** - Version switching with .nvmrc
@@ -78,8 +78,9 @@ aihelp                  # Show all AI commands
 ```
 
 **Setup AI:**
-- AI commands require `gemini-cli` to be installed
-- Install: `npm install -g @google/gemini-cli`
+- AI commands require a Google Gemini API key
+- Get a key: https://aistudio.google.com/apikey
+- Configure: `export GOOGLE_API_KEY='your-api-key'`
 
 ### Modern Vim Editing
 
@@ -265,7 +266,8 @@ export BAT_STYLE="plain"                # Options: plain, auto, numbers, grid, h
                                         # Combine: "numbers,grid"
 
 # AI configuration
-export GEMINI_MODEL='gemini-2.0-flash'
+export GOOGLE_API_KEY='your-api-key'   # https://aistudio.google.com/apikey
+export GEMINI_MODEL='gemini-3.1-flash-lite'
 ```
 
 ## 📊 Performance
@@ -442,7 +444,8 @@ nivuus-shell/
 - **Curl** 7.0+
 
 ### Optional
-- **gemini-cli** - For AI commands (`npm install -g gemini-cli`)
+- **Gemini API key** - For AI commands (get one at https://aistudio.google.com/apikey)
+- **jq** - Robust JSON parsing for AI responses (falls back to grep/sed if absent)
 - **NVM** - For Node.js version management
 - **fd** - Fast file search (`cargo install fd-find`)
 - **ripgrep** - Fast content search (`cargo install ripgrep`)
@@ -482,8 +485,8 @@ export GIT_PROMPT_CACHE_TTL=5
 ### AI commands not working
 
 ```bash
-# Install gemini-cli
-npm install -g @google/gemini-cli
+# Set your Gemini API key (https://aistudio.google.com/apikey)
+export GOOGLE_API_KEY='your-api-key'
 ```
 
 ### Git prompt not showing

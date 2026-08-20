@@ -1,8 +1,8 @@
 #!/usr/bin/env zsh
 # =============================================================================
-# AI-Powered Commands - Gemini CLI Integration
+# AI-Powered Commands - Gemini API Integration
 # =============================================================================
-# Using gemini-cli for intelligent command assistance
+# Talks directly to the Gemini REST API (no gemini-cli dependency)
 # =============================================================================
 
 # =============================================================================
@@ -10,11 +10,11 @@
 # =============================================================================
 
 aihelp() {
-    local gemini_status
-    if command -v gemini &>/dev/null; then
-        gemini_status="✓ Installed"
+    local key_status
+    if _ai_get_api_key &>/dev/null; then
+        key_status="✓ Configured"
     else
-        gemini_status="✗ Not installed"
+        key_status="✗ Not configured"
     fi
 
     # Use /bin/cat to bypass bat alias
@@ -47,23 +47,25 @@ AI Terminal Titles:
   Help:    ai-title-help
 
 Configuration:
-  Model: ${GEMINI_MODEL:-Global setting (from gemini /settings)}
-  Status: $gemini_status
+  Model: ${GEMINI_MODEL:-$AI_DEFAULT_MODEL}
+  API key: $key_status
 
 Setup:
-  Install: npm install -g @google/gemini-cli
+  Get a key: https://aistudio.google.com/apikey
+  export GOOGLE_API_KEY='your-api-key'
 EOF
 }
 
 # =============================================================================
-# Check if gemini is installed
+# Check if the Gemini API key is configured
 # =============================================================================
 
-if ! command -v gemini &>/dev/null; then
-    # Provide installation instructions on first use
+if ! _ai_get_api_key &>/dev/null; then
+    # Provide setup instructions on first use
     _nivuus_ai_not_installed() {
-        echo "⚠️  gemini not found"
-        echo "Install: npm install -g @google/gemini-cli"
+        echo "⚠️  GOOGLE_API_KEY not set"
+        echo "Get a key: https://aistudio.google.com/apikey"
+        echo "Then: export GOOGLE_API_KEY='your-api-key'"
         echo ""
         echo "Run 'aihelp' for more information"
         return 1
@@ -82,84 +84,65 @@ if ! command -v gemini &>/dev/null; then
 fi
 
 # =============================================================================
-# Configuration
-# =============================================================================
-
-# export GEMINI_MODEL="${GEMINI_MODEL:-gemini-2.0-flash}"
-
-# =============================================================================
 # AI Command Functions
 # =============================================================================
-
-# Helper to get model flag
-_ai_model_flag() {
-    if [[ -n "$GEMINI_MODEL" ]]; then
-        echo "--model $GEMINI_MODEL"
-    fi
-}
 
 # General command suggestions
 _nivuus_ai_suggest() {
     local query="$*"
-    local model_flag=($(_ai_model_flag))
     if [[ -z "$query" ]]; then
-        gemini "${model_flag[@]}" "Suggest useful zsh commands and shell tricks" 2>/dev/null
+        _ai_api_call "Suggest useful zsh commands and shell tricks" "${GEMINI_MODEL:-$AI_DEFAULT_MODEL}"
     else
-        gemini "${model_flag[@]}" "Suggest zsh commands for: $query" 2>/dev/null
+        _ai_api_call "Suggest zsh commands for: $query" "${GEMINI_MODEL:-$AI_DEFAULT_MODEL}"
     fi
 }
 
 # Git-specific help
 _nivuus_git_help() {
     local query="$*"
-    local model_flag=($(_ai_model_flag))
-    gemini "${model_flag[@]}" "Git command help: $query. Provide the exact command to run." 2>/dev/null
+    _ai_api_call "Git command help: $query. Provide the exact command to run." "${GEMINI_MODEL:-$AI_DEFAULT_MODEL}"
 }
 
 # GitHub CLI help
 _nivuus_gh_help() {
     local query="$*"
-    local model_flag=($(_ai_model_flag))
-    gemini "${model_flag[@]}" "GitHub CLI (gh) help: $query. Provide the exact command to run." 2>/dev/null
+    _ai_api_call "GitHub CLI (gh) help: $query. Provide the exact command to run." "${GEMINI_MODEL:-$AI_DEFAULT_MODEL}"
 }
 
 # Explain a command
 why() {
     local cmd="$*"
-    local model_flag=($(_ai_model_flag))
     if [[ -z "$cmd" ]]; then
         echo "Usage: why <command>"
         echo "Example: why 'tar -xzf file.tar.gz'"
         return 1
     fi
 
-    gemini "${model_flag[@]}" "Explain this command concisely: $cmd" 2>/dev/null
+    _ai_api_call "Explain this command concisely: $cmd" "${GEMINI_MODEL:-$AI_DEFAULT_MODEL}"
 }
 
 # Detailed explanation
 explain() {
     local cmd="$*"
-    local model_flag=($(_ai_model_flag))
     if [[ -z "$cmd" ]]; then
         echo "Usage: explain <command>"
         echo "Example: explain 'find . -name \"*.log\" -delete'"
         return 1
     fi
 
-    gemini "${model_flag[@]}" "Provide a detailed explanation of this command, including each option: $cmd" 2>/dev/null
+    _ai_api_call "Provide a detailed explanation of this command, including each option: $cmd" "${GEMINI_MODEL:-$AI_DEFAULT_MODEL}"
 }
 
 # General question
 ask() {
     local question="$*"
-    local model_flag=($(_ai_model_flag))
     if [[ -z "$question" ]]; then
         echo "Usage: ask <question>"
         echo "Example: ask 'how to compress a folder'"
         return 1
     fi
 
-    gemini "${model_flag[@]}" "$question" 2>/dev/null
+    _ai_api_call "$question" "${GEMINI_MODEL:-$AI_DEFAULT_MODEL}"
 }
 
 # =============================================================================

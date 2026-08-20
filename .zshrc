@@ -55,6 +55,7 @@ config_files=(
     06-git.zsh
     07-navigation.zsh
     08-vim.zsh
+    09-ai-core.zsh
     09-nodejs.zsh
     09-python.zsh
     10-ai.zsh

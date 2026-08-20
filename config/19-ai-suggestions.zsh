@@ -20,7 +20,7 @@ export NIVUUS_AI_SUGGESTIONS_LOADED=1
 typeset -g AI_SUGGESTION_MIN_CHARS="${AI_SUGGESTION_MIN_CHARS:-3}"
 typeset -g AI_DEBOUNCE_DELAY="${AI_DEBOUNCE_DELAY:-2}"  # Debounce delay in seconds
 typeset -g ENABLE_AI_AUTO_DEBOUNCE="${ENABLE_AI_AUTO_DEBOUNCE:-false}"  # Auto-trigger after typing
-typeset -g AI_SUGGESTION_MODEL="${AI_SUGGESTION_MODEL:-gemini-1.5-flash}"  # Model for suggestions
+typeset -g AI_SUGGESTION_MODEL="${AI_SUGGESTION_MODEL:-gemini-3.1-flash-lite}"  # Model for suggestions
 
 # Cache
 typeset -gA _AI_CACHE
@@ -133,7 +133,7 @@ _ai_generate() {
     local cache_key="${prefix}_${PWD}"
 
     # Check for API key
-    if [[ -z "$GOOGLE_API_KEY" ]]; then
+    if ! _ai_get_api_key &>/dev/null; then
         echo "ERROR: GOOGLE_API_KEY not set" >&2
         return 1
     fi
@@ -151,33 +151,32 @@ _ai_generate() {
     local num_suggestions=1
 
     local context=$(_ai_get_context)
-    local prompt="Complete this shell command. Output ONLY the completed command, no explanation. Context: $context. Partial: $prefix"
+    local prompt="You are a shell command autocompletion engine. The user has typed exactly this partial command: \"$prefix\"
+Your output MUST be the full command and MUST start with exactly \"$prefix\" (same characters, same case). Do not suggest an unrelated command, even if the context below seems more relevant. Output ONLY the completed command, no explanation, no markdown.
+
+Context (background reference only, does not override the partial command above):
+$context"
 
     # Call Gemini API directly
-    local api_url="https://generativelanguage.googleapis.com/v1beta/models/${AI_SUGGESTION_MODEL}:generateContent?key=${GOOGLE_API_KEY}"
+    local result=$(_ai_api_call "$prompt" "$AI_SUGGESTION_MODEL" 60 0.3 5)
 
-    # Build JSON payload (escape quotes in prompt)
-    local escaped_prompt="${prompt//\"/\\\"}"
-    local json_payload="{\"contents\":[{\"parts\":[{\"text\":\"$escaped_prompt\"}]}],\"generationConfig\":{\"temperature\":0.3,\"maxOutputTokens\":30}}"
-
-    local api_response=$(timeout 5 curl -s -X POST "$api_url" \
-        -H 'Content-Type: application/json' \
-        -d "$json_payload" 2>/dev/null)
-
-    # Extract and clean result
-    local result=$(echo "$api_response" | grep -o '"text"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4 | \
-        sed 's/\\n/ /g' | \
+    # Keep first non-empty line, strip wrapping backticks/quotes
+    result=$(print -r -- "$result" | grep -v '^[[:space:]]*$' | head -1 | \
         sed 's/^`\(.*\)`$/\1/' | \
-        sed 's/^"\(.*\)"$/\1/' | \
-        grep -E '^[a-zA-Z0-9_/\.\-\$\{\}]' | \
-        head -1)
+        sed 's/^"\(.*\)"$/\1/')
+
+    # Reject completions that don't actually extend what the user typed
+    # (the model sometimes ignores the partial and free-associates from context)
+    if [[ -n "$result" && "$result" != "$prefix"* ]]; then
+        result=""
+    fi
 
     if [[ -n "$result" ]]; then
         _AI_CACHE[$cache_key]="$result"
         _AI_CACHE_TIME[$cache_key]="$EPOCHSECONDS"
     fi
 
-    echo "$result"
+    print -r -- "$result"
 }
 
 
@@ -534,12 +533,14 @@ Configuration:
   AI_SUGGESTION_MIN_CHARS=3       # Minimum chars to trigger
   AI_DEBOUNCE_DELAY=2             # Debounce delay in seconds
   ENABLE_AI_AUTO_DEBOUNCE=false   # Auto-trigger after typing pause
-  AI_SUGGESTION_MODEL=gemini-1.5-flash  # Model for suggestions (default)
+  AI_SUGGESTION_MODEL=gemini-3.1-flash-lite  # Model for suggestions (default)
 
 Available models:
-  gemini-1.5-flash       # Latest stable, fast, best balance (default)
-  gemini-1.5-pro         # More capable, slower
-  gemini-2.0-flash       # Experimental 2.0 Flash (if available)
+  gemini-3.1-flash-lite  # Fastest, no "thinking" overhead, best for inline completion (default)
+  gemini-2.5-flash       # More capable, still fast
+  gemini-2.5-pro         # Most capable, slower
+  Note: "thinking" models (gemini-3.7-flash, gemini-flash-latest) spend the
+  output token budget on internal reasoning and return empty completions here.
 
 Keybindings:
   Ctrl+↓     - Accept inline AI suggestion

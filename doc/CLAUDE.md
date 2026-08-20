@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Nivuus Shell is a modern, performance-focused ZSH configuration framework with:
 - **Performance target**: <300ms startup time
 - **Theme**: Nord color scheme throughout (prompt, vim, all output)
-- **AI Integration**: gemini-cli for command assistance (not GitHub Copilot)
+- **AI Integration**: direct Gemini REST API calls for command assistance (not GitHub Copilot, no gemini-cli dependency)
 - **Philosophy**: Pure ZSH, no external plugin frameworks (no Oh-My-Zsh, no Prezto)
 
 ## Development Commands
@@ -143,11 +143,12 @@ The vim system (`config/08-vim.zsh` + `.vimrc.nord`) uses environment detection:
 
 ### AI Command System
 
-`config/10-ai.zsh` wraps gemini-cli with shell-friendly functions:
+`config/10-ai.zsh` calls the Gemini REST API directly via the shared helper in `config/09-ai-core.zsh` (`_ai_api_call`, `_ai_get_api_key`) - no `gemini-cli` binary dependency:
 
-- **No fallback**: If `gemini-cli` not installed, shows installation instructions
-- **Model config**: `GEMINI_MODEL` defaults to `gemini-2.0-flash`
-- Functions (`??`, `?git`, `why`, `explain`, `ask`) are wrappers calling `gemini-cli ask`
+- **No fallback**: If `GOOGLE_API_KEY` is not set (and no `~/.gemini-cli/config.json` apiKey is found), shows setup instructions
+- **Model config**: `GEMINI_MODEL` unset by default (falls back to `gemini-3.1-flash-lite` in `config/09-ai-core.zsh`)
+- Functions (`??`, `?git`, `?gh`, `why`, `explain`, `ask`) call `_ai_api_call` from `config/09-ai-core.zsh`
+- `config/19-ai-suggestions.zsh`, `config/20-terminal-title.zsh` and `config/22-ai-errors.zsh` share the same helper
 
 ## Critical Implementation Details
 
@@ -272,7 +273,8 @@ Modify `config/05-prompt.zsh`:
 - **`config/08-vim.zsh`**: Vim wrapper functions, environment detection
 - **`config/09-nodejs.zsh`**: NVM lazy loading, auto-switch with .nvmrc, project detection
 - **`config/09-python.zsh`**: Python virtual environment detection and management (venv/conda/poetry)
-- **`config/10-ai.zsh`**: gemini-cli integration, AI command wrappers
+- **`config/09-ai-core.zsh`**: Shared Gemini REST API helper (`_ai_api_call`, `_ai_get_api_key`)
+- **`config/10-ai.zsh`**: AI command wrappers (`??`, `?git`, `?gh`, `why`, `explain`, `ask`), calls the Gemini API directly
 - **`config/21-safety.zsh`**: Command safety checks, dangerous pattern detection, safe alternatives
 - **`config/99-cleanup.zsh`**: Compilation, welcome messages, final cleanup
 - **`.vimrc.nord`**: Standalone vim config with inline Nord theme (no plugins)

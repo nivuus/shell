@@ -29,7 +29,7 @@ esac
 
 # AI Titles Configuration (only if enabled)
 if [[ "${ENABLE_AI_TERMINAL_TITLES:-false}" == "true" ]]; then
-    export AI_TITLE_MODEL="${AI_TITLE_MODEL:-gemini-2.5-flash-lite}"
+    export AI_TITLE_MODEL="${AI_TITLE_MODEL:-gemini-3.1-flash-lite}"
     export AI_TITLE_CACHE_TTL="${AI_TITLE_CACHE_TTL:-3600}"  # 1 hour
     export AI_TITLE_MAX_LENGTH="${AI_TITLE_MAX_LENGTH:-60}"
     export AI_TITLE_CACHE_DIR="${AI_TITLE_CACHE_DIR:-$HOME/.cache/nivuus-shell/ai-titles}"
@@ -37,10 +37,16 @@ if [[ "${ENABLE_AI_TERMINAL_TITLES:-false}" == "true" ]]; then
     # Create cache directory
     mkdir -p "$AI_TITLE_CACHE_DIR" 2>/dev/null
 
+    # Max commands from THIS session to feed the AI
+    export AI_TITLE_SESSION_MAX="${AI_TITLE_SESSION_MAX:-50}"
+
     # State variables for exponential backoff
     typeset -g _AI_TITLE_COMMAND_COUNT=0
     typeset -g _AI_TITLE_NEXT_TRIGGER=1
     typeset -g _AI_TITLE_CURRENT=""  # Store current AI title
+    # Per-session command buffer (NOT shared history) so the AI title
+    # reflects only what happens in this terminal session
+    typeset -ga _AI_TITLE_SESSION_HISTORY=()
     typeset -gA _AI_TITLE_TRIGGER_SEQUENCE=(
         1  1    # 1st command
         2  2    # 2nd
@@ -116,7 +122,7 @@ if [[ "${ENABLE_AI_TERMINAL_TITLES:-false}" == "true" ]]; then
         local content="$2"
         local cache_file="$AI_TITLE_CACHE_DIR/$cache_key"
         mkdir -p "$AI_TITLE_CACHE_DIR" 2>/dev/null
-        echo "$content" > "$cache_file" 2>/dev/null
+        print -r -- "$content" > "$cache_file" 2>/dev/null
     }
 
     _ai_title_get_context() {
@@ -169,41 +175,28 @@ if [[ "${ENABLE_AI_TERMINAL_TITLES:-false}" == "true" ]]; then
         local context=$(_ai_title_get_context)
 
         # Check for API key
-        if [[ -z "$GOOGLE_API_KEY" ]]; then
-            local config_file="$HOME/.gemini-cli/config.json"
-            if [[ -f "$config_file" ]]; then
-                GOOGLE_API_KEY=$(grep -o '"apiKey"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" | cut -d'"' -f4)
-            fi
-        fi
+        _ai_get_api_key &>/dev/null || return 1
 
-        [[ -z "$GOOGLE_API_KEY" ]] && return 1
-
-        # Get entire session command history (limited to last 50 to avoid API limits)
-        local recent_history=$(fc -ln -50 | tr '\n' ';' | sed 's/;$//' | cut -c1-500)
+        # Use ONLY this session's commands (SHARE_HISTORY would otherwise leak
+        # commands from other terminals via `fc`). Falls back to nothing if empty.
+        local recent_history=$(print -rl -- "${_AI_TITLE_SESSION_HISTORY[@]}" | tr '\n' ';' | sed 's/;$//' | cut -c1-500)
 
         # Check cache first (cache by directory + context, not command)
         local cache_key=$(_ai_title_cache_key "$recent_history" "$dir_name" "$context")
         local cached_title=""
         if cached_title=$(_ai_title_cache_get "$cache_key"); then
-            echo "$cached_title"
+            print -r -- "$cached_title"
             return 0
         fi
 
         # Build prompt for session context title
-        local prompt="Output ONLY a terminal title (emoji + text, max 30 chars). No preamble! Based on these commands: $recent_history. Create a fun, creative title that captures what I'm doing. Be playful!"
-        local escaped_prompt="${prompt//\"/\\\"}"
-        local json="{\"contents\":[{\"parts\":[{\"text\":\"$escaped_prompt\"}]}],\"generationConfig\":{\"temperature\":1.2,\"maxOutputTokens\":25}}"
+        local prompt="Output ONLY a terminal title (emoji + text, max 30 chars). No preamble! Based on the commands run in this terminal session: $recent_history. Create a fun, creative title that captures what I'm working on right now. Be playful!"
 
         # Call API with timeout
-        local api_url="https://generativelanguage.googleapis.com/v1beta/models/${AI_TITLE_MODEL}:generateContent?key=${GOOGLE_API_KEY}"
-        local api_response=$(timeout 3 curl -s -X POST "$api_url" \
-            -H 'Content-Type: application/json' \
-            -d "$json" 2>/dev/null)
+        local api_result=$(_ai_api_call "$prompt" "$AI_TITLE_MODEL" 25 1.2 3)
 
         # Extract title - take last non-empty line (skips any preamble)
-        local result=$(echo "$api_response" | \
-            grep -o '"text"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4 | \
-            sed 's/\\n/\n/g' | \
+        local result=$(print -r -- "$api_result" | \
             grep -v '^[[:space:]]*$' | \
             tail -1 | \
             sed 's/^\*\*\(.*\)\*\*$/\1/' | \
@@ -213,7 +206,7 @@ if [[ "${ENABLE_AI_TERMINAL_TITLES:-false}" == "true" ]]; then
 
         if [[ -n "$result" ]]; then
             _ai_title_cache_set "$cache_key" "$result"
-            echo "$result"
+            print -r -- "$result"
             return 0
         fi
 
@@ -249,7 +242,8 @@ if [[ "${ENABLE_AI_TERMINAL_TITLES:-false}" == "true" ]]; then
     ai-title-reset-counter() {
         _AI_TITLE_COMMAND_COUNT=0
         _AI_TITLE_NEXT_TRIGGER=1
-        echo "✓ Reset command counter"
+        _AI_TITLE_SESSION_HISTORY=()
+        echo "✓ Reset command counter and session buffer"
     }
 
 fi
@@ -285,6 +279,12 @@ _terminal_title_preexec() {
     fi
 
     if [[ "${ENABLE_AI_TERMINAL_TITLES:-false}" == "true" ]]; then
+        # Record this command in the per-session buffer (trim to last N)
+        _AI_TITLE_SESSION_HISTORY+=("$command")
+        if (( ${#_AI_TITLE_SESSION_HISTORY} > AI_TITLE_SESSION_MAX )); then
+            _AI_TITLE_SESSION_HISTORY=("${_AI_TITLE_SESSION_HISTORY[@]: -AI_TITLE_SESSION_MAX}")
+        fi
+
         # Generate new AI title if backoff says so
         if _ai_should_generate_title; then
             local new_title=$(_ai_get_terminal_title "$command" "$dir_path")
