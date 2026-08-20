@@ -1,5 +1,13 @@
 # tests/helpers/fingerprint.bash
 # Empreinte reproductible d'une arborescence : chemin, permissions, contenu.
+#
+# LIMITE CONNUE : les liens symboliques sont invisibles ici. `find -type d` et
+# `-type f` ne matchent pas un lien (son type est `l`), donc un lien laissé
+# derrière ou mal restauré ne ferait PAS échouer le test. Inerte aujourd'hui —
+# rien dans bin/nivuus ni lib/ ne crée de lien — mais si cela change, ajouter
+# `-type l` ici AVANT de se fier au vert de ce test.
+# Non capturés non plus : attributs étendus, ACL, et mtimes (ces derniers
+# volontairement : la promesse porte sur le contenu, les chemins et les droits).
 
 fs_hash() {
     if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1
