@@ -63,3 +63,75 @@ nivuus_manifest_each() {
         "$callback" "$a" "$p" "$h" "$r"
     done
 }
+
+nivuus_store_backup() {
+    local path="$1" hash
+    hash="$(nivuus_hash_file "$path")" || return 1
+    [ "$hash" = "-" ] && { printf '%s\n' '-'; return 0; }
+    if [ -z "${NIVUUS_DRY_RUN:-}" ] && [ ! -f "$NIVUUS_BACKUP_DIR/$hash" ]; then
+        cp -p "$path" "$NIVUUS_BACKUP_DIR/$hash"
+    fi
+    printf '%s\n' "$hash"
+}
+
+nivuus_mkdir_p() {
+    local dir="$1" missing='' d
+    d="$dir"
+    # Collecte les niveaux manquants, du plus profond au plus superficiel.
+    while [ ! -d "$d" ] && [ "$d" != "/" ] && [ -n "$d" ]; do
+        missing="$missing$d
+"
+        d="$(dirname "$d")"
+    done
+    [ -n "$missing" ] || return 0
+
+    if [ -n "${NIVUUS_DRY_RUN:-}" ]; then
+        log_dry "mkdir -p $dir"
+    else
+        mkdir -p "$dir"
+    fi
+    printf '%s' "$missing" | while IFS= read -r level; do
+        [ -n "$level" ] && nivuus_manifest_record MKDIR "$level" '-' '-'
+    done
+}
+
+# Coeur partagé : $1 = source, $2 = destination.
+_nivuus_place() {
+    local src="$1" dst="$2" existed=0 backup='-' new_hash
+
+    [ -f "$dst" ] && existed=1
+    if [ "$existed" -eq 1 ] && [ "$(nivuus_hash_file "$src")" = "$(nivuus_hash_file "$dst")" ]; then
+        return 0   # idempotent : rien à faire, rien à journaliser
+    fi
+
+    if [ "$existed" -eq 1 ]; then
+        backup="$(nivuus_store_backup "$dst")" || return 1
+    fi
+
+    if [ -n "${NIVUUS_DRY_RUN:-}" ]; then
+        if [ "$existed" -eq 1 ]; then log_dry "modifierait $dst"; else log_dry "créerait $dst"; fi
+        new_hash="$(nivuus_hash_file "$src")" || return 1
+    else
+        nivuus_mkdir_p "$(dirname "$dst")"
+        cp -p "$src" "$dst"
+        new_hash="$(nivuus_hash_file "$dst")" || return 1
+    fi
+
+    if [ "$existed" -eq 1 ]; then
+        nivuus_manifest_record MODIFY "$dst" "$new_hash" "$backup"
+    else
+        nivuus_manifest_record CREATE "$dst" "$new_hash" '-'
+    fi
+}
+
+nivuus_install_file() { _nivuus_place "$1" "$2"; }
+
+nivuus_write_file() {
+    local dst="$1" tmp result
+    tmp="$(mktemp)"
+    cat > "$tmp"
+    _nivuus_place "$tmp" "$dst"
+    result=$?
+    rm -f "$tmp"
+    return $result
+}
