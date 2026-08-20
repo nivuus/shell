@@ -99,14 +99,14 @@ nivuus_manifest_commit() {
 }
 
 nivuus_manifest_each() {
-    local callback="$1" seen
-    [ -f "$NIVUUS_MANIFEST" ] || return 0
+    local callback="$1" manifest="${2:-$NIVUUS_MANIFEST}" seen
+    [ -f "$manifest" ] || return 0
     seen="$(mktemp)"
     # tail -r n'existe pas partout ; on inverse avec sed.
     # Un chemin peut apparaître plusieurs fois (installations répétées héritées
     # via nivuus_manifest_inherit) : on ne rejoue que l'entrée la plus récente
     # (la première rencontrée une fois le fichier inversé) pour chaque chemin.
-    { grep -v '^#' "$NIVUUS_MANIFEST" || true; } | sed '1!G;h;$!d' | while IFS="$NIVUUS_TAB" read -r a p h r; do
+    { grep -v '^#' "$manifest" || true; } | sed '1!G;h;$!d' | while IFS="$NIVUUS_TAB" read -r a p h r; do
         [ -n "$a" ] || continue
         if grep -qxF "$p" "$seen" 2>/dev/null; then continue; fi
         printf '%s\n' "$p" >> "$seen"
@@ -313,5 +313,32 @@ nivuus_restore_entry() {
 # du manifeste -- l'appelant peut alors les rejouer dans un nouveau manifeste
 # plutôt que de perdre leur trace (voir _nivuus_record_survivor).
 nivuus_manifest_rollback() {
-    nivuus_manifest_each nivuus_restore_entry
+    nivuus_manifest_each nivuus_restore_entry "$NIVUUS_MANIFEST"
+}
+
+# Annule une installation interrompue entre begin et commit (dépendance
+# manquante, .zshrc corrompu, disque plein...). $NIVUUS_MANIFEST_TMP décrit
+# déjà tout ce que les étapes qui ont réussi ont écrit sur le disque avant
+# l'échec, donc on le rejoue à l'envers comme n'importe quel manifeste, puis
+# on le supprime : sans cela, ~/.nivuus-shell et $NIVUUS_STATE_DIR restent
+# peuplés mais $NIVUUS_MANIFEST (le seul fichier qu'uninstall regarde)
+# n'existe jamais, et « nivuus uninstall » répond « rien à faire ».
+nivuus_manifest_abort() {
+    [ -f "$NIVUUS_MANIFEST_TMP" ] || return 0
+    # $NIVUUS_MANIFEST_TMP lui-même vit sous un des répertoires MKDIR qu'il
+    # décrit (typiquement $NIVUUS_STATE_DIR) : tant qu'il existe, un rmdir
+    # sur ce niveau échoue "non vide". On capture donc les niveaux avant de
+    # rejouer, on le supprime, puis on retente ces niveaux -- exactement le
+    # même contournement que cmd_uninstall --purge applique au manifeste
+    # committé et à ses sauvegardes.
+    local levels
+    levels="$(awk -F"$NIVUUS_TAB" '$1=="MKDIR"{print $2}' "$NIVUUS_MANIFEST_TMP" 2>/dev/null || true)"
+    nivuus_manifest_each nivuus_restore_entry "$NIVUUS_MANIFEST_TMP"
+    rm -f "$NIVUUS_MANIFEST_TMP"
+    if [ -n "$levels" ]; then
+        printf '%s\n' "$levels" | sed '1!G;h;$!d' | while IFS= read -r level; do
+            [ -z "$level" ] && continue
+            rmdir "$level" 2>/dev/null || true
+        done
+    fi
 }

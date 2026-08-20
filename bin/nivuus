@@ -62,9 +62,17 @@ cmd_install() {
 
     nivuus_manifest_begin user "$prefix"
     nivuus_manifest_inherit
-    nivuus_step_copy_tree "$NIVUUS_SRC_ROOT" "$prefix"
-    nivuus_step_write_version "$NIVUUS_SRC_ROOT" "$prefix"
-    nivuus_step_write_zshrc "$HOME/.zshrc" "$prefix" || { log_error "Installation interrompue."; return 1; }
+    if ! nivuus_step_copy_tree "$NIVUUS_SRC_ROOT" "$prefix" \
+        || ! nivuus_step_write_version "$NIVUUS_SRC_ROOT" "$prefix" \
+        || ! nivuus_step_write_zshrc "$HOME/.zshrc" "$prefix"; then
+        log_error "Installation interrompue."
+        # Le manifeste n'a jamais été committé (voir nivuus_manifest_commit
+        # plus bas) : sans ceci, tout ce que les étapes précédentes ont déjà
+        # écrit sur le disque resterait orphelin -- uninstall ne verrait
+        # jamais de manifeste et répondrait "rien à faire".
+        nivuus_manifest_abort
+        return 1
+    fi
     nivuus_manifest_commit
 
     if [ -n "${NIVUUS_DRY_RUN:-}" ]; then

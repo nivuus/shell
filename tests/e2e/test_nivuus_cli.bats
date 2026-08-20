@@ -128,6 +128,14 @@ teardown() { rm -rf "$TMP"; }
     [ "$(cat "$HOME/.zsh_local")" = "my own settings" ]
 }
 
+@test "an install aborted by a corrupt zshrc leaves nothing behind (no rm -rf needed)" {
+    printf '# >>> nivuus shell >>>\nno closing marker\n' > "$HOME/.zshrc"
+    run "$NIVUUS" install --yes --prefix "$TMP/target"
+    [ "$status" -ne 0 ]
+    [ ! -e "$TMP/target" ]
+    [ ! -e "$NIVUUS_STATE_DIR" ]
+}
+
 @test "install --prefix without a value fails with a readable message" {
     run "$NIVUUS" install --yes --prefix
     [ "$status" -ne 0 ]
