@@ -192,3 +192,43 @@ _ai_backend_anthropic_call "hello"
     [ "$status" -eq 1 ]
     [[ "$output" == *"requires jq"* ]]
 }
+
+# --- Gemini backend (cli / Antigravity mode) ---
+
+@test "gemini cli mode shells out to agy and parses .response" {
+    local fake_bin_dir="$BATS_TEST_TMPDIR/fake-agy"
+    mkdir -p "$fake_bin_dir"
+    cat > "$fake_bin_dir/agy" <<'INNEREOF'
+#!/usr/bin/env bash
+echo '{"response":"mocked agy response","status":"SUCCESS"}'
+INNEREOF
+    chmod +x "$fake_bin_dir/agy"
+
+    run zsh -c '
+export PATH="'"$fake_bin_dir"':$PATH"
+export GEMINI_AUTH_MODE=cli
+source "'"$NIVUUS_SHELL_DIR"'/config/09-ai-core.zsh"
+source "'"$NIVUUS_SHELL_DIR"'/config/09-ai-backend-gemini.zsh"
+_ai_backend_gemini_call "hello" "gemini-3.5-flash-lite" 100 0.3 5
+'
+    [ "$status" -eq 0 ]
+    [ "$output" = "mocked agy response" ]
+}
+
+@test "gemini cli mode fails clearly when agy is not installed" {
+    run zsh -c '
+export PATH="/nonexistent-bin-only"
+export GEMINI_AUTH_MODE=cli
+source "'"$NIVUUS_SHELL_DIR"'/config/09-ai-core.zsh"
+source "'"$NIVUUS_SHELL_DIR"'/config/09-ai-backend-gemini.zsh"
+_ai_backend_gemini_call "hello" "gemini-3.5-flash-lite"
+'
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"agy"*"not installed"* ]] || [[ "$output" == *"Antigravity CLI"* ]]
+}
+
+@test "gemini cli mode is not used by default (api-key stays default)" {
+    run zsh -c "source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh'; source '$NIVUUS_SHELL_DIR/config/09-ai-backend-gemini.zsh'; echo \$GEMINI_AUTH_MODE"
+    [ "$status" -eq 0 ]
+    [ "$output" = "api-key" ]
+}

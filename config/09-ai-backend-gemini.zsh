@@ -67,3 +67,37 @@ _ai_backend_gemini_call() {
 
     print -r -- "$result"
 }
+
+# Shell out to Antigravity CLI (agy) to spend a Google AI Pro/Ultra
+# subscription's quota instead of a metered API key. agy owns its own
+# OAuth session (one-time interactive `agy` login, cached credentials) —
+# no OAuth code lives in this repo. gemini-cli was discontinued for
+# subscription/free-tier accounts on 2026-06-18; agy is its replacement.
+_ai_gemini_cli_call() {
+    local prompt="$1"
+    local model="$2"
+    local timeout_secs="$3"
+
+    if ! command -v agy &>/dev/null; then
+        print -u2 -- "GEMINI_AUTH_MODE=cli but 'agy' (Antigravity CLI) is not installed. Install it, or set GEMINI_AUTH_MODE=api-key."
+        return 1
+    fi
+
+    if ! command -v jq &>/dev/null; then
+        print -u2 -- "GEMINI_AUTH_MODE=cli requires jq to parse the agy JSON response."
+        return 1
+    fi
+
+    local cli_response
+    cli_response=$(timeout "$timeout_secs" agy -p "$prompt" --model "$model" \
+        --output-format json --print-timeout "${timeout_secs}s" 2>/dev/null)
+
+    [[ -z "$cli_response" ]] && return 1
+
+    local result
+    result=$(print -r -- "$cli_response" | jq -r '.response // empty' 2>/dev/null)
+
+    [[ -z "$result" ]] && return 1
+
+    print -r -- "$result"
+}
