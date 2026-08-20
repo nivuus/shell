@@ -137,3 +137,58 @@ _ai_backend_openai_call "hello"
     [ "$status" -eq 1 ]
     [[ "$output" == *"requires jq"* ]]
 }
+
+# --- Anthropic backend ---
+
+@test "anthropic backend parses content text via curl+jq" {
+    # The implementation runs curl under the external `timeout` binary, which
+    # execs "curl" via a fresh PATH lookup -- a shell function named `curl`
+    # in this process is invisible to that subprocess. So the mock must be a
+    # real executable on PATH, not a shell function.
+    local mock_bin="$BATS_TEST_TMPDIR/bin"
+    mkdir -p "$mock_bin"
+    cat > "$mock_bin/curl" <<'MOCK'
+#!/usr/bin/env bash
+printf '%s' '{"content":[{"type":"text","text":"mocked anthropic response"}]}'
+MOCK
+    chmod +x "$mock_bin/curl"
+
+    run zsh -c '
+export PATH="'"$mock_bin"':$PATH"
+export ANTHROPIC_API_KEY=test-key
+source "'"$NIVUUS_SHELL_DIR"'/config/09-ai-core.zsh"
+source "'"$NIVUUS_SHELL_DIR"'/config/09-ai-backend-anthropic.zsh"
+_ai_backend_anthropic_call "hello" "claude-haiku-4-5" 100 0.3 5
+'
+    [ "$status" -eq 0 ]
+    [ "$output" = "mocked anthropic response" ]
+}
+
+@test "anthropic backend fails when no API key is configured" {
+    run zsh -c '
+unset ANTHROPIC_API_KEY
+source "'"$NIVUUS_SHELL_DIR"'/config/09-ai-core.zsh"
+source "'"$NIVUUS_SHELL_DIR"'/config/09-ai-backend-anthropic.zsh"
+_ai_backend_anthropic_call "hello"
+'
+    [ "$status" -eq 1 ]
+}
+
+@test "anthropic backend fails clearly when jq is missing" {
+    local no_jq_dir="$BATS_TEST_TMPDIR/no-jq-anthropic"
+    mkdir -p "$no_jq_dir"
+    local bin real
+    for bin in curl timeout grep cut sed; do
+        real=$(command -v "$bin") || continue
+        ln -sf "$real" "$no_jq_dir/$bin"
+    done
+    run zsh -c '
+export PATH="'"$no_jq_dir"'"
+export ANTHROPIC_API_KEY=test-key
+source "'"$NIVUUS_SHELL_DIR"'/config/09-ai-core.zsh"
+source "'"$NIVUUS_SHELL_DIR"'/config/09-ai-backend-anthropic.zsh"
+_ai_backend_anthropic_call "hello"
+'
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"requires jq"* ]]
+}
