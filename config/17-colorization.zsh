@@ -8,7 +8,7 @@
 
 # Only load once
 [[ -n "${NIVUUS_COLORIZATION_LOADED}" ]] && return
-export NIVUUS_COLORIZATION_LOADED=1
+typeset -g NIVUUS_COLORIZATION_LOADED=1
 
 # Skip only if terminal is dumb (not if non-interactive)
 [[ "$TERM" == "dumb" ]] && return
@@ -185,6 +185,114 @@ fi
 export LS_COLORS="${LS_COLORS:-rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=30;41:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.gz=01;31:*.zip=01;31:*.jpg=01;35:*.png=01;35:*.mp4=01;35:*.mp3=00;36:*.flac=00;36}"
 
 # =============================================================================
+# Markdown Rendering (glow / mdcat / python-rich / bat fallback)
+# =============================================================================
+
+# Define fallback _render_markdown if config/09-ai-core.zsh was not loaded
+if ! typeset -f _render_markdown &>/dev/null; then
+    _nivuus_get_markdown_renderer() {
+        if [[ -n "$NIVUUS_MARKDOWN_RENDERER" ]]; then
+            print -r -- "$NIVUUS_MARKDOWN_RENDERER"
+            return 0
+        fi
+        if [[ -n "$_NIVUUS_CACHED_MD_RENDERER" ]]; then
+            print -r -- "$_NIVUUS_CACHED_MD_RENDERER"
+            return 0
+        fi
+        local renderer="cat"
+        if command -v glow &>/dev/null; then
+            renderer="glow"
+        elif command -v mdcat &>/dev/null; then
+            renderer="mdcat"
+        elif command -v python3 &>/dev/null && python3 -c 'import rich.markdown' &>/dev/null; then
+            renderer="rich"
+        elif command -v bat &>/dev/null; then
+            renderer="bat"
+        elif command -v batcat &>/dev/null; then
+            renderer="batcat"
+        fi
+        typeset -g _NIVUUS_CACHED_MD_RENDERER="$renderer"
+        print -r -- "$renderer"
+    }
+
+    _render_markdown() {
+        if [[ "${ENABLE_MARKDOWN_RENDERING:-true}" == "false" || "$TERM" == "dumb" || ( ! -t 1 && "${FORCE_MARKDOWN_COLOR:-false}" != "true" ) ]]; then
+            if [[ $# -gt 0 ]]; then
+                if [[ -f "$1" && $# -eq 1 ]]; then
+                    /bin/cat "$1"
+                else
+                    print -r -- "$*"
+                fi
+            else
+                /bin/cat
+            fi
+            return $?
+        fi
+
+        local renderer=$(_nivuus_get_markdown_renderer)
+        local bat_theme="${THEME_BAT_NAME:-Nord}"
+
+        _pipe_to_renderer() {
+            case "$renderer" in
+                glow)
+                    glow -s auto --pager=false - 2>/dev/null || glow - 2>/dev/null || /bin/cat
+                    ;;
+                mdcat)
+                    mdcat - 2>/dev/null || /bin/cat
+                    ;;
+                rich)
+                    python3 -m rich.markdown -c -y - 2>/dev/null || /bin/cat
+                    ;;
+                bat)
+                    bat -l markdown --style="${BAT_STYLE:-plain}" --theme="$bat_theme" --paging=never --color=always 2>/dev/null || /bin/cat
+                    ;;
+                batcat)
+                    batcat -l markdown --style="${BAT_STYLE:-plain}" --theme="$bat_theme" --paging=never --color=always 2>/dev/null || /bin/cat
+                    ;;
+                *)
+                    /bin/cat
+                    ;;
+            esac
+        }
+
+        if [[ $# -gt 0 ]]; then
+            if [[ -f "$1" && $# -eq 1 ]]; then
+                case "$renderer" in
+                    glow)
+                        glow -s auto --pager=false "$1" 2>/dev/null || glow "$1" 2>/dev/null || /bin/cat "$1"
+                        ;;
+                    mdcat)
+                        mdcat "$1" 2>/dev/null || /bin/cat "$1"
+                        ;;
+                    rich)
+                        python3 -m rich.markdown -c -y "$1" 2>/dev/null || /bin/cat "$1"
+                        ;;
+                    bat)
+                        bat -l markdown --style="${BAT_STYLE:-plain}" --theme="$bat_theme" --paging=never --color=always "$1" 2>/dev/null || /bin/cat "$1"
+                        ;;
+                    batcat)
+                        batcat -l markdown --style="${BAT_STYLE:-plain}" --theme="$bat_theme" --paging=never --color=always "$1" 2>/dev/null || /bin/cat "$1"
+                        ;;
+                    *)
+                        /bin/cat "$1"
+                        ;;
+                esac
+            else
+                print -r -- "$*" | _pipe_to_renderer
+            fi
+        else
+            _pipe_to_renderer
+        fi
+    }
+fi
+
+# View markdown file or string in terminal
+mdview() {
+    _render_markdown "$@"
+}
+alias markdown='mdview'
+
+# =============================================================================
 # Help Function
 # =============================================================================
 
@@ -198,6 +306,7 @@ Modern Tools:
   cat               - bat with syntax highlighting
   less              - bat as pager
   git diff          - delta with themed syntax
+  mdview, markdown  - Terminal markdown rendering (glow/mdcat/rich/bat)
   img, showimg      - timg for terminal image display
   TAB completion    - fzf-tab popup, themed (see fzf below)
 
@@ -206,14 +315,15 @@ Colorized Commands (via grc):
   systemctl, journalctl, traceroute
 
 Configuration:
-  eza:     \$EZA_COLORS
-  bat:     \$BAT_THEME (${THEME_BAT_NAME:-Nord})
-  grep:    \$GREP_COLORS
-  delta:   Git config (\$THEME_DELTA_SYNTAX)
-  fzf:     \$FZF_DEFAULT_OPTS (override before this file loads to customize)
+  eza:      \$EZA_COLORS
+  bat:      \$BAT_THEME (${THEME_BAT_NAME:-Nord})
+  grep:     \$GREP_COLORS
+  delta:    Git config (\$THEME_DELTA_SYNTAX)
+  markdown: \$ENABLE_MARKDOWN_RENDERING (true/false), \$NIVUUS_MARKDOWN_RENDERER (glow/mdcat/rich/bat/cat)
+  fzf:      \$FZF_DEFAULT_OPTS (override before this file loads to customize)
 
 Install missing tools:
   cargo install eza bat git-delta ripgrep
-  sudo apt install grc timg
+  sudo apt install grc timg glow
 EOF
 }

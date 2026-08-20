@@ -208,10 +208,9 @@ _ai_explain_error_widget() {
 
     # Display analysis
     if [[ -n "$analysis" ]]; then
-        print "$analysis"
+        _render_markdown "$analysis"
     else
-        print -P "%F{167}Failed to analyze error. Is GOOGLE_API_KEY configured correctly?%f"
-        print -P "%F{246}Get a key: https://aistudio.google.com/apikey%f"
+        print -P "%F{167}Failed to analyze error. Check your AI backend configuration (run 'aihelp')%f"
     fi
 
     print ""

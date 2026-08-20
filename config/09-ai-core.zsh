@@ -87,3 +87,123 @@ _ai_api_call() {
             ;;
     esac
 }
+
+# =============================================================================
+# Markdown Rendering Helper
+# =============================================================================
+
+# Detect the best available markdown renderer in order of preference:
+# 1. $NIVUUS_MARKDOWN_RENDERER (explicit user override: glow/mdcat/rich/bat/batcat/cat)
+# 2. glow (dedicated terminal markdown renderer)
+# 3. mdcat (fast rust terminal markdown renderer)
+# 4. python3 + rich (Python Rich markdown renderer)
+# 5. bat / batcat (syntax-highlighted markdown)
+# 6. cat (plain text fallback)
+_nivuus_get_markdown_renderer() {
+    if [[ -n "$NIVUUS_MARKDOWN_RENDERER" ]]; then
+        print -r -- "$NIVUUS_MARKDOWN_RENDERER"
+        return 0
+    fi
+
+    if [[ -n "$_NIVUUS_CACHED_MD_RENDERER" ]]; then
+        print -r -- "$_NIVUUS_CACHED_MD_RENDERER"
+        return 0
+    fi
+
+    local renderer="cat"
+    if command -v glow &>/dev/null; then
+        renderer="glow"
+    elif command -v mdcat &>/dev/null; then
+        renderer="mdcat"
+    elif command -v python3 &>/dev/null && python3 -c 'import rich.markdown' &>/dev/null; then
+        renderer="rich"
+    elif command -v bat &>/dev/null; then
+        renderer="bat"
+    elif command -v batcat &>/dev/null; then
+        renderer="batcat"
+    fi
+
+    typeset -g _NIVUUS_CACHED_MD_RENDERER="$renderer"
+    print -r -- "$renderer"
+}
+
+# Render markdown formatted text or file in the terminal.
+# Supports stdin, file argument, or string arguments.
+_render_markdown() {
+    # If rendering is disabled or terminal is dumb, output plain text.
+    # When stdout is not a tty (pipe/redirect), default to plain text unless forced.
+    if [[ "${ENABLE_MARKDOWN_RENDERING:-true}" == "false" || "$TERM" == "dumb" || ( ! -t 1 && "${FORCE_MARKDOWN_COLOR:-false}" != "true" ) ]]; then
+        if [[ $# -gt 0 ]]; then
+            if [[ -f "$1" && $# -eq 1 ]]; then
+                /bin/cat "$1"
+            else
+                print -r -- "$*"
+            fi
+        else
+            /bin/cat
+        fi
+        return $?
+    fi
+
+    local renderer=$(_nivuus_get_markdown_renderer)
+    local bat_theme="${THEME_BAT_NAME:-Nord}"
+
+    _pipe_to_renderer() {
+        case "$renderer" in
+            glow)
+                glow -s auto --pager=false - 2>/dev/null || glow - 2>/dev/null || /bin/cat
+                ;;
+            mdcat)
+                mdcat - 2>/dev/null || /bin/cat
+                ;;
+            rich)
+                python3 -m rich.markdown -c -y - 2>/dev/null || /bin/cat
+                ;;
+            bat)
+                bat -l markdown --style="${BAT_STYLE:-plain}" --theme="$bat_theme" --paging=never --color=always 2>/dev/null || /bin/cat
+                ;;
+            batcat)
+                batcat -l markdown --style="${BAT_STYLE:-plain}" --theme="$bat_theme" --paging=never --color=always 2>/dev/null || /bin/cat
+                ;;
+            *)
+                /bin/cat
+                ;;
+        esac
+    }
+
+    if [[ $# -gt 0 ]]; then
+        if [[ -f "$1" && $# -eq 1 ]]; then
+            case "$renderer" in
+                glow)
+                    glow -s auto --pager=false "$1" 2>/dev/null || glow "$1" 2>/dev/null || /bin/cat "$1"
+                    ;;
+                mdcat)
+                    mdcat "$1" 2>/dev/null || /bin/cat "$1"
+                    ;;
+                rich)
+                    python3 -m rich.markdown -c -y "$1" 2>/dev/null || /bin/cat "$1"
+                    ;;
+                bat)
+                    bat -l markdown --style="${BAT_STYLE:-plain}" --theme="$bat_theme" --paging=never --color=always "$1" 2>/dev/null || /bin/cat "$1"
+                    ;;
+                batcat)
+                    batcat -l markdown --style="${BAT_STYLE:-plain}" --theme="$bat_theme" --paging=never --color=always "$1" 2>/dev/null || /bin/cat "$1"
+                    ;;
+                *)
+                    /bin/cat "$1"
+                    ;;
+            esac
+        else
+            print -r -- "$*" | _pipe_to_renderer
+        fi
+    else
+        _pipe_to_renderer
+    fi
+}
+
+# User helper to render markdown files or stdin in the terminal
+mdview() {
+    _render_markdown "$@"
+}
+
+
