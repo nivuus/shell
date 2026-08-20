@@ -27,7 +27,22 @@ _ai_json_escape() {
     s="${s//$'\n'/\\n}"
     s="${s//$'\r'/}"
     s="${s//$'\t'/\\t}"
+    # Any remaining raw control characters (U+0000-U+001F) would produce
+    # invalid JSON that jq rejects -- flatten them to a space.
+    s="${s//[[:cntrl:]]/ }"
     print -r -- "$s"
+}
+
+# Return success if the active backend can actually make a call right now
+# (an API key is configured, or -- for Gemini in cli mode -- agy is
+# installed). Use this for gating features, instead of _ai_get_api_key
+# directly, since _ai_get_api_key has no knowledge of GEMINI_AUTH_MODE.
+_ai_credentials_ok() {
+    if [[ "$AI_BACKEND" == "gemini" && "$GEMINI_AUTH_MODE" == "cli" ]]; then
+        command -v agy &>/dev/null
+        return $?
+    fi
+    _ai_get_api_key &>/dev/null
 }
 
 # Resolve the API key/credential for the active backend.

@@ -132,9 +132,19 @@ _ai_generate() {
     local prefix="$1"
     local cache_key="${prefix}_${PWD}"
 
-    # Check for API key
-    if ! _ai_get_api_key &>/dev/null; then
-        echo "ERROR: GOOGLE_API_KEY not set" >&2
+    # Check credentials for the active backend
+    if ! _ai_credentials_ok; then
+        case "$AI_BACKEND" in
+            openai) echo "ERROR: OPENAI_API_KEY not set. Run 'aihelp' for setup instructions." >&2 ;;
+            anthropic) echo "ERROR: ANTHROPIC_API_KEY not set. Run 'aihelp' for setup instructions." >&2 ;;
+            gemini)
+                if [[ "$GEMINI_AUTH_MODE" == "cli" ]]; then
+                    echo "ERROR: Antigravity CLI (agy) not found. Install it, or set GEMINI_AUTH_MODE=api-key. Run 'aihelp' for setup instructions." >&2
+                else
+                    echo "ERROR: GOOGLE_API_KEY not set. Run 'aihelp' for setup instructions." >&2
+                fi
+                ;;
+        esac
         return 1
     fi
 

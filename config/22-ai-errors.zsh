@@ -9,7 +9,7 @@
 # Skip if explicitly disabled or the Gemini API key is not configured
 [[ "${ENABLE_AI_ERROR_EXPLANATION:-true}" != "true" ]] && return
 
-if ! _ai_get_api_key &>/dev/null; then
+if ! _ai_credentials_ok; then
     return
 fi
 

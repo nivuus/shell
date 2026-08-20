@@ -13,16 +13,18 @@
 aihelp() {
     local status_line
 
-    if [[ "$AI_BACKEND" == "gemini" && "$GEMINI_AUTH_MODE" == "cli" ]]; then
-        if command -v agy &>/dev/null; then
+    if _ai_credentials_ok; then
+        if [[ "$AI_BACKEND" == "gemini" && "$GEMINI_AUTH_MODE" == "cli" ]]; then
             status_line="✓ Antigravity CLI (agy) found"
         else
-            status_line="✗ Antigravity CLI (agy) not found"
+            status_line="✓ Configured"
         fi
-    elif _ai_get_api_key &>/dev/null; then
-        status_line="✓ Configured"
     else
-        status_line="✗ Not configured"
+        if [[ "$AI_BACKEND" == "gemini" && "$GEMINI_AUTH_MODE" == "cli" ]]; then
+            status_line="✗ Antigravity CLI (agy) not found"
+        else
+            status_line="✗ Not configured"
+        fi
     fi
 
     # Use /bin/cat to bypass bat alias
@@ -71,12 +73,29 @@ EOF
 # Check if the Gemini API key is configured
 # =============================================================================
 
-if ! _ai_get_api_key &>/dev/null; then
+if ! _ai_credentials_ok; then
     # Provide setup instructions on first use
     _nivuus_ai_not_installed() {
-        echo "⚠️  GOOGLE_API_KEY not set"
-        echo "Get a key: https://aistudio.google.com/apikey"
-        echo "Then: export GOOGLE_API_KEY='your-api-key'"
+        case "$AI_BACKEND" in
+            openai)
+                echo "⚠️  OPENAI_API_KEY not set"
+                echo "Then: export OPENAI_API_KEY='your-api-key'"
+                ;;
+            anthropic)
+                echo "⚠️  ANTHROPIC_API_KEY not set"
+                echo "Then: export ANTHROPIC_API_KEY='your-api-key'"
+                ;;
+            gemini)
+                if [[ "$GEMINI_AUTH_MODE" == "cli" ]]; then
+                    echo "⚠️  Antigravity CLI (agy) not found"
+                    echo "Install it, or set GEMINI_AUTH_MODE=api-key"
+                else
+                    echo "⚠️  GOOGLE_API_KEY not set"
+                    echo "Get a key: https://aistudio.google.com/apikey"
+                    echo "Then: export GOOGLE_API_KEY='your-api-key'"
+                fi
+                ;;
+        esac
         echo ""
         echo "Run 'aihelp' for more information"
         return 1
