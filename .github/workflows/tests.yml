@@ -1,23 +1,28 @@
 name: Tests
 
+# Boucle rapide : ce que toute PR doit prouver, en ~5 min de temps mur.
+# La matrice exhaustive (6 conteneurs + 2 runners) vit dans matrix.yml et ne
+# tourne JAMAIS ici : six pulls d'image par PR coûteraient plus que tout le
+# reste réuni, pour une information que le nightly donne déjà.
+
 on:
   push:
     branches: [ master, main, develop ]
   pull_request:
     branches: [ master, main, develop ]
 
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
-  test:
-    name: Run Test Suite
-    runs-on: ${{ matrix.os }}
-
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest]
-        # Future: Add macOS support
-        # os: [ubuntu-latest, macos-latest]
-
+  # Niveau 1 (unitaire) + intégration + budget de démarrage. ~2 min.
+  unit:
+    name: Unit + integration
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -25,13 +30,16 @@ jobs:
       - name: Setup test environment
         uses: ./.github/actions/setup-tests
 
-      - name: Run smoke tests
-        run: |
-          ./tests/ci/bats-run.sh tests/unit/test_smoke.bats
+      - name: Smoke
+        run: ./tests/ci/bats-run.sh tests/unit/test_smoke.bats
 
-      - name: Run unit tests
+      - name: Unit
         run: |
+          rm -f config/*.zwc     # un .zwc périmé masquerait le module
           ./tests/ci/bats-run.sh tests/unit/
+
+      - name: Integration
+        run: ./tests/ci/bats-run.sh tests/integration/
 
       - name: Performance (startup budget is enforced, not observed)
         run: ./tests/ci/bats-run.sh tests/performance/
@@ -50,11 +58,10 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-
+  # Niveaux 2, 3 et 4 sur la plateforme de référence. ~2 min.
   e2e:
-    name: Installation E2E
+    name: Installation E2E (Ubuntu)
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -63,16 +70,12 @@ jobs:
         uses: ./.github/actions/setup-tests
 
       - name: Library unit tests
-        run: |
-          ./tests/ci/bats-run.sh tests/unit/test_lib_*.bats
+        run: ./tests/ci/bats-run.sh tests/unit/test_lib_*.bats
 
-      - name: Install / uninstall E2E
+      - name: End-to-end (install, uninstall, reversibility, level 4)
         run: |
-          ./tests/ci/bats-run.sh tests/e2e/test_nivuus_cli.bats tests/e2e/test_install_sh_compat.bats
-
-      - name: Platform, deps and minimal-mode E2E
-        run: |
-          ./tests/ci/bats-run.sh tests/e2e/test_platform.bats tests/e2e/test_with_deps.bats tests/e2e/test_minimal_mode.bats
+          rm -f config/*.zwc
+          ./tests/ci/bats-run.sh tests/e2e/
 
       - name: Signature verification suite
         run: |
@@ -104,14 +107,10 @@ jobs:
             tests/unit/test_release_signature.bats
           grep -c "INVARIANT" tests/e2e/test_update_signature.bats
 
-      - name: Reversibility (HOME must be bit-identical)
-        run: |
-          ./tests/ci/bats-run.sh tests/e2e/test_reversibility.bats
-
+  # Niveau 2 sur macOS : étroit, car facturé x10. Première exécution réelle.
   e2e-macos:
     name: Installation E2E (macOS)
     runs-on: macos-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -122,8 +121,11 @@ jobs:
       - name: Library unit tests
         run: ./tests/ci/bats-run.sh tests/unit/test_lib_*.bats tests/unit/test_helpers_portable.bats
 
-      - name: Install / uninstall E2E
-        run: ./tests/ci/bats-run.sh tests/e2e/test_nivuus_cli.bats tests/e2e/test_install_sh_compat.bats tests/e2e/test_minimal_mode.bats
+      - name: Install / uninstall
+        run: |
+          ./tests/ci/bats-run.sh tests/e2e/test_nivuus_cli.bats \
+               tests/e2e/test_install_sh_compat.bats \
+               tests/e2e/test_minimal_mode.bats
 
       - name: Signature suites (macOS = le cas « shasum, pas sha256sum »)
         run: |
@@ -138,12 +140,13 @@ jobs:
       - name: Reversibility (HOME must be bit-identical)
         run: ./tests/ci/bats-run.sh tests/e2e/test_reversibility.bats
 
+  # Alpine reste sur la boucle rapide : seule cible sans coreutils GNU,
+  # c'est là que les régressions de portabilité se voient en premier.
   e2e-alpine:
-    name: Installation E2E (Alpine / musl, no GNU coreutils)
+    name: Installation E2E (Alpine / musl)
     runs-on: ubuntu-latest
     container:
       image: alpine:3.20
-
     steps:
       - name: BOOTSTRAP git before checkout (Alpine has none)
         shell: sh
@@ -163,7 +166,7 @@ jobs:
       - name: Library unit tests
         run: ./tests/ci/bats-run.sh tests/unit/test_lib_*.bats tests/unit/test_helpers_portable.bats
 
-      - name: Install / uninstall E2E
+      - name: Install / uninstall
         run: ./tests/ci/bats-run.sh tests/e2e/test_nivuus_cli.bats tests/e2e/test_minimal_mode.bats
 
       - name: No verification tool at all is refused (Alpine's real state)
@@ -171,6 +174,7 @@ jobs:
           # Mesuré (doc/SIGNING.md) : alpine:3.20 + zsh/git/curl n'a NI
           # openssl NI ssh-keygen. C'est donc ici, et nulle part ailleurs,
           # que le code de retour 2 (« aucun outil ») se joue en vrai.
+          # install-deps.sh n'installe délibérément aucun des deux.
           rm -f config/*.zwc
           ./tests/ci/bats-run.sh tests/unit/test_lib_steps_verify_tools.bats
 
@@ -191,9 +195,8 @@ jobs:
         run: ./tests/ci/bats-run.sh tests/e2e/test_reversibility.bats
 
   lint:
-    name: Syntax Validation
+    name: Syntax validation
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -201,21 +204,24 @@ jobs:
       - name: Setup test environment
         uses: ./.github/actions/setup-tests
 
-      - name: Validate ZSH syntax
+      - name: ZSH syntax
         run: |
-          echo "Validating .zshrc..."
           zsh -n .zshrc
-
-          echo "Validating config files..."
-          for file in config/*.zsh; do
-            echo "  Checking $file..."
+          for file in config/*.zsh themes/*.zsh; do
             zsh -n "$file"
           done
 
-          echo "Validating theme files..."
-          for file in themes/*.zsh; do
-            echo "  Checking $file..."
-            zsh -n "$file"
+      - name: POSIX sh syntax (lib/ and tests/ci/ run under dash and busybox)
+        run: |
+          for file in lib/*.sh tests/ci/*.sh; do
+            sh -n "$file"
           done
 
-          echo "✅ All ZSH files have valid syntax"
+      - name: Workflow syntax
+        uses: raven-actions/actionlint@v2
+        with:
+          # shellcheck désactivé : il rapporte des « info » de style sur des
+          # workflows que ce plan ne possède pas (release.yml). Le lint de
+          # structure, lui, est bloquant. Les scripts, eux, sont vérifiés
+          # par les deux steps ci-dessus.
+          flags: -shellcheck=
