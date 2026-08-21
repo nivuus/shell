@@ -5,8 +5,9 @@
 # - TAP13, pour que le plan (`1..N`) soit toujours lisible en tête de sortie.
 # - --jobs seulement si GNU parallel est là ET si la suite y gagne (mesuré :
 #   e2e 60s -> 26s ; unit 25s -> 30s, donc unit reste en série).
-# - Les tests marqués `docker` sont exclus par défaut : ils tirent des images
-#   entières et n'ont leur place que dans la matrice nightly.
+# - Les tests marqués `docker` ou `network` sont exclus par défaut : les uns
+#   tirent des images entières, les autres sortent sur Internet ; les deux
+#   n'ont leur place que dans la matrice nightly.
 set -eu
 
 JOBS="${NIVUUS_BATS_JOBS:-4}"
@@ -17,6 +18,12 @@ ARGS="--formatter tap13"
 EXCLUDE=''
 if [ "${NIVUUS_CI_DOCKER:-}" != "1" ]; then
     EXCLUDE="!docker"
+fi
+if [ "${NIVUUS_CI_NETWORK:-}" != "1" ]; then
+    # Les tests `network` sortent vers github.com : ils appartiennent au
+    # nightly, pas à une PR, dont la CI ne doit pas rougir parce qu'un CDN
+    # a hoqueté.
+    EXCLUDE="${EXCLUDE:+$EXCLUDE,}!network"
 fi
 if [ -n "$EXCLUDE" ]; then
     ARGS="$ARGS --filter-tags $EXCLUDE"

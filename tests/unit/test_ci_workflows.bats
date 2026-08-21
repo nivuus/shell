@@ -191,3 +191,21 @@ test_workflow_files() {
     done
 }
 
+@test "a job that runs the whole e2e suite fetches tags" {
+    # tests/e2e/test_upgrade_from_v3.bats reconstruit une installation v3.0.0
+    # à partir du TAG v3.0.0 (tests/helpers/legacy.bash). Sans les tags, le
+    # helper échoue volontairement -- il ne se met pas en skip. Un checkout
+    # par défaut n'a aucun tag.
+    for f in $(test_workflow_files); do
+        grep -qE "bats-run\.sh tests/e2e/$" "$f" || continue
+        grep -q "fetch-tags: true" "$f" \
+            || { echo "$f lance tests/e2e/ sans fetch-tags"; false; }
+    done
+}
+
+@test "the v3 upgrade test is actually part of the e2e suite" {
+    # Garde-fou : si ce fichier disparaît, la règle ci-dessus devient muette.
+    [ -f "$ROOT/tests/e2e/test_upgrade_from_v3.bats" ]
+    grep -q "v3.0.0" "$ROOT/tests/helpers/legacy.bash"
+}
+

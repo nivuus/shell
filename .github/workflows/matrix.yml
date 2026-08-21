@@ -114,6 +114,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Même raison que dans tests.yml : le tag v3.0.0 est une dépendance
+          # de tests/e2e/test_upgrade_from_v3.bats.
+          fetch-tags: true
+          fetch-depth: 0
       - uses: ./.github/actions/setup-tests
       - run: ./tests/ci/bats-run.sh tests/unit/
       - run: ./tests/ci/bats-run.sh tests/integration/

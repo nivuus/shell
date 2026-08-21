@@ -8,6 +8,8 @@ setup() {
     printf '#!/usr/bin/env bats\n@test "ok" { true; }\n' > "$TMP/suite/a.bats"
     printf '#!/usr/bin/env bats\n# bats test_tags=docker\n@test "dockery" { false; }\n' \
         > "$TMP/suite/b.bats"
+    printf '#!/usr/bin/env bats\n# bats test_tags=network\n@test "netty" { false; }\n' \
+        > "$TMP/suite/c.bats"
 }
 
 teardown() { rm -rf "$TMP"; }
@@ -71,3 +73,22 @@ clean_env() {
     [ "$status" -eq 0 ]
     [[ "$output" == *"ok 1 ok"* ]]
 }
+
+@test "network-tagged tests are excluded by default too" {
+    # Piège de bats : deux options --filter-tags se combinent en OU, donc
+    # « !docker » puis « !network » n'exclurait plus rien. Les deux exclusions
+    # doivent tenir dans UNE seule option, séparées par une virgule.
+    run clean_env "$RUN" "$TMP/suite"
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"dockery"* ]]
+    [[ "$output" != *"netty"* ]]
+    [[ "$output" == *"ok 1 ok"* ]]
+}
+
+@test "NIVUUS_CI_NETWORK=1 includes the network tests" {
+    run clean_env NIVUUS_CI_NETWORK=1 "$RUN" "$TMP/suite"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"netty"* ]]
+    [[ "$output" != *"dockery"* ]]
+}
+

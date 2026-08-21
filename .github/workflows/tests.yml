@@ -65,6 +65,12 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          # tests/e2e/test_upgrade_from_v3.bats reconstruit l'installation
+          # v3.0.0 depuis le TAG v3.0.0 ; sans les tags, son helper échoue
+          # volontairement plutôt que de se taire.
+          fetch-tags: true
+          fetch-depth: 0
 
       - name: Setup test environment
         uses: ./.github/actions/setup-tests
