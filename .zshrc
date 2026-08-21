@@ -7,6 +7,12 @@
 # Last updated: January 2025
 # =============================================================================
 
+# $EPOCHREALTIME/$EPOCHSECONDS come from zsh/datetime, which zsh does NOT load
+# by default. Without this, every timing and cache-TTL check in the framework
+# (startup report, git prompt cache, AI suggestion cache, AI error timestamps)
+# silently reads an empty value and never works.
+zmodload zsh/datetime 2>/dev/null
+
 # Performance measurement
 typeset -g NIVUUS_START_TIME=$EPOCHREALTIME
 

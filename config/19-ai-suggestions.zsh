@@ -23,6 +23,10 @@ typeset -g ENABLE_AI_AUTO_DEBOUNCE="${ENABLE_AI_AUTO_DEBOUNCE:-false}"  # Auto-t
 typeset -g AI_SUGGESTION_MODEL="${AI_SUGGESTION_MODEL:-$(_ai_resolve_model)}"  # Model for suggestions
 
 # Cache
+# $EPOCHSECONDS needs zsh/datetime; without it every cache entry is stamped
+# with an empty time and the 5min TTL check below never sees a hit, so every
+# keystroke re-calls the backend.
+zmodload zsh/datetime 2>/dev/null
 typeset -gA _AI_CACHE
 typeset -gA _AI_CACHE_TIME
 

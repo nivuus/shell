@@ -28,6 +28,10 @@ mkdir -p "$AI_ERROR_CACHE_DIR"
 # State Variables
 # =============================================================================
 
+# $EPOCHSECONDS (used to timestamp the last error) needs zsh/datetime, which
+# zsh does not load by default.
+zmodload zsh/datetime 2>/dev/null
+
 typeset -g _AI_LAST_ERROR_CODE=0
 typeset -g _AI_LAST_COMMAND=""
 typeset -g _AI_LAST_ERROR_TIME=0
