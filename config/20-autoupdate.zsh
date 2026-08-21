@@ -583,8 +583,26 @@ fi
 nivuus-update() {
     # Never run the destructive release updater on a git checkout.
     if _nivuus_is_dev_checkout; then
-        echo "ℹ️  Development checkout detected at $NIVUUS_SHELL_DIR"
-        echo "   Use 'git pull' here instead of the release updater."
+        # Deux situations très différentes derrière un même .git, et le
+        # message générique envoyait la mauvaise dans une impasse : le
+        # dépôt que l'installeur de la v3.0.0 créait ici n'est PAS un
+        # checkout de développement, et « git pull » n'y donne rien
+        # d'utile. lib/migrate.sh sait les distinguer ; on ne la source
+        # qu'ici, jamais au démarrage -- le budget de démarrage est intact.
+        local _nivuus_git_kind=""
+        if [[ -r "$NIVUUS_SHELL_DIR/lib/migrate.sh" ]]; then
+            source "$NIVUUS_SHELL_DIR/lib/migrate.sh" 2>/dev/null
+            _nivuus_git_kind="$(nivuus_git_state "$NIVUUS_SHELL_DIR" 2>/dev/null)"
+        fi
+        if [[ "$_nivuus_git_kind" == "legacy" ]]; then
+            echo "⚠️  Un dépôt git hérité de la v3.0.0 se trouve dans $NIVUUS_SHELL_DIR."
+            echo "   C'est lui qui bloque tes mises à jour depuis l'installation."
+            echo "   Lance « nivuus migrate » pour le mettre de côté (il est déplacé,"
+            echo "   pas supprimé), puis relance « nivuus-update »."
+        else
+            echo "ℹ️  Development checkout detected at $NIVUUS_SHELL_DIR"
+            echo "   Use 'git pull' here instead of the release updater."
+        fi
         return 0
     fi
 
