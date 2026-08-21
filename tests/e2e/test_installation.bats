@@ -36,7 +36,10 @@ setup() {
 }
 
 @test "FEATURES.md documentation exists" {
-    [ -f "$BATS_TEST_DIRNAME/../../FEATURES.md" ] || [ -f "$NIVUUS_SHELL_DIR/FEATURES.md" ]
+    # Documentation moved under doc/ (commit "docs: organize documentation
+    # into doc/ directory"); accept either location.
+    [ -f "$BATS_TEST_DIRNAME/../../doc/FEATURES.md" ] || [ -f "$NIVUUS_SHELL_DIR/doc/FEATURES.md" ] \
+        || [ -f "$BATS_TEST_DIRNAME/../../FEATURES.md" ] || [ -f "$NIVUUS_SHELL_DIR/FEATURES.md" ]
 }
 
 @test "Installation can run in non-interactive mode" {
@@ -90,7 +93,8 @@ setup() {
 }
 
 @test "CLAUDE.md developer guide exists" {
-    [ -f "$BATS_TEST_DIRNAME/../../CLAUDE.md" ] || [ -f "$NIVUUS_SHELL_DIR/CLAUDE.md" ]
+    [ -f "$BATS_TEST_DIRNAME/../../doc/CLAUDE.md" ] || [ -f "$NIVUUS_SHELL_DIR/doc/CLAUDE.md" ] \
+        || [ -f "$BATS_TEST_DIRNAME/../../CLAUDE.md" ] || [ -f "$NIVUUS_SHELL_DIR/CLAUDE.md" ]
 }
 
 @test "Installation preserves execute permissions on scripts" {

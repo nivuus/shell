@@ -40,15 +40,13 @@ npm run test:integration
    - Compilation verification (.zwc files)
    - Memory footprint (<100MB)
 
-3. **Integration Tests** - `tests/integration/test_ai_workflow.zsh`
-   - Complete AI suggestions workflow
-   - Animation cycle testing
-   - RPROMPT updates with Nord colors
-   - Cache behavior (5min TTL)
-   - SIGUSR1 signal handling
-   - Keybindings validation
-   - Context collection
-   - Error handling (missing gemini-cli)
+3. **Integration Tests** - `tests/integration/test_ai_workflow.bats`
+   - Backend dispatcher (model resolution, temperature, AI_BACKEND routing)
+   - AI commands (`ask`, `why`, `explain`, `aihelp`) incl. missing credentials
+   - Inline suggestions workflow (ZLE widgets, background generation)
+   - Cache behavior (5min TTL, no duplicate backend call)
+   - Context collection and secret redaction
+   - Terminal titles and AI error capture hooks
 
 ### 📝 TODO - Remaining Test Files (15 more unit tests)
 
@@ -155,7 +153,7 @@ npm run test:e2e           # End-to-end tests
 ```bash
 zunit tests/unit/test_prompt.zsh
 zunit tests/performance/test_startup.zsh
-zunit tests/integration/test_ai_workflow.zsh
+bats tests/integration/test_ai_workflow.bats
 ```
 
 ### With Verbose Output

@@ -23,6 +23,10 @@ typeset -g ENABLE_AI_AUTO_DEBOUNCE="${ENABLE_AI_AUTO_DEBOUNCE:-false}"  # Auto-t
 typeset -g AI_SUGGESTION_MODEL="${AI_SUGGESTION_MODEL:-$(_ai_resolve_model)}"  # Model for suggestions
 
 # Cache
+# $EPOCHSECONDS needs zsh/datetime; without it every cache entry is stamped
+# with an empty time and the 5min TTL check below never sees a hit, so every
+# keystroke re-calls the backend.
+zmodload zsh/datetime 2>/dev/null
 typeset -gA _AI_CACHE
 typeset -gA _AI_CACHE_TIME
 
@@ -326,6 +330,14 @@ _ai_clear_postdisplay() {
 
 _ai_show_inline() {
     local prefix="$BUFFER"
+
+    # Inline ghost text is the only display mode; AI_INLINE_MODE=false turns it
+    # off while keeping the widgets/keybindings defined. Guard here rather than
+    # at load time so the auto-debounce path (which ends up calling this
+    # widget) is covered too.
+    if [[ "${AI_INLINE_MODE:-true}" != "true" ]]; then
+        return
+    fi
 
     # Cancel any pending debounce timer, animation, and generation
     _ai_cancel_debounce
