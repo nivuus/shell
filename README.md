@@ -21,8 +21,8 @@
 - 🐍 **Python Venv** - Auto-detection in prompt (venv/conda/poetry)
 - ☁️ **Cloud Context** - AWS/GCP/Azure in prompt
 - 🛡️ **Safety Checks** - Warns before dangerous commands
-- 🌿 **Git Integration** - Fast shortcuts + beautiful prompt
-- 🛠️ **Zero Config** - Works out of the box
+- 🌿 **Git Integration** - Fast shortcuts, plus branch and dirty state in the prompt
+- 🛠️ **Works unconfigured** - Sensible defaults; `~/.zsh_local` when you want otherwise
 
 ## 🚀 Quick Start
 
@@ -179,7 +179,7 @@ gs                      # git status
 ga                      # git add
 gc                      # git commit
 gp                      # git push
-gl                      # git log (beautiful)
+gl                      # git log (graph, one line per commit)
 gd                      # git diff
 gb                      # git branch
 gco                     # git checkout
@@ -241,7 +241,7 @@ safe-rm .env            # Extra protection for important files
 ### File Management
 
 ```bash
-ll                      # Beautiful file list
+ll                      # Detailed file list
 tree                    # Directory tree
 f <pattern>             # Fast file search
 search <pattern>        # Search file contents

@@ -70,3 +70,28 @@ enforced_budget() {
     budget="$(enforced_budget)"
     grep -q "startup-<${budget}ms" "$README"
 }
+
+@test "REGLE 5.2: aucun superlatif non mesuré dans le README" {
+    # Liste noire, volontairement courte et littérale. Une promesse
+    # qualitative n'est pas testable : on interdit donc d'en écrire une.
+    # Elle ne s'applique qu'au README -- doc/ décrit, le README vend, et
+    # c'est le seul endroit où vendre dérape.
+    fautes=""
+    for mot in blazing lightning ultimate "the best" "just works" insanely \
+               revolutionary "zero config" "beautiful" "buttery" "supercharge"; do
+        if grep -qiF "$mot" "$README"; then
+            fautes="$fautes
+  $mot: $(grep -inF "$mot" "$README" | head -3)"
+        fi
+    done
+    [ -z "$fautes" ] || { echo "superlatif non mesuré :$fautes"; false; }
+}
+
+@test "REGLE 5.2: la liste noire est non vide et vérifiée sur elle-même" {
+    # Garde-fou du garde-fou : un test qui boucle sur une liste vide passe
+    # toujours. Ici, on prouve que la règle SAIT échouer.
+    tmp="$BATS_TEST_TMPDIR/faux-readme.md"
+    printf 'Nivuus is blazing fast.\n' > "$tmp"
+    run grep -qiF blazing "$tmp"
+    [ "$status" -eq 0 ]
+}
