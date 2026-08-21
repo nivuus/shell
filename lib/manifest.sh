@@ -49,11 +49,22 @@ nivuus_manifest_begin() {
         # répertoire XDG préexistant.
         missing="$(_nivuus_missing_levels "$NIVUUS_BACKUP_DIR")"
         mkdir -p "$NIVUUS_BACKUP_DIR"
+        # Le store de sauvegardes peut contenir la copie d'un fichier de
+        # /etc dont le mode d'origine était restrictif : élargir ses droits
+        # élargirait ceux du contenu sauvegardé.
+        if [ -n "${NIVUUS_BACKUP_DIR_MODE:-}" ]; then
+            chmod "$NIVUUS_BACKUP_DIR_MODE" "$NIVUUS_BACKUP_DIR" 2>/dev/null || :
+        fi
     fi
 
     printf '#nivuus-manifest v1\tinstalled_at=%s\tmode=%s\tdir=%s\n' \
         "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$mode" "$install_dir" \
         > "$NIVUUS_MANIFEST_TMP"
+    # Le manifeste ne contient que des chemins et des empreintes : il doit
+    # rester lisible par un utilisateur non privilégié qui lance « doctor ».
+    if [ -n "${NIVUUS_MANIFEST_MODE:-}" ]; then
+        chmod "$NIVUUS_MANIFEST_MODE" "$NIVUUS_MANIFEST_TMP" 2>/dev/null || :
+    fi
 
     if [ -n "$missing" ]; then
         # Du plus superficiel au plus profond (ordre de création), pour que
@@ -220,6 +231,13 @@ nivuus_mkdir_p() {
         log_dry "mkdir -p $dir"
     else
         mkdir -p "$dir"
+        # Uniquement les niveaux que NOUS venons de créer : $missing les
+        # contient exactement. Toucher aux modes de /usr/local ou de /etc,
+        # qui préexistent, serait une mutation non journalisée d'un chemin
+        # qui ne nous appartient pas.
+        printf '%s\n' "$missing" | while IFS= read -r level; do
+            [ -n "$level" ] && _nivuus_enforce_modes "$level" dir
+        done
     fi
     # Enregistrés du plus superficiel au plus profond (ordre de création),
     # afin que le rollback -- qui rejoue le journal à l'envers -- supprime
@@ -273,9 +291,69 @@ _nivuus_prior_entry_exists() {
         "$NIVUUS_MANIFEST_TMP" 2>/dev/null
 }
 
+# Modes et propriétaire IMPOSÉS, jamais hérités de l'umask ni de la source.
+#
+# Deux modes d'échec réels, tous deux invisibles en test non-root :
+#   1. « cp -p » préserve le propriétaire quand on est root : un sudo lancé
+#      depuis un checkout appartenant à quelqu'un poserait /usr/local/share
+#      appartenant à cette personne -- donc inscriptible par elle, donc
+#      contournant le garde-fou d'inscriptibilité de l'auto-update.
+#   2. Un sudo avec umask 077 produirait un arbre 0700 que PERSONNE ne peut
+#      lire : une installation « réussie » qui casse tous les shells.
+#
+# Les trois variables sont VIDES par défaut : le mode utilisateur ne change
+# pas d'un octet.
+_nivuus_enforce_modes() {
+    local path="$1" kind="${2:-file}"
+    [ -n "${NIVUUS_DRY_RUN:-}" ] && return 0
+    [ -e "$path" ] || return 0
+    if [ "$kind" = "dir" ]; then
+        if [ -n "${NIVUUS_INSTALL_DIR_MODE:-}" ]; then
+            chmod "$NIVUUS_INSTALL_DIR_MODE" "$path" 2>/dev/null || :
+        fi
+    elif [ -x "$path" ]; then
+        # Un exécutable reste exécutable : le mode fichier imposé ne doit
+        # pas transformer bin/nivuus en fichier de données. Il prend donc le
+        # mode des répertoires (0755), qui est exactement « lisible par
+        # tous, exécutable par tous, écrivable par root seul ».
+        if [ -n "${NIVUUS_INSTALL_DIR_MODE:-}" ]; then
+            chmod "$NIVUUS_INSTALL_DIR_MODE" "$path" 2>/dev/null || :
+        fi
+    else
+        if [ -n "${NIVUUS_INSTALL_FILE_MODE:-}" ]; then
+            chmod "$NIVUUS_INSTALL_FILE_MODE" "$path" 2>/dev/null || :
+        fi
+    fi
+    # chown échoue sans privilège : NON FATAL, sinon toute la couche de
+    # tests unitaires (qui tourne sans root) deviendrait inexécutable. Le
+    # vrai chown est prouvé en conteneur, en root, par run-system-target.sh.
+    if [ -n "${NIVUUS_INSTALL_OWNER:-}" ]; then
+        chown "$NIVUUS_INSTALL_OWNER" "$path" 2>/dev/null || :
+    fi
+    return 0
+}
+
+# Nivuus a-t-il CRÉÉ ce chemin (à cette installation ou à une précédente
+# héritée) ? Si oui, le fichier NOUS appartient : une réécriture ultérieure
+# (mise à jour, réinstallation) reste un CREATE dont on rafraîchit
+# l'empreinte, et ne devient PAS un MODIFY avec sauvegarde.
+#
+# Sans cette distinction, une machine mise à jour une fois n'était plus
+# désinstallable proprement : « uninstall » restaurait la version
+# PRÉCÉDENTE de chaque fichier au lieu de le supprimer, et l'arbre survivait
+# au retrait -- ce qui casse la promesse centrale du projet. Mesuré sur le
+# chemin « install --system puis sudo nivuus update puis uninstall ».
+_nivuus_prior_create_exists() {
+    local path="$1"
+    [ -f "$NIVUUS_MANIFEST_TMP" ] || return 1
+    awk -F"$NIVUUS_TAB" -v p="$path" \
+        '$1 == "CREATE" && $2 == p { found=1 } END { exit !found }' \
+        "$NIVUUS_MANIFEST_TMP" 2>/dev/null
+}
+
 # Coeur partagé : $1 = source, $2 = destination.
 _nivuus_place() {
-    local src="$1" dst="$2" existed=0 backup='-' new_hash prior_ref
+    local src="$1" dst="$2" existed=0 ours=0 backup='-' new_hash prior_ref
 
     [ -f "$dst" ] && existed=1
     if [ "$existed" -eq 1 ] && [ "$(nivuus_hash_file "$src")" = "$(nivuus_hash_file "$dst")" ]; then
@@ -323,6 +401,12 @@ _nivuus_place() {
         prior_ref="$(_nivuus_prior_modify_ref "$dst")"
         if [ -n "$prior_ref" ] && [ "$prior_ref" != "-" ]; then
             backup="$prior_ref"
+        elif _nivuus_prior_create_exists "$dst"; then
+            # Ce fichier, c'est NOUS qui l'avons créé : il le reste. Aucune
+            # sauvegarde à prendre (il n'y a pas de contenu « d'avant Nivuus »
+            # à protéger), et l'entrée reste un CREATE pour que le retrait le
+            # supprime au lieu de restaurer une version antérieure.
+            ours=1
         else
             backup="$(nivuus_store_backup "$dst")" || return 1
         fi
@@ -345,10 +429,14 @@ _nivuus_place() {
         else
             cp -p "$src" "$dst" || return 1
         fi
+        # L'empreinte AVANT l'imposition des modes : un mode restrictif
+        # rendrait le fichier illisible pour sha256sum, et le manifeste
+        # enregistrerait une empreinte vide -- donc impossible à rejouer.
         new_hash="$(nivuus_hash_file "$dst")"
+        _nivuus_enforce_modes "$dst" file
     fi
 
-    if [ "$existed" -eq 1 ]; then
+    if [ "$existed" -eq 1 ] && [ "$ours" -eq 0 ]; then
         nivuus_manifest_record MODIFY "$dst" "$new_hash" "$backup"
     else
         nivuus_manifest_record CREATE "$dst" "$new_hash" '-'
@@ -365,6 +453,41 @@ nivuus_write_file() {
     result=$?
     rm -f "$tmp"
     return $result
+}
+
+# Un lien symbolique est une mutation comme une autre : journalisée avant
+# d'exister, restaurée par la même règle que les autres. C'est la PREMIÈRE
+# du projet (cf. le commentaire de tests/helpers/fingerprint.bash) : sans
+# journal, uninstall ne la retirerait jamais, et l'empreinte -- qui voit
+# désormais les liens -- le dirait.
+nivuus_install_symlink() {
+    local target="$1" link="$2" backup='-' existed=0
+
+    # Le chemin peut déjà porter un script écrit à la main par
+    # l'administrateur : on ne l'écrase pas en silence, on le sauvegarde.
+    if [ -e "$link" ] && [ ! -L "$link" ]; then
+        existed=1
+    fi
+
+    if [ -n "${NIVUUS_DRY_RUN:-}" ]; then
+        log_dry "lierait $link -> $target"
+        nivuus_manifest_record SYMLINK "$link" "$target" '-'
+        return 0
+    fi
+
+    if [ "$existed" -eq 1 ]; then
+        backup="$(nivuus_store_backup "$link")" || return 1
+        rm -f "$link" || return 1
+        nivuus_manifest_record MODIFY "$link" '-' "$backup" || return 1
+    fi
+
+    nivuus_mkdir_p "$(dirname "$link")"
+    ln -sfn "$target" "$link" || return 1
+    if [ -n "${NIVUUS_INSTALL_OWNER:-}" ]; then
+        chown -h "$NIVUUS_INSTALL_OWNER" "$link" 2>/dev/null || :
+    fi
+    # La CIBLE tient lieu de hash : c'est tout ce qu'un lien transporte.
+    nivuus_manifest_record SYMLINK "$link" "$target" '-'
 }
 
 # Trace une entrée que le rollback n'a PAS pu appliquer (fichier divergé,
@@ -490,6 +613,25 @@ nivuus_restore_entry() {
                 # correspond de toute façon plus au fichier restauré.
                 touch "$path"
                 [ -f "$path.zwc" ] && ! _nivuus_zwc_preserved "$path.zwc" && rm -f "$path.zwc"
+            fi
+            ;;
+        SYMLINK)
+            if [ ! -L "$path" ]; then
+                # Absent, ou remplacé par un fichier ordinaire : dans les
+                # deux cas, ce n'est plus notre lien. On ne touche à rien.
+                [ -e "$path" ] && log_warn "$path n'est plus un lien : laissé en place."
+                return 0
+            fi
+            current="$(readlink "$path")"
+            if [ "$current" != "$hash" ]; then
+                log_warn "$path pointe désormais vers $current (au lieu de $hash) : laissé en place."
+                _nivuus_record_survivor SYMLINK "$path" "$hash" "$ref"
+                return 0
+            fi
+            if [ -n "${NIVUUS_DRY_RUN:-}" ]; then
+                log_dry "retirerait le lien $path"
+            else
+                rm -f "$path"
             fi
             ;;
         MKDIR)

@@ -173,3 +173,144 @@ nivuus doctor
 ```
 
 `nivuus doctor` signale le dépôt git hérité s'il est présent, sans jamais y toucher.
+
+## Administration : installer pour toute une machine
+
+**Sur Debian et Ubuntu, préfère le paquet.** `apt install ./nivuus-shell_<version>_all.deb`
+est inventorié par `dpkg`, vérifiable par `dpkg -V` et retiré par `apt purge`. `--system`
+refait ce travail lui-même ; le paquet le fait mieux. L'installeur te le rappelle avant
+d'écrire quoi que ce soit — c'est une information, pas un refus.
+
+Partout ailleurs — Fedora, RHEL, Rocky, openSUSE, Alpine, images de conteneur, machines
+sans réseau sortant — il n'y a pas de paquet, et c'est ce que `--system` sert :
+
+```bash
+sudo nivuus install --system
+```
+
+Ce que ça écrit, et rien d'autre :
+
+| Chemin | Rôle |
+|---|---|
+| `/usr/local/share/nivuus-shell/` | l'arbre partagé, en lecture seule pour les utilisateurs |
+| `/usr/local/bin/nivuus` | le point d'entrée (un lien vers l'arbre) |
+| `/usr/local/share/man/man1/nivuus.1` | la page de manuel |
+| `/var/lib/nivuus/manifest.tsv` | l'inventaire : ce qui a été écrit, et comment le défaire |
+
+**Aucun `~/.zshrc` n'est touché. Aucun `chsh` n'est fait**, pour personne. L'activation
+reste un acte par utilisateur : chacun lance `nivuus enable`, sans privilège.
+
+Pour auditer avant de décider d'élever les privilèges — la commande fonctionne
+**sans root** et n'écrit rien :
+
+```bash
+nivuus install --system --dry-run
+```
+
+L'installation se termine par une **sonde** : un zsh non privilégié charge réellement
+l'arbre. Si aucun shell ne peut le lire (umask hostile, SELinux sans `restorecon`,
+`/usr/local` monté `noexec`), l'installation est **annulée** plutôt que laissée en place.
+
+### Activer pour les comptes créés ensuite (`--skel`)
+
+```bash
+sudo nivuus install --system --skel
+```
+
+`/etc/skel` ne s'applique qu'aux comptes **créés après** cette commande. Les comptes déjà
+présents ne sont pas activés — c'est une limite du mécanisme, pas un défaut de Nivuus, et
+le message de succès te donne le nombre exact de comptes non couverts. Là où `/etc/skel`
+n'existe pas (macOS, Alpine), `--skel` est **refusé**, jamais ignoré en silence.
+
+### Activer pour toute la machine (`nivuus enable --all`)
+
+```bash
+sudo nivuus enable --all
+```
+
+Ajoute un drop-in `/etc/zsh/zshrc.d/10-nivuus.zsh` et **une seule ligne** au fichier zsh
+global. Le drop-in cède toujours à l'utilisateur : qui a son propre bloc dans `~/.zshrc`
+garde son installation. Sur Debian et Ubuntu, le fichier zsh global est un conffile `dpkg` :
+une future mise à jour de `zsh-common` posera peut-être la question « conffile modifié ».
+`nivuus doctor` le signale par avance. Pour gérer `/etc` toi-même (Ansible, image
+immuable, `/etc` sous git) :
+
+```bash
+nivuus enable --all --print      # affiche le fichier et la ligne, n'écrit rien
+```
+
+La même activation peut être demandée dès l'installation, en une seule commande :
+
+```bash
+sudo nivuus install --system --activate-all
+```
+
+L'activation est **vérifiée** après écriture : si aucun zsh interactif ne voit le marqueur,
+elle est annulée et le chemin exact à corriger est affiché. Pour la retirer :
+
+```bash
+sudo nivuus disable --all
+```
+
+### Mettre à jour
+
+```bash
+sudo nivuus update
+```
+
+C'est une réinstallation depuis une release **vérifiée** (empreinte SHA-256 fail-closed,
+puis signature), qui passe par le manifeste et reste donc réversible. Les shells des
+utilisateurs ne se mettent jamais à jour tout seuls sur un arbre système : `nivuus update`
+leur répond quoi taper, et sort en 0. **Aucun ordonnanceur n'est fourni** — ni unité
+systemd, ni cron : branche cette commande sur le tien.
+
+### Diagnostiquer
+
+```bash
+nivuus doctor
+sudo nivuus doctor --system --scan-users
+```
+
+`--scan-users` liste les comptes locaux dont le `~/.zshrc` porte le bloc Nivuus. Il est
+**opt-in et en lecture seule** : sur un parc NFS, lire un `$HOME` déclenche l'automonteur,
+donc ce n'est jamais automatique.
+
+### Désinstaller
+
+```bash
+sudo nivuus uninstall --system
+```
+
+Rejoue le manifeste système et **rien d'autre** : `/etc`, `/usr/local` et `/var/lib`
+redeviennent bit-identiques à ce qu'ils étaient. La commande n'écrit dans **aucun `$HOME`**
+et ne les lit même pas. Les activations par utilisateur subsistent — elles appartiennent à
+chaque compte, leurs shells ne cassent pas (le bloc `.zshrc` est gardé, il teste l'arbre
+avant de le charger), et chacun peut faire `nivuus disable`.
+
+### Une installation faite par l'ancien `--system`
+
+Avant la v3.1, `--system` posait un arbre dans `/etc/nivuus-shell` **sans manifeste** :
+il n'est pas réversible automatiquement, et l'installation actuelle refuse d'écrire
+par-dessus plutôt que de rendre la situation irréparable. Procédure, et comment
+revenir en arrière :
+
+```bash
+sudo mv /etc/nivuus-shell /etc/nivuus-shell.avant-migration
+sudo nivuus install --system
+# pour revenir en arrière :
+sudo mv /etc/nivuus-shell.avant-migration /etc/nivuus-shell
+```
+
+### Image de conteneur
+
+```dockerfile
+RUN sh install.sh --system --skel --non-interactive
+```
+
+### Ansible
+
+```yaml
+- name: Installer Nivuus pour la machine
+  ansible.builtin.command: nivuus install --system --yes
+  args: { creates: /usr/local/share/nivuus-shell/.nivuus-origin }
+```

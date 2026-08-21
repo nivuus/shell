@@ -57,9 +57,15 @@ setup() {
     [ "$status" -eq 0 ]
 }
 
-@test "Install script supports --system flag" {
-    run bash -c "grep -E '(--system|system.mode)' '$NIVUUS_SHELL_DIR/install.sh'"
+@test "l'aide d'install.sh documente --system" {
+    # Une assertion sur le COMPORTEMENT (le script s'exécute et répond),
+    # pas sur la présence d'un mot dans le fichier. L'ancienne version de
+    # ce test faisait « grep --system install.sh » et ne passait au vert
+    # que grâce au message de refus : elle serait restée verte en
+    # n'exerçant rien du tout une fois --system réactivé.
+    run "$NIVUUS_SHELL_DIR/install.sh" --help
     [ "$status" -eq 0 ]
+    [[ "$output" == *"--system"* ]]
 }
 
 @test "Install script has backup functionality" {

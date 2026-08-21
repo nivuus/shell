@@ -35,6 +35,7 @@ fi
 # shellcheck source=/dev/null
 . "$NIVUUS_SRC_ROOT/lib/log.sh"
 . "$NIVUUS_SRC_ROOT/lib/detect.sh"
+. "$NIVUUS_SRC_ROOT/lib/system.sh"
 . "$NIVUUS_SRC_ROOT/lib/deps.sh"
 . "$NIVUUS_SRC_ROOT/lib/origin.sh"
 . "$NIVUUS_SRC_ROOT/lib/manifest.sh"
@@ -49,13 +50,15 @@ nivuus — gestion de Nivuus Shell
 
 Usage :
   nivuus install   [--dry-run] [--yes] [--prefix DIR] [--minimal|--no-minimal]
-                   [--with-deps] [--verify-key EMPREINTE]
+                   [--with-deps] [--verify-key EMPREINTE] [--system] [--skel]
+                   [--activate-all]
   nivuus enable    [--dry-run] [--yes] [--prefix DIR] [--minimal|--no-minimal]
-  nivuus disable   [--dry-run] [--yes] [--purge]
-  nivuus uninstall [--dry-run] [--yes] [--purge]
+                   [--all [--print]]
+  nivuus disable   [--dry-run] [--yes] [--purge] [--all]
+  nivuus uninstall [--dry-run] [--yes] [--purge] [--system]
   nivuus migrate   [--dry-run] [--yes] [--prefix DIR]
   nivuus update
-  nivuus doctor
+  nivuus doctor    [--system] [--scan-users]
   nivuus help
 
 Options :
@@ -67,6 +70,15 @@ Options :
   --with-deps   Propose UNE commande groupée pour installer les dépendances
                 recommandées et optionnelles, après confirmation. Sans elle,
                 Nivuus se contente d'afficher la commande.
+  --activate-all  (avec --system) active Nivuus pour TOUS les shells zsh
+              interactifs de la machine : un drop-in et UNE ligne au rc
+              global. L'effet est VÉRIFIÉ, ou l'écriture est annulée.
+  --skel      (avec --system) pose /etc/skel/.zshrc : n'affecte QUE les
+              comptes créés ensuite, jamais ceux qui existent déjà.
+  --system    Installe pour TOUTE la machine (exige root) : arbre partagé
+              sous /usr/local/share/nivuus-shell, inventorié dans
+              /var/lib/nivuus. N'écrit dans AUCUN $HOME et ne fait de chsh
+              pour personne : chaque utilisateur lance « nivuus enable ».
   --verify-key  Empreinte attendue du jeu de clés de signature embarqué
                 (voir SECURITY.md). Si elle ne correspond pas, l'installation
                 est refusée AVANT toute écriture. C'est l'ancrage hors bande :
@@ -79,6 +91,9 @@ Options :
   migrate     Met de côté le dépôt git que l'installeur de la v3.0.0
               laissait dans ~/.nivuus-shell et qui bloque les mises à jour.
               Le dépôt est DÉPLACÉ, jamais supprimé, et le chemin est affiché.
+  --scan-users  (doctor) liste les comptes locaux dont le ~/.zshrc porte le
+                bloc Nivuus. En LECTURE SEULE, et jamais automatique : un
+                stat sur un $HOME NFS déclenche l'automonteur.
   --purge     (uninstall) supprime aussi l'état Nivuus (manifeste, sauvegardes).
               Ne supprime que ce que Nivuus a créé : ~/.zsh_local (si présent
               mais non créé par Nivuus) et ~/.zsh_history ne sont JAMAIS supprimés.
@@ -135,6 +150,54 @@ install_optional_deps() {
     return 0
 }
 
+# --- Activation machine : les primitives partagées -----------------------
+#
+# Un SEUL code d'activation machine, appelé par « install --system
+# --activate-all » et par « nivuus enable --all » -- y compris sur un arbre
+# posé par un paquet. Deux implémentations seraient deux comportements, dont
+# un seul serait testé.
+#
+# Suppose un manifeste OUVERT : toute écriture y passe, sans exception.
+# Codes de retour : 0 posée et prouvée, 1 échec (l'appelant annule),
+# 2 refusée par l'humain (rien d'anormal, rien à annuler).
+_system_write_activation() {
+    local tree="$1" rc
+    rc="$(nivuus_system_global_rc)"
+    log_warn "L'activation machine ajoute UNE ligne à $rc."
+    log_warn "Sur Debian et Ubuntu, ce fichier est un conffile dpkg : une future mise à"
+    log_warn "jour de zsh-common posera peut-être la question « conffile modifié »."
+    log_warn "Pour gérer /etc toi-même :  nivuus enable --all --print"
+    confirm "Activer Nivuus pour tous les shells zsh interactifs de la machine ?" \
+        || { log_info "Activation machine ignorée. L'arbre reste installé."; return 2; }
+
+    nivuus_system_dropin_content "$tree" | nivuus_write_file "$(nivuus_system_dropin)" || return 1
+    # Idempotence : le conffile ne reçoit la ligne qu'une fois. Une seconde
+    # activation ne doit pas empiler les pointeurs dans un fichier de la
+    # distribution.
+    if ! grep -qF "$(nivuus_system_dropin)" "$rc" 2>/dev/null; then
+        { cat "$rc" 2>/dev/null; nivuus_system_rc_line; } | nivuus_write_file "$rc" || return 1
+    fi
+
+    if [ -z "${NIVUUS_DRY_RUN:-}" ] && ! nivuus_system_probe_activation; then
+        log_error "L'activation machine n'a produit AUCUN effet : le zsh de cette machine ne lit"
+        log_error "pas $rc. Elle est annulée -- /etc est rendu tel qu'il était."
+        log_error "Ajoute la ligne à la main dans le fichier que ton zsh lit réellement :"
+        log_error "  $(nivuus_system_rc_line)"
+        return 1
+    fi
+    log_ok "Activation machine vérifiée (un zsh interactif voit NIVUUS_ACTIVATED_BY=system)."
+    return 0
+}
+
+# Pour Ansible, les images immuables, /etc sous git : on affiche, on n'écrit
+# pas. Exiger qu'ils nous laissent /etc serait de trop.
+_system_print_activation() {
+    printf '# %s\n' "$(nivuus_system_dropin)"
+    nivuus_system_dropin_content "$1"
+    printf '\n# à ajouter dans %s :\n' "$(nivuus_system_global_rc)"
+    nivuus_system_rc_line
+}
+
 cmd_install() {
     # Mode paquet : l'arbre appartient au gestionnaire, « install » ne peut
     # donc rien copier. Plutôt que de répondre « commande invalide » à un
@@ -149,11 +212,14 @@ cmd_install() {
     fi
 
     local prefix="$HOME/.nivuus-shell" MINIMAL='' FORCE_MINIMAL='' FORCE_FULL='' WITH_DEPS=''
-    local verify_key=''
+    local verify_key='' SYSTEM='' SKEL='' ACTIVATE_ALL='' manifest_mode='user' legacy='' act_rc=0
     while [ $# -gt 0 ]; do
         case "$1" in
             --dry-run) export NIVUUS_DRY_RUN=1 ;;
             --yes|-y)  ASSUME_YES=1 ;;
+            --system)  SYSTEM=1 ;;
+            --skel)    SKEL=1 ;;
+            --activate-all) ACTIVATE_ALL=1 ;;
             --minimal)     FORCE_MINIMAL=1 ;;
             --no-minimal)  FORCE_FULL=1 ;;
             --with-deps)   WITH_DEPS=1 ;;
@@ -171,6 +237,64 @@ cmd_install() {
         esac
         shift
     done
+
+    # --- Mode système : le domaine root -------------------------------
+    # Tout est décidé ICI, avant la première écriture : les chemins, le
+    # journal, les modes, et le droit d'agir. Aucune étape ne relit ce
+    # choix depuis l'environnement.
+    if [ -n "$SYSTEM" ]; then
+        manifest_mode='system'
+        prefix="$(nivuus_system_tree)"
+        NIVUUS_STATE_DIR="$(nivuus_system_state_dir)"; export NIVUUS_STATE_DIR
+        # L'umask de l'administrateur ne décide de rien : un sudo en 077
+        # produirait un arbre que personne ne peut lire.
+        umask 022
+        # Défauts imposés, pas hérités de l'umask. Ils restent surchargeables
+        # par l'environnement : c'est le crochet qui rend la sonde de fin
+        # d'installation prouvable (tests/integration/test_system_probe.bats
+        # pose un mode impossible pour vérifier que l'installation s'annule).
+        NIVUUS_INSTALL_DIR_MODE="${NIVUUS_INSTALL_DIR_MODE:-755}";  export NIVUUS_INSTALL_DIR_MODE
+        NIVUUS_INSTALL_FILE_MODE="${NIVUUS_INSTALL_FILE_MODE:-644}"; export NIVUUS_INSTALL_FILE_MODE
+        NIVUUS_BACKUP_DIR_MODE="${NIVUUS_BACKUP_DIR_MODE:-700}";   export NIVUUS_BACKUP_DIR_MODE
+        NIVUUS_MANIFEST_MODE="${NIVUUS_MANIFEST_MODE:-644}";     export NIVUUS_MANIFEST_MODE
+        if nivuus_system_is_root; then
+            NIVUUS_INSTALL_OWNER=root:root; export NIVUUS_INSTALL_OWNER
+        fi
+        # Ni chsh, ni extras interactifs : le shell de connexion d'autrui
+        # ne nous regarde pas (l'admin a usermod -s et useradd -s).
+        FORCE_MINIMAL=1
+        FORCE_FULL=''
+
+        # /etc/skel n'existe pas partout : refuser AVANT toute écriture,
+        # plutôt qu'ignorer le drapeau en silence.
+        if [ -n "$SKEL" ] && ! nivuus_system_skel_supported; then
+            log_error "$(dirname "$(nivuus_system_skel)") n'existe pas sur cette plateforme."
+            log_error "C'est le cas de macOS, et d'Alpine (BusyBox adduser ne s'en sert pas)."
+            log_error "--skel est refusé plutôt qu'ignoré. Les comptes s'activent avec « nivuus enable »."
+            return 1
+        fi
+
+        legacy="$(nivuus_system_legacy_tree || true)"
+        if [ -n "$legacy" ]; then
+            log_error "$legacy contient une installation faite par l'ancien --system."
+            log_error "Elle n'a pas de manifeste : Nivuus ne peut pas la retirer sans risque, et refuse"
+            log_error "d'installer par-dessus. Procédure manuelle : voir doc/INSTALL.md, section « héritage »."
+            return 1
+        fi
+
+        # La recommandation du canal de paquets parle AVANT le refus de
+        # privilège : un administrateur sans sudo sous la main doit quand
+        # même apprendre que le .deb existe.
+        if nivuus_system_package_notice; then
+            confirm "Continuer avec --system quand même ?" \
+                || { log_info "Annulé. Rien n'a été écrit."; return 0; }
+        fi
+
+        # --dry-run n'exige rien : on doit pouvoir auditer avant d'élever.
+        if [ -z "${NIVUUS_DRY_RUN:-}" ]; then
+            nivuus_system_require_root "installer Nivuus pour la machine" || return 1
+        fi
+    fi
 
     # Le mode se décide ici, une fois, et se transmet ensuite explicitement
     # (jamais relu depuis l'environnement au fond d'une étape).
@@ -207,7 +331,7 @@ cmd_install() {
     nivuus_step_check_verify_tools
     confirm "Installer Nivuus Shell dans $prefix ?" || { log_info "Annulé."; return 0; }
 
-    nivuus_manifest_begin user "$prefix"
+    nivuus_manifest_begin "$manifest_mode" "$prefix"
     # Hérite les entrées d'une installation précédente ET pose elle-même la
     # marque post-inherit dont nivuus_manifest_abort a besoin pour ne
     # défaire que sa propre part si CETTE installation échoue, jamais une
@@ -223,8 +347,55 @@ cmd_install() {
     # ne le supprimera donc jamais, préexistant ou non. S'il n'existe pas
     # encore, un MKDIR l'autorise à être repris par rmdir plus tard s'il
     # finit vide -- sans jamais toucher à un ~/.cache non vide ou déjà là.
-    [ -d "$HOME/.cache" ] || nivuus_manifest_record MKDIR "$HOME/.cache" '-' '-'
-    if ! nivuus_step_copy_tree "$NIVUUS_SRC_ROOT" "$prefix" \
+    # En mode système, RIEN dans un $HOME : pas même le MKDIR de ~/.cache.
+    if [ -z "$SYSTEM" ]; then
+        [ -d "$HOME/.cache" ] || nivuus_manifest_record MKDIR "$HOME/.cache" '-' '-'
+    fi
+    if [ -n "$SYSTEM" ]; then
+        if ! nivuus_step_copy_tree "$NIVUUS_SRC_ROOT" "$prefix" \
+            || ! nivuus_step_write_version "$NIVUUS_SRC_ROOT" "$prefix" \
+            || ! nivuus_step_install_updater "$NIVUUS_SRC_ROOT" "$prefix" \
+            || ! nivuus_step_write_origin "$prefix" system selfhosted \
+            || ! nivuus_step_install_man "$NIVUUS_SRC_ROOT" "$(nivuus_system_man)" \
+            || ! nivuus_install_symlink "$prefix/bin/nivuus" "$(nivuus_system_bin)"; then
+            log_error "Installation interrompue."
+            nivuus_manifest_abort
+            return 1
+        fi
+        if [ -n "$SKEL" ]; then
+            # MÊME chemin de code que l'activation d'un utilisateur, et pas
+            # un simple « écris le bloc » : un /etc/skel/.zshrc rédigé par
+            # l'administrateur doit survivre intact, le bloc s'ajoutant à ce
+            # qui s'y trouve. C'est nivuus_zshrc_merge qui sait faire ça, et
+            # il est déjà prouvé par le domaine utilisateur -- une seconde
+            # écriture « à la main » ici serait une variante non testée.
+            #
+            # Le bloc est écrit SANS le marqueur « minimal » : --skel décide
+            # de l'activation, pas du mode de chaque futur compte.
+            if ! nivuus_step_write_zshrc "$(nivuus_system_skel)" "$prefix" ''; then
+                nivuus_manifest_abort
+                return 1
+            fi
+            log_ok "$(nivuus_system_skel) écrit."
+            log_warn "Il ne s'applique QU'AUX COMPTES CRÉÉS APRÈS cette commande."
+            log_warn "Les $(nivuus_system_existing_users) comptes déjà présents ne sont pas activés :"
+            log_warn "chacun peut lancer « nivuus enable », ou utilise --activate-all pour toute la machine."
+        fi
+        if [ -n "$ACTIVATE_ALL" ]; then
+            if _system_write_activation "$prefix"; then act_rc=0; else act_rc=$?; fi
+            if [ "$act_rc" -eq 1 ]; then
+                nivuus_manifest_abort
+                return 1
+            fi
+        fi
+        nivuus_system_restorecon "$prefix" "$(nivuus_system_bin)"
+        # « Une installation qui ne peut pas être prouvée est annulée. »
+        if [ -z "${NIVUUS_DRY_RUN:-}" ] && ! nivuus_system_probe_tree "$prefix"; then
+            log_error "Installation annulée : ce qui ne peut pas être prouvé n'est pas laissé en place."
+            nivuus_manifest_abort
+            return 1
+        fi
+    elif ! nivuus_step_copy_tree "$NIVUUS_SRC_ROOT" "$prefix" \
         || ! nivuus_step_write_version "$NIVUUS_SRC_ROOT" "$prefix" \
         || ! nivuus_step_write_zshrc "$HOME/.zshrc" "$prefix" "$MINIMAL"; then
         log_error "Installation interrompue."
@@ -235,7 +406,9 @@ cmd_install() {
         nivuus_manifest_abort
         return 1
     fi
-    if [ -z "${MINIMAL:-}" ]; then
+    # Aucun chsh en mode système, pour personne : root changeant le shell de
+    # connexion d'autrui est hors de question.
+    if [ -z "${MINIMAL:-}" ] && [ -z "$SYSTEM" ]; then
         if confirm "Faire de zsh ton shell de connexion ?"; then
             nivuus_step_chsh
         else
@@ -247,6 +420,10 @@ cmd_install() {
 
     if [ -n "${NIVUUS_DRY_RUN:-}" ]; then
         log_info "Aucune modification effectuée (--dry-run)."
+    elif [ -n "$SYSTEM" ]; then
+        log_ok "Nivuus Shell installé pour la machine dans $prefix"
+        log_info "Aucun ~/.zshrc n'a été modifié : l'activation est un acte par utilisateur."
+        log_info "Chacun lance, sans privilège :  nivuus enable"
     else
         log_ok "Nivuus Shell installé dans $prefix"
         log_info "Lance « exec zsh » pour démarrer."
@@ -254,20 +431,37 @@ cmd_install() {
 }
 
 cmd_uninstall() {
-    local purge='' f name mkdir_levels level header kept_refs
+    local purge='' f name mkdir_levels level header kept_refs SYSTEM=''
     while [ $# -gt 0 ]; do
         case "$1" in
             --dry-run) export NIVUUS_DRY_RUN=1 ;;
             --yes|-y)  ASSUME_YES=1 ;;
             --purge)   purge=1 ;;
+            --system)  SYSTEM=1 ;;
+            --skel)    SKEL=1 ;;
+            --activate-all) ACTIVATE_ALL=1 ;;
             *) log_error "Option inconnue : $1"; return 2 ;;
         esac
         shift
     done
 
+    if [ -n "$SYSTEM" ]; then
+        NIVUUS_STATE_DIR="$(nivuus_system_state_dir)"; export NIVUUS_STATE_DIR
+        umask 022
+        if [ -z "${NIVUUS_DRY_RUN:-}" ]; then
+            nivuus_system_require_root "retirer l'installation système" || return 1
+        fi
+    fi
     : "${NIVUUS_STATE_DIR:=${XDG_STATE_HOME:-$HOME/.local/state}/nivuus}"
     NIVUUS_MANIFEST="$NIVUUS_STATE_DIR/manifest.tsv"
     NIVUUS_BACKUP_DIR="$NIVUUS_STATE_DIR/backups"
+
+    if [ -n "$SYSTEM" ] && nivuus_system_manifest_has_home "$NIVUUS_MANIFEST"; then
+        log_error "Le manifeste système décrit des chemins dans un \$HOME : il est corrompu."
+        log_error "Nivuus refuse de le rejouer en root. Rien n'a été touché."
+        log_error "Inspecte-le :  $NIVUUS_MANIFEST"
+        return 1
+    fi
 
     if [ ! -f "$NIVUUS_MANIFEST" ]; then
         log_info "Aucune installation Nivuus tracée ; rien à faire."
@@ -290,6 +484,10 @@ cmd_uninstall() {
     nivuus_manifest_rollback
 
     if [ -n "$purge" ] && [ -z "${NIVUUS_DRY_RUN:-}" ]; then
+        # En mode système, aucun $HOME n'est touché -- ni lu. Le fait qu'un
+        # humain ait tapé « sudo » ne vaut pas consentement au nom des
+        # quatorze personnes qui ont un compte sur cette machine.
+        if [ -z "$SYSTEM" ]; then
         # On ne supprime QUE ce que Nivuus a créé, jamais un répertoire en bloc.
         if [ -f "$HOME/.zsh_local" ]; then
             log_info "~/.zsh_local n'a pas été créé par Nivuus : conservé. Supprime-le à la main si tu le souhaites."
@@ -311,6 +509,7 @@ cmd_uninstall() {
             # même prudence (rmdir échoue silencieusement si non vide) que
             # pour $NIVUUS_STATE_DIR et ses parents.
         fi
+        fi   # fin du bloc « artefacts d'exécution du $HOME » (mode utilisateur)
         # ~/.local, ~/.local/state et l'état Nivuus lui-même sont journalisés
         # en MKDIR par nivuus_manifest_begin, comme toute autre mutation :
         # rien n'est deviné ici. Mais nivuus_manifest_rollback (déjà exécuté
@@ -374,6 +573,11 @@ cmd_uninstall() {
 
     if [ -n "${NIVUUS_DRY_RUN:-}" ]; then
         log_info "Aucune modification effectuée (--dry-run)."
+    elif [ -n "$SYSTEM" ]; then
+        log_ok "Arbre système retiré ($(nivuus_system_tree)), rien d'autre n'a été touché."
+        log_info "Les activations par utilisateur subsistent -- elles appartiennent à chaque compte."
+        log_info "Leurs shells ne casseront pas (le bloc .zshrc est gardé). Chacun peut faire :"
+        log_info "  nivuus disable"
     else
         log_ok "Nivuus Shell désinstallé."
     fi
@@ -384,10 +588,13 @@ cmd_uninstall() {
 # paquets : l'activation est, et reste, un acte par utilisateur.
 cmd_enable() {
     local prefix="${NIVUUS_SHELL_DIR:-$NIVUUS_SRC_ROOT}" MINIMAL='' FORCE_MINIMAL='' FORCE_FULL=''
+    local ALL='' PRINT='' tree act_rc=0
     while [ $# -gt 0 ]; do
         case "$1" in
             --dry-run) export NIVUUS_DRY_RUN=1 ;;
             --yes|-y)  ASSUME_YES=1 ;;
+            --all)     ALL=1 ;;
+            --print)   PRINT=1 ;;
             --minimal)    FORCE_MINIMAL=1 ;;
             --no-minimal) FORCE_FULL=1 ;;
             # Options d'« install » sans objet ici : l'arbre est déjà posé,
@@ -406,6 +613,44 @@ cmd_enable() {
         esac
         shift
     done
+
+    # --- Activation MACHINE ------------------------------------------
+    # Le même code que « install --system --activate-all », sur un arbre
+    # déjà posé -- y compris un arbre de paquet. C'est ce qui fait de ce
+    # chantier le porteur unique de l'activation machine pour tous les
+    # canaux : le paquet AFFICHE la commande, --system la PORTE.
+    if [ -n "$ALL" ]; then
+        tree="$(nivuus_system_activation_tree)"
+        if [ -n "$PRINT" ]; then
+            _system_print_activation "$tree"
+            return 0
+        fi
+        NIVUUS_STATE_DIR="$(nivuus_system_state_dir)"; export NIVUUS_STATE_DIR
+        umask 022
+        NIVUUS_INSTALL_DIR_MODE="${NIVUUS_INSTALL_DIR_MODE:-755}";  export NIVUUS_INSTALL_DIR_MODE
+        NIVUUS_INSTALL_FILE_MODE="${NIVUUS_INSTALL_FILE_MODE:-644}"; export NIVUUS_INSTALL_FILE_MODE
+        NIVUUS_BACKUP_DIR_MODE="${NIVUUS_BACKUP_DIR_MODE:-700}";   export NIVUUS_BACKUP_DIR_MODE
+        NIVUUS_MANIFEST_MODE="${NIVUUS_MANIFEST_MODE:-644}";       export NIVUUS_MANIFEST_MODE
+        if nivuus_system_is_root; then
+            NIVUUS_INSTALL_OWNER=root:root; export NIVUUS_INSTALL_OWNER
+        fi
+        if [ -z "${NIVUUS_DRY_RUN:-}" ]; then
+            nivuus_system_require_root "activer Nivuus pour toute la machine" || return 1
+        fi
+        nivuus_manifest_begin system "$tree"
+        nivuus_manifest_inherit
+        if _system_write_activation "$tree"; then act_rc=0; else act_rc=$?; fi
+        if [ "$act_rc" -eq 1 ]; then
+            nivuus_manifest_abort
+            return 1
+        fi
+        if [ "$act_rc" -eq 2 ]; then
+            nivuus_manifest_abort
+            return 0
+        fi
+        nivuus_manifest_commit
+        return 0
+    fi
 
     if [ ! -r "$prefix/.zshrc" ]; then
         log_error "Aucun arbre Nivuus lisible dans $prefix."
@@ -426,6 +671,13 @@ cmd_enable() {
 
     nivuus_manifest_begin user "$prefix"
     nivuus_manifest_inherit
+    # Exactement la même journalisation qu'à l'installation, et pour la même
+    # raison : ~/.cache n'est créé par aucune étape, mais par le shell une
+    # fois la session démarrée. Sans cette ligne, une activation sur un arbre
+    # partagé (paquet ou --system) laisse un ~/.cache derrière elle qu'aucun
+    # « disable --purge » ne peut réclamer -- l'empreinte de réversibilité du
+    # domaine utilisateur le voit, et c'est ainsi qu'on l'a trouvé.
+    [ -d "$HOME/.cache" ] || nivuus_manifest_record MKDIR "$HOME/.cache" '-' '-'
     if ! nivuus_step_write_zshrc "$HOME/.zshrc" "$prefix" "$MINIMAL"; then
         log_error "Activation interrompue."
         nivuus_manifest_abort
@@ -452,16 +704,73 @@ cmd_enable() {
 # l'arbre : en mode paquet il appartient au gestionnaire, en mode source
 # c'est le travail d'« uninstall ».
 cmd_disable() {
-    local purge='' f name mkdir_levels level
+    local purge='' f name mkdir_levels level ALL='' dropin rc filtered kept header
     while [ $# -gt 0 ]; do
         case "$1" in
             --dry-run) export NIVUUS_DRY_RUN=1 ;;
             --yes|-y)  ASSUME_YES=1 ;;
             --purge)   purge=1 ;;
+            --all)     ALL=1 ;;
             *) log_error "Option inconnue : $1"; return 2 ;;
         esac
         shift
     done
+
+    # --- Désactivation MACHINE ---------------------------------------
+    # Ne rejoue QUE les deux entrées de l'activation machine (le drop-in et
+    # la ligne du rc global) et les répertoires que le drop-in a fait créer.
+    # Surtout PAS tout ce qui est sous /etc : /etc/skel/.zshrc appartient à
+    # --skel, pas à l'activation machine, et « disable --all » n'a aucune
+    # raison de le retirer.
+    if [ -n "$ALL" ]; then
+        NIVUUS_STATE_DIR="$(nivuus_system_state_dir)"; export NIVUUS_STATE_DIR
+        umask 022
+        if [ -z "${NIVUUS_DRY_RUN:-}" ]; then
+            nivuus_system_require_root "retirer l'activation machine" || return 1
+        fi
+        NIVUUS_MANIFEST="$NIVUUS_STATE_DIR/manifest.tsv"
+        NIVUUS_BACKUP_DIR="$NIVUUS_STATE_DIR/backups"
+        if [ ! -f "$NIVUUS_MANIFEST" ]; then
+            log_info "Aucune activation machine tracée ; rien à faire."
+            return 0
+        fi
+        confirm "Retirer l'activation machine (drop-in et ligne du rc global) ?" \
+            || { log_info "Annulé."; return 0; }
+        dropin="$(nivuus_system_dropin)"
+        rc="$(nivuus_system_global_rc)"
+        header="$(head -n1 "$NIVUUS_MANIFEST")"
+        filtered="$(mktemp)"; kept="$(mktemp)"
+        awk -F"$NIVUUS_TAB" -v d="$dropin" -v r="$rc" -v f="$filtered" -v k="$kept" '
+            /^#/ { next }
+            NF == 0 { next }
+            {
+                take = 0
+                if ($2 == d || $2 == r) take = 1
+                # Les niveaux que le drop-in a fait créer (ex: /etc/zsh/zshrc.d).
+                else if ($1 == "MKDIR" && index(d, $2 "/") == 1) take = 1
+                if (take) print > f; else print > k
+            }
+        ' "$NIVUUS_MANIFEST"
+        NIVUUS_ROLLBACK_SURVIVORS="$(mktemp)"
+        NIVUUS_KEPT_BACKUP_REFS="$(mktemp)"
+        nivuus_manifest_each nivuus_restore_entry "$filtered"
+        if [ -z "${NIVUUS_DRY_RUN:-}" ]; then
+            {
+                printf '%s\n' "$header"
+                cat "$kept"
+                [ -s "$NIVUUS_ROLLBACK_SURVIVORS" ] && cat "$NIVUUS_ROLLBACK_SURVIVORS"
+                true
+            } > "$NIVUUS_MANIFEST"
+        fi
+        rm -f "$filtered" "$kept" "$NIVUUS_ROLLBACK_SURVIVORS" "$NIVUUS_KEPT_BACKUP_REFS"
+        if [ -n "${NIVUUS_DRY_RUN:-}" ]; then
+            log_info "Aucune modification effectuée (--dry-run)."
+        else
+            log_ok "Activation machine retirée. L'arbre système n'a pas été touché."
+            log_info "Les activations par utilisateur, elles, subsistent : « nivuus disable »."
+        fi
+        return 0
+    fi
 
     : "${NIVUUS_STATE_DIR:=${XDG_STATE_HOME:-$HOME/.local/state}/nivuus}"
     NIVUUS_MANIFEST="$NIVUUS_STATE_DIR/manifest.tsv"
@@ -602,6 +911,35 @@ cmd_update() {
         return 0
     fi
 
+    # Arbre système : on répond ici, sans déléguer à un shell interactif --
+    # un conteneur, une CI ou un cron n'en ont pas, et le message est le même.
+    if [ "$(nivuus_origin "$dir")" = "system" ]; then
+        if ! nivuus_system_is_root; then
+            log_info "Nivuus est installé pour la machine ($dir)."
+            log_info "Les mises à jour sont l'affaire de l'administrateur :"
+            log_info "  sudo nivuus update"
+            log_info "Pour une installation personnelle avec mises à jour automatiques :"
+            log_info "  curl -fsSL https://raw.githubusercontent.com/maximeallanic/nivuus-shell/master/install.sh | sh"
+            return 0
+        fi
+        # Réinstallation VÉRIFIÉE : télécharge, vérifie l'empreinte
+        # (fail-closed) et la signature, extrait, puis délègue à
+        # « install --system », qui est idempotent et différentiel et qui
+        # passe par le manifeste. On n'emprunte JAMAIS le chemin destructif
+        # de l'auto-update (rm -rf puis cp -r dans l'arbre) : dans le
+        # domaine root, ce serait une écriture massive hors inventaire --
+        # exactement ce que le manifeste existe pour empêcher. Un test le
+        # vérifie par grep sur ce fichier.
+        if [ ! -f "$dir/install.sh" ]; then
+            log_error "$dir/install.sh est absent : cet arbre ne peut pas se mettre à jour lui-même."
+            log_error "Réinstalle depuis une release :  sudo nivuus install --system"
+            return 1
+        fi
+        log_info "Mise à jour de l'installation système : réinstallation depuis une release vérifiée."
+        NIVUUS_FORCE_BOOTSTRAP=1; export NIVUUS_FORCE_BOOTSTRAP
+        exec sh "$dir/install.sh" --system --non-interactive
+    fi
+
     state="$(nivuus_git_state "$dir")"
     if [ "$state" = "legacy" ]; then
         log_error "Les mises à jour sont bloquées par le dépôt git que l'ancien installeur a laissé dans $dir."
@@ -621,7 +959,7 @@ main() {
         uninstall) cmd_uninstall "$@" ;;
         migrate)   cmd_migrate "$@" ;;
         update)    cmd_update "$@" ;;
-        doctor)    exec "$NIVUUS_SRC_ROOT/bin/healthcheck" ;;
+        doctor)    exec "$NIVUUS_SRC_ROOT/bin/healthcheck" "$@" ;;
         help|--help|-h) usage ;;
         *) log_error "Sous-commande inconnue : $cmd"; usage >&2; return 2 ;;
     esac

@@ -62,6 +62,37 @@ nivuus_step_write_zshrc() {
     printf '%s\n' "$merged" | nivuus_write_file "$target"
 }
 
+# Le marqueur d'origine : lu par lib/origin.sh (côté sh) et par
+# config/20-autoupdate.zsh (côté zsh, relu en ligne). C'est lui qui fait
+# qu'un shell utilisateur sait qu'il tourne sur un arbre qu'il ne possède
+# pas -- et qu'il doit donc refuser de se mettre à jour tout seul.
+nivuus_step_write_origin() {
+    local dst="$1" origin="$2" channel="$3" version=''
+    [ -f "$dst/.version" ] && version="$(cat "$dst/.version" 2>/dev/null)"
+    printf 'origin=%s\nchannel=%s\nprefix=%s\nversion=%s\n' \
+        "$origin" "$channel" "$dst" "${version:-inconnue}" \
+        | nivuus_write_file "$dst/.nivuus-origin"
+}
+
+# Page de manuel : installée si elle existe dans les sources. On ne la
+# réinvente pas si elle manque, et on n'échoue pas pour autant.
+nivuus_step_install_man() {
+    local src="$1" dst="$2"
+    [ -f "$src/doc/nivuus.1" ] || return 0
+    nivuus_install_file "$src/doc/nivuus.1" "$dst"
+}
+
+# L'installeur, embarqué dans l'arbre système : c'est lui que
+# « sudo nivuus update » relance en mode amorçage pour télécharger et
+# VÉRIFIER une release. Sans lui, l'arbre ne saurait pas se mettre à jour
+# lui-même. Absent des sources (arbre de paquet) : on ne le réinvente pas et
+# on n'échoue pas pour autant.
+nivuus_step_install_updater() {
+    local src="$1" dst="$2"
+    [ -f "$src/install.sh" ] || return 0
+    nivuus_install_file "$src/install.sh" "$dst/install.sh"
+}
+
 nivuus_step_write_version() {
     local src="$1" dst="$2"
     [ -f "$src/.version" ] || return 0

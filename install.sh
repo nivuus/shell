@@ -41,7 +41,8 @@ Options :
   --no-backup         Accepté sans effet : le manifeste sauvegarde toujours.
   --verify-key EMPR   Épingle l'empreinte du trousseau de signature.
   --health-check      Lance « nivuus doctor » après l'installation.
-  --system            Indisponible dans cette version (sort en erreur).
+  --system            Installe pour toute la machine (exige root).
+                      Voir « nivuus install --help » et doc/INSTALL.md.
   --help              Affiche ceci.
 
 Désinstallation :
@@ -265,15 +266,10 @@ set -- "$@" --
 while [ "$1" != "--" ]; do
     arg="$1"; shift
     case "$arg" in
-        --system)
-            printf '%s\n' "L'installation système (--system) n'est pas encore disponible dans cette version." >&2
-            printf '%s\n' "Utilise l'installation utilisateur (sans --system) en attendant." >&2
-            exit 1
-            ;;
         --non-interactive) set -- "$@" --yes ;;
         --health-check)    RUN_DOCTOR=1 ;;
         --no-backup)       : ;;   # accepté, sans effet : le manifeste sauvegarde toujours
-        --dry-run|--minimal|--no-minimal|--with-deps|--yes|-y)
+        --dry-run|--minimal|--no-minimal|--with-deps|--yes|-y|--system)
             set -- "$@" "$arg" ;;
         --prefix)
             [ "$1" != "--" ] || { printf "L'option --prefix attend un chemin.\n" >&2; exit 2; }
@@ -291,7 +287,14 @@ while [ "$1" != "--" ]; do
 done
 shift    # retire la sentinelle
 
-ROOT="$(nivuus_local_root || true)"
+# $NIVUUS_FORCE_BOOTSTRAP : « sudo nivuus update » lance CE script depuis
+# l'arbre système. Sans cette variable, nivuus_local_root le trouverait et
+# réinstallerait la MÊME version -- une mise à jour qui ne met rien à jour.
+if [ -n "${NIVUUS_FORCE_BOOTSTRAP:-}" ]; then
+    ROOT=''
+else
+    ROOT="$(nivuus_local_root || true)"
+fi
 if [ -z "$ROOT" ]; then
     nivuus_bootstrap "$@"
     exit $?

@@ -244,14 +244,21 @@ When adding new config modules:
 `install.sh` supports two modes:
 
 - **User mode** (default): Installs to `~/.nivuus-shell`, modifies `~/.zshrc`
-- **System mode** (`--system`): Installs to `/etc/nivuus-shell`, creates `/etc/skel/.zshrc`.
-  Temporarily unavailable -- `--system` now exits with an error; this is a later phase.
+- **System mode** (`--system`): installs a shared tree in `/usr/local/share/nivuus-shell`,
+  links `/usr/local/bin/nivuus`, and inventories everything in `/var/lib/nivuus/manifest.tsv`
+  (`mode=system`). It writes to **no** `$HOME` and never runs `chsh`. `/etc/skel/.zshrc`
+  (`--skel`) and the machine-wide drop-in (`nivuus enable --all`) are opt-in.
+  `/etc/nivuus-shell` is only ever *detected*, as a legacy tree, and never written to.
 
 Since phase 5, `install.sh` is POSIX `sh` and **bimodal**: it delegates to a neighbouring
 `bin/nivuus` when there is one, and otherwise bootstraps (resolve version, download the release
 archive, verify its SHA-256 fail-closed, extract, delegate, clean up). See `doc/INSTALL.md`.
 
-**Backup system**: Always backs up to `~/.config/nivuus-shell-backup/` before modifying configs.
+**Backup system**: every mutation goes through `lib/manifest.sh`, which stores
+content-addressed backups in `~/.local/state/nivuus/backups/` (`/var/lib/nivuus/backups/`
+in system mode) before touching a file. The older `~/.config/nivuus-shell-backup/` is
+unrelated to installation -- it belongs to the runtime helpers of `config/13-system.zsh`
+and `config/20-autoupdate.zsh`.
 
 ## Testing Modifications
 

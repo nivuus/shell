@@ -2,11 +2,11 @@
   "_comment": "Source unique des cibles CI. Consommée par .github/workflows/matrix.yml (fromJSON) et par le tableau 'Plateformes testées' du README, dont la cohérence est vérifiée par tests/unit/test_readme_badges.bats.",
   "containers": [
     { "id": "ubuntu-2204", "image": "ubuntu:22.04",     "label": "Ubuntu 22.04" },
-    { "id": "ubuntu-2404", "image": "ubuntu:24.04",     "label": "Ubuntu 24.04" },
-    { "id": "debian-12",   "image": "debian:12",        "label": "Debian 12" },
-    { "id": "arch",        "image": "archlinux:latest", "label": "Arch Linux" },
-    { "id": "fedora-41",   "image": "fedora:41",        "label": "Fedora 41" },
-    { "id": "alpine-320",  "image": "alpine:3.20",      "label": "Alpine 3.20 (musl)" }
+    { "id": "ubuntu-2404", "image": "ubuntu:24.04",     "label": "Ubuntu 24.04", "system": true },
+    { "id": "debian-12",   "image": "debian:12",        "label": "Debian 12", "system": true },
+    { "id": "arch",        "image": "archlinux:latest", "label": "Arch Linux", "system": true },
+    { "id": "fedora-41",   "image": "fedora:41",        "label": "Fedora 41", "system": true },
+    { "id": "alpine-320",  "image": "alpine:3.20",      "label": "Alpine 3.20 (musl)", "system": true }
   ],
   "runners": [
     { "id": "ubuntu-runner", "runs-on": "ubuntu-latest", "label": "Ubuntu (GitHub runner)" },

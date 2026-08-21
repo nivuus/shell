@@ -48,7 +48,12 @@ if [[ "${NIVUUS_NO_COMPILE:-0}" != "1" ]]; then
         else
             origin=source
         fi
-        [[ "$origin" != "package" ]]
+        # Seul un arbre d'origine « source » nous appartient. « package »
+        # appartient au gestionnaire ; « system » appartient au manifeste de
+        # /var/lib/nivuus, qui ne connaît pas ces .zwc et ne les retirerait
+        # donc jamais -- et c'est un shell ROOT qui les écrirait, là où
+        # l'inscriptibilité ne protège personne.
+        [[ "$origin" == "source" ]]
     }
 
     if [[ -d "$NIVUUS_SHELL_DIR/config" ]] && _nivuus_cleanup_owns_tree; then
