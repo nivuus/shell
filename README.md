@@ -24,36 +24,35 @@
 
 ## 🚀 Quick Start
 
-### One-Line Installation
-
-Install Nivuus Shell with a single command:
+### Installation
 
 ```bash
-git clone https://github.com/maximeallanic/nivuus-shell.git /tmp/nivuus-shell && /tmp/nivuus-shell/install.sh --non-interactive && rm -rf /tmp/nivuus-shell && exec zsh
+curl -fsSL https://raw.githubusercontent.com/maximeallanic/nivuus-shell/master/install.sh | sh
 ```
 
-This will:
-1. Clone the repository to `/tmp/nivuus-shell`
-2. Run the installation automatically (no prompts)
-3. Clean up the temporary directory
-4. Restart your shell with Nivuus
+The one-liner downloads the latest release archive, **verifies its SHA-256 checksum**, installs
+into `~/.nivuus-shell` and adds a delimited block to your `~/.zshrc`. It leaves no git repository
+and no temporary directory behind, needs no `sudo`, and does not require `git`. `wget` works too
+(`wget -qO- <url> | sh`).
 
-### Manual Installation
+Other ways to install (manual download with checksum verification, development checkout,
+per-platform prerequisites, `--minimal`, `--dry-run`, `--prefix`, pinning a version): see
+**[doc/INSTALL.md](doc/INSTALL.md)**.
 
-#### User Installation (Recommended)
+### Uninstall
+
 ```bash
-git clone https://github.com/maximeallanic/nivuus-shell.git
-cd nivuus-shell
-./install.sh
+nivuus uninstall              # removes everything Nivuus wrote, restores your .zshrc
+nivuus uninstall --purge      # also removes Nivuus's internal state (manifest, backups)
+nivuus uninstall --dry-run    # shows what would be removed, changes nothing
 ```
 
-#### System-Wide Installation
-```bash
-git clone https://github.com/maximeallanic/nivuus-shell.git
-cd nivuus-shell
-sudo ./install.sh --system
-```
-> **Note:** `--system` is temporarily unavailable (it now exits with an error). Per-user installation above is unaffected.
+Every modified file is restored byte-for-byte from the backup recorded at install time.
+`~/.zsh_local` and `~/.zsh_history` are never deleted.
+
+If Nivuus was installed by the old one-liner (before v3.1), a git repository was created in
+`~/.nivuus-shell` and has been blocking updates ever since. `nivuus migrate` moves it aside
+(it is moved, never deleted, and the path is printed); `nivuus doctor` reports it.
 
 ### Vérifier le trousseau de signature à l'installation (optionnel)
 
@@ -61,7 +60,8 @@ Les mises à jour sont authentifiées par des clés publiques livrées avec
 l'installation. Tu peux épingler ce trousseau au moment de l'installer :
 
 ```bash
-./install.sh --verify-key <empreinte>
+curl -fsSL https://raw.githubusercontent.com/maximeallanic/nivuus-shell/master/install.sh \
+  | sh -s -- --verify-key <empreinte>
 ```
 
 L'empreinte est publiée dans [SECURITY.md](SECURITY.md). Si le trousseau
