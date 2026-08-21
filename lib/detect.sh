@@ -4,6 +4,7 @@
 : "${NIVUUS_DOCKERENV:=/.dockerenv}"
 : "${NIVUUS_CGROUP:=/proc/1/cgroup}"
 : "${NIVUUS_OS_RELEASE:=/etc/os-release}"
+: "${NIVUUS_PROC_VERSION:=/proc/version}"
 
 nivuus_detect_os() {
     case "$(uname -s)" in
@@ -23,9 +24,39 @@ nivuus_is_tty() {
     [ -t 0 ] && [ -t 1 ]
 }
 
+nivuus_is_wsl() {
+    [ -n "${WSL_DISTRO_NAME:-}" ] && return 0
+    [ -n "${WSL_INTEROP:-}" ] && return 0
+    grep -qi 'microsoft\|wsl' "$NIVUUS_PROC_VERSION" 2>/dev/null && return 0
+    return 1
+}
+
+nivuus_is_ssh() {
+    [ -n "${SSH_CONNECTION:-}" ] && return 0
+    [ -n "${SSH_CLIENT:-}" ] && return 0
+    [ -n "${SSH_TTY:-}" ] && return 0
+    return 1
+}
+
+# « Pas d'endroit où installer une police » plutôt que « pas d'écran » :
+# macOS et WSL ont toujours un terminal hôte, même sans $DISPLAY côté Unix.
+nivuus_is_headless() {
+    [ "$(nivuus_detect_os)" = "macos" ] && return 1
+    nivuus_is_wsl && return 1
+    [ -n "${DISPLAY:-}" ] && return 1
+    [ -n "${WAYLAND_DISPLAY:-}" ] && return 1
+    return 0
+}
+
+# Ordre délibéré : la surcharge explicite de l'utilisateur passe AVANT
+# toute heuristique, dans les deux sens.
 nivuus_should_minimal() {
+    [ -n "${NIVUUS_NO_MINIMAL:-}" ] && return 1
+    [ -n "${NIVUUS_MINIMAL:-}" ] && return 0
     nivuus_is_container && return 0
     nivuus_is_tty || return 0
+    nivuus_is_ssh && return 0
+    nivuus_is_headless && return 0
     return 1
 }
 
