@@ -39,8 +39,18 @@ make_release_api() {
 # Modifie l'archive APRÈS coup : SHA256SUMS reste authentique et cohérent
 # avec lui-même, mais ne décrit plus le contenu livré. C'est le scénario
 # « CDN empoisonné » et c'est le seul que l'empreinte seule peut attraper.
+#
+# L'archive falsifiée reste une archive PARFAITEMENT VALIDE : y ajouter des
+# octets en fin de fichier la rendrait illisible, et le client la
+# refuserait alors à l'extraction -- ce qui ferait passer les tests
+# d'invariant sans que la vérification d'empreinte y soit pour quoi que ce
+# soit. Un attaquant, lui, sert une archive qui s'extrait très bien.
 tamper_release() {
-    local outdir="$1" version="$2" archive
+    local outdir="$1" version="$2" archive work
     archive="$outdir/v$version/nivuus-shell-v${version}.tar.gz"
-    printf 'charge utile malveillante\n' >> "$archive"
+    work="$(mktemp -d)"
+    tar -xzf "$archive" -C "$work"
+    printf 'charge utile malveillante\n' > "$work/PAYLOAD"
+    tar -czf "$archive" -C "$work" .
+    rm -rf "$work"
 }
