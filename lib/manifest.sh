@@ -417,6 +417,41 @@ nivuus_write_file() {
     return $result
 }
 
+# Un lien symbolique est une mutation comme une autre : journalisée avant
+# d'exister, restaurée par la même règle que les autres. C'est la PREMIÈRE
+# du projet (cf. le commentaire de tests/helpers/fingerprint.bash) : sans
+# journal, uninstall ne la retirerait jamais, et l'empreinte -- qui voit
+# désormais les liens -- le dirait.
+nivuus_install_symlink() {
+    local target="$1" link="$2" backup='-' existed=0
+
+    # Le chemin peut déjà porter un script écrit à la main par
+    # l'administrateur : on ne l'écrase pas en silence, on le sauvegarde.
+    if [ -e "$link" ] && [ ! -L "$link" ]; then
+        existed=1
+    fi
+
+    if [ -n "${NIVUUS_DRY_RUN:-}" ]; then
+        log_dry "lierait $link -> $target"
+        nivuus_manifest_record SYMLINK "$link" "$target" '-'
+        return 0
+    fi
+
+    if [ "$existed" -eq 1 ]; then
+        backup="$(nivuus_store_backup "$link")" || return 1
+        rm -f "$link" || return 1
+        nivuus_manifest_record MODIFY "$link" '-' "$backup" || return 1
+    fi
+
+    nivuus_mkdir_p "$(dirname "$link")"
+    ln -sfn "$target" "$link" || return 1
+    if [ -n "${NIVUUS_INSTALL_OWNER:-}" ]; then
+        chown -h "$NIVUUS_INSTALL_OWNER" "$link" 2>/dev/null || :
+    fi
+    # La CIBLE tient lieu de hash : c'est tout ce qu'un lien transporte.
+    nivuus_manifest_record SYMLINK "$link" "$target" '-'
+}
+
 # Trace une entrée que le rollback n'a PAS pu appliquer (fichier divergé,
 # sauvegarde manquante...) pour que l'appelant (bin/nivuus) puisse :
 #   - garder le manifeste (le rejouer plus tard reste possible) plutôt que
@@ -540,6 +575,25 @@ nivuus_restore_entry() {
                 # correspond de toute façon plus au fichier restauré.
                 touch "$path"
                 [ -f "$path.zwc" ] && ! _nivuus_zwc_preserved "$path.zwc" && rm -f "$path.zwc"
+            fi
+            ;;
+        SYMLINK)
+            if [ ! -L "$path" ]; then
+                # Absent, ou remplacé par un fichier ordinaire : dans les
+                # deux cas, ce n'est plus notre lien. On ne touche à rien.
+                [ -e "$path" ] && log_warn "$path n'est plus un lien : laissé en place."
+                return 0
+            fi
+            current="$(readlink "$path")"
+            if [ "$current" != "$hash" ]; then
+                log_warn "$path pointe désormais vers $current (au lieu de $hash) : laissé en place."
+                _nivuus_record_survivor SYMLINK "$path" "$hash" "$ref"
+                return 0
+            fi
+            if [ -n "${NIVUUS_DRY_RUN:-}" ]; then
+                log_dry "retirerait le lien $path"
+            else
+                rm -f "$path"
             fi
             ;;
         MKDIR)
