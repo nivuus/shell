@@ -27,14 +27,14 @@ jobs:
 
       - name: Run smoke tests
         run: |
-          bats tests/unit/test_smoke.bats
+          ./tests/ci/bats-run.sh tests/unit/test_smoke.bats
 
       - name: Run unit tests
         run: |
-          bats tests/unit/
+          ./tests/ci/bats-run.sh tests/unit/
 
       - name: Performance (startup budget is enforced, not observed)
-        run: bats tests/performance/
+        run: ./tests/ci/bats-run.sh tests/performance/
 
       - name: Test count must never regress
         run: ./bin/test-count --check
@@ -64,20 +64,20 @@ jobs:
 
       - name: Library unit tests
         run: |
-          bats tests/unit/test_lib_*.bats
+          ./tests/ci/bats-run.sh tests/unit/test_lib_*.bats
 
       - name: Install / uninstall E2E
         run: |
-          bats tests/e2e/test_nivuus_cli.bats tests/e2e/test_install_sh_compat.bats
+          ./tests/ci/bats-run.sh tests/e2e/test_nivuus_cli.bats tests/e2e/test_install_sh_compat.bats
 
       - name: Platform, deps and minimal-mode E2E
         run: |
-          bats tests/e2e/test_platform.bats tests/e2e/test_with_deps.bats tests/e2e/test_minimal_mode.bats
+          ./tests/ci/bats-run.sh tests/e2e/test_platform.bats tests/e2e/test_with_deps.bats tests/e2e/test_minimal_mode.bats
 
       - name: Signature verification suite
         run: |
           rm -f config/*.zwc     # un .zwc périmé masquerait le module
-          bats tests/unit/test_keys_repo.bats \
+          ./tests/ci/bats-run.sh tests/unit/test_keys_repo.bats \
                tests/unit/test_autoupdate_sha256.bats \
                tests/unit/test_release_signature.bats \
                tests/unit/test_autoupdate_download.bats \
@@ -89,7 +89,7 @@ jobs:
       - name: Signature E2E (forged release must be refused)
         run: |
           rm -f config/*.zwc
-          bats tests/e2e/test_update_signature.bats \
+          ./tests/ci/bats-run.sh tests/e2e/test_update_signature.bats \
                tests/e2e/test_install_keys.bats \
                tests/e2e/test_verify_key.bats
 
@@ -106,7 +106,7 @@ jobs:
 
       - name: Reversibility (HOME must be bit-identical)
         run: |
-          bats tests/e2e/test_reversibility.bats
+          ./tests/ci/bats-run.sh tests/e2e/test_reversibility.bats
 
   e2e-macos:
     name: Installation E2E (macOS)
@@ -120,23 +120,23 @@ jobs:
         uses: ./.github/actions/setup-tests
 
       - name: Library unit tests
-        run: bats tests/unit/test_lib_*.bats tests/unit/test_helpers_portable.bats
+        run: ./tests/ci/bats-run.sh tests/unit/test_lib_*.bats tests/unit/test_helpers_portable.bats
 
       - name: Install / uninstall E2E
-        run: bats tests/e2e/test_nivuus_cli.bats tests/e2e/test_install_sh_compat.bats tests/e2e/test_minimal_mode.bats
+        run: ./tests/ci/bats-run.sh tests/e2e/test_nivuus_cli.bats tests/e2e/test_install_sh_compat.bats tests/e2e/test_minimal_mode.bats
 
       - name: Signature suites (macOS = le cas « shasum, pas sha256sum »)
         run: |
           rm -f config/*.zwc
-          bats tests/unit/test_autoupdate_sha256.bats \
+          ./tests/ci/bats-run.sh tests/unit/test_autoupdate_sha256.bats \
                tests/unit/test_release_signature.bats \
                tests/unit/test_autoupdate_download.bats \
                tests/unit/test_autoupdate_hard_refusal.bats \
                tests/unit/test_lib_keys.bats
-          bats tests/e2e/test_update_signature.bats tests/e2e/test_install_keys.bats
+          ./tests/ci/bats-run.sh tests/e2e/test_update_signature.bats tests/e2e/test_install_keys.bats
 
       - name: Reversibility (HOME must be bit-identical)
-        run: bats tests/e2e/test_reversibility.bats
+        run: ./tests/ci/bats-run.sh tests/e2e/test_reversibility.bats
 
   e2e-alpine:
     name: Installation E2E (Alpine / musl, no GNU coreutils)
@@ -161,10 +161,10 @@ jobs:
         uses: ./.github/actions/setup-tests
 
       - name: Library unit tests
-        run: bats tests/unit/test_lib_*.bats tests/unit/test_helpers_portable.bats
+        run: ./tests/ci/bats-run.sh tests/unit/test_lib_*.bats tests/unit/test_helpers_portable.bats
 
       - name: Install / uninstall E2E
-        run: bats tests/e2e/test_nivuus_cli.bats tests/e2e/test_minimal_mode.bats
+        run: ./tests/ci/bats-run.sh tests/e2e/test_nivuus_cli.bats tests/e2e/test_minimal_mode.bats
 
       - name: No verification tool at all is refused (Alpine's real state)
         run: |
@@ -172,7 +172,7 @@ jobs:
           # openssl NI ssh-keygen. C'est donc ici, et nulle part ailleurs,
           # que le code de retour 2 (« aucun outil ») se joue en vrai.
           rm -f config/*.zwc
-          bats tests/unit/test_lib_steps_verify_tools.bats
+          ./tests/ci/bats-run.sh tests/unit/test_lib_steps_verify_tools.bats
 
       - name: Signature suites (needs the tools it verifies)
         run: |
@@ -181,14 +181,14 @@ jobs:
           # ici -- l'étape ci-dessus a déjà couvert l'Alpine nue.
           ./tests/ci/install-verify-tools.sh
           rm -f config/*.zwc
-          bats tests/unit/test_release_signature.bats \
+          ./tests/ci/bats-run.sh tests/unit/test_release_signature.bats \
                tests/unit/test_autoupdate_sha256.bats \
                tests/unit/test_autoupdate_download.bats \
                tests/unit/test_lib_keys.bats \
                tests/e2e/test_update_signature.bats
 
       - name: Reversibility (HOME must be bit-identical)
-        run: bats tests/e2e/test_reversibility.bats
+        run: ./tests/ci/bats-run.sh tests/e2e/test_reversibility.bats
 
   lint:
     name: Syntax Validation
