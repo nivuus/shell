@@ -204,3 +204,80 @@ readme_env_vars() {
     grep -qiE 'architecture|module' "$ROOT/doc/CLAUDE.md"
     grep -qF 'doc/CLAUDE.md' "$README"
 }
+
+# Le premier lexème de chaque ligne de commande des blocs ```bash du README.
+readme_commands() {
+    awk '
+        /^```bash/  { inblock = 1; next }
+        /^```/      { inblock = 0; next }
+        !inblock    { next }
+        /^[[:space:]]*#/ { next }
+        /^[[:space:]]*$/ { next }
+        { sub(/^[[:space:]]+/, ""); sub(/^\$ /, ""); print $1 }
+    ' "$README" | LC_ALL=C sort -u
+}
+
+# Tout ce qu'un shell Nivuus installé sait exécuter.
+command_exists_in_nivuus() {
+    cmd="$1"
+    # 1. sous-commande de nivuus -- traitée par l'appelant
+    # 2. exécutable de bin/
+    [ -x "$ROOT/bin/$cmd" ] && return 0
+    # 3. fonction zsh d'un module
+    grep -qhE "^[[:space:]]*(function[[:space:]]+)?${cmd}\(\)" "$ROOT"/config/*.zsh && return 0
+    # 4. alias d'un module. Comparaison LITTÉRALE : « ?? » et « ?git » sont
+    #    des alias réels, et les passer à une ERE en ferait des quantifieurs.
+    grep -qhF -e "alias '${cmd}'=" -e "alias ${cmd}=" "$ROOT"/config/*.zsh && return 0
+    # 5. script exécutable du dépôt cité par son chemin (« ./dev.sh »)
+    case "$cmd" in
+        ./*) [ -x "$ROOT/${cmd#./}" ] && return 0 ;;
+    esac
+    return 1
+}
+
+@test "REGLE 5.1: toute commande citée dans un bloc bash du README existe" {
+    rm -f "$ROOT"/config/*.zwc
+    # Outils externes déclarés en prérequis ou builtins du shell : ils ne
+    # sont pas de notre ressort, mais la liste est CLOSE -- on ne peut pas
+    # y ajouter un outil sans le déclarer ici, donc sans y penser.
+    # az et gcloud sont des CLI de fournisseurs cloud : ils sont cités pour
+    # montrer ce que le prompt affiche, pas fournis par Nivuus. Déclarés ici
+    # sciemment, comme l'exige la clôture de la liste.
+    externes="curl wget sh zsh bash git exec cd echo export source print
+              nivuus ./install.sh sudo brew apt-get pacman dnf apk npx
+              az gcloud"
+    inconnues=""
+    for c in $(readme_commands); do
+        case " $externes " in *" $c "*) continue ;; esac
+        command_exists_in_nivuus "$c" || inconnues="$inconnues $c"
+    done
+    [ -z "$inconnues" ] || {
+        echo "commandes citées par le README et introuvables :$inconnues"; false; }
+}
+
+@test "REGLE 5.1: toute sous-commande « nivuus X » du README figure dans nivuus help" {
+    aide="$("$ROOT/bin/nivuus" help)"
+    manquantes=""
+    for sub in $(grep -ohE '\bnivuus [a-z-]+' "$README" | awk '{print $2}' | LC_ALL=C sort -u); do
+        case "$sub" in shell) continue ;; esac   # « nivuus shell » dans une phrase
+        printf '%s\n' "$aide" | grep -qE "nivuus +$sub" || manquantes="$manquantes $sub"
+    done
+    [ -z "$manquantes" ] || { echo "sous-commandes inexistantes :$manquantes"; false; }
+}
+
+@test "REGLE 5.1: la règle voit au moins dix commandes (elle n'est pas inerte)" {
+    n="$(readme_commands | wc -l)"
+    [ "$n" -ge 10 ] || { echo "seulement $n commandes extraites : l'awk est cassé"; false; }
+}
+
+@test "le README promeut les sous-commandes réelles, pas les alias legacy" {
+    # healthcheck / nivuus-version / nivuus-update existent encore comme
+    # alias de compatibilité, mais la surface publique est « nivuus X ».
+    # Les promouvoir, c'est enseigner ce qu'on prévoit de retirer.
+    for legacy in 'nivuus-version' 'nivuus-update'; do
+        run grep -nF "$legacy" "$README"
+        [ "$status" -ne 0 ] || { echo "alias legacy promu : $output"; false; }
+    done
+    grep -q 'nivuus doctor' "$README"
+    grep -q 'nivuus update' "$README"
+}

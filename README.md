@@ -168,7 +168,7 @@ git push
 ...                     # Go up two directories
 ....                    # Go up three directories
 d                       # List recent directories
-1-5                     # Jump to directory in stack
+# 1..9                  Jump to the Nth directory in the stack
 ```
 
 ### Git Shortcuts
@@ -261,13 +261,11 @@ weather Paris           # Get weather forecast
 ### System Monitoring
 
 ```bash
-healthcheck             # Complete system diagnostics
+nivuus doctor           # Diagnose an installation that misbehaves
 benchmark               # Performance testing
 cleanup                 # Clean cache and temp files
 zsh_info                # Show shell configuration
-nivuus-version          # Show current version
-nivuus-version --check  # Check for updates
-nivuus-update           # Install latest update
+nivuus update           # Check for a new release and install it
 ```
 
 ## 🎨 Theme & Prompt
@@ -383,11 +381,11 @@ Nivuus keeps two kinds of backup, and they are not interchangeable:
 
 Nivuus Shell includes an automatic update system that checks for new releases weekly and installs them automatically. Each release is **signed**; an update whose signature does not verify against a key shipped with your installation is refused outright.
 
-### Check Current Version
+### Check and update
 
 ```bash
-nivuus-version              # Show current version
-nivuus-version --check      # Check for available updates
+nivuus update               # Check for a new release and install it, signature verified
+nivuus doctor               # Diagnose an installation that misbehaves
 ```
 
 ### Automatic Updates
@@ -404,7 +402,7 @@ nivuus-version --check      # Check for available updates
 ### Manual Update
 
 ```bash
-nivuus-update               # Check for and install updates manually
+nivuus update               # Check for and install updates manually
 ```
 
 The update system will:
@@ -522,6 +520,9 @@ MIT License - see LICENSE file for details
 - **Gemini AI** - [Google](https://ai.google.dev/)
 
 ## 🐛 Troubleshooting
+
+The answer to "it does not work" is `nivuus doctor`: it checks the tree, the
+`~/.zshrc` block, the manifest and the signing keyring, and prints what to run.
 
 ### Shell loads slowly
 
