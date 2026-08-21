@@ -46,6 +46,13 @@ jobs:
         with:
           fetch-depth: 0  # Fetch all history for changelog generation
 
+      - name: GARDE 4 — the demo must not be a generation behind
+        # Aucune mineure ne sort avec une démo périmée (spec § 3.4, garde 4).
+        # Les patchs en sont exemptés : le coût serait constant pour un
+        # bénéfice nul. Toute la logique est dans le script, rejouable en
+        # local -- même modèle que tests/ci/run-target.sh.
+        run: ./tools/demo/check-freshness.sh "${{ inputs.bump_type }}"
+
       - name: Calculate new version
         id: version
         run: |

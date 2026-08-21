@@ -266,3 +266,57 @@ demo_recorded() { [ -f "$ASSETS/demo.stamp" ]; }
         [ -z "$illegitimes" ] || { echo "donnée suspecte dans le cast : $illegitimes"; false; }
     fi
 }
+
+# Un tampon synthétique : la garde 4 ne lit qu'un champ, « version ». Le
+# fabriquer plutôt que de patcher un vrai tampon rend ces tests exécutables
+# AVANT le premier enregistrement -- une garde qui n'est testable qu'une fois
+# la démo tournée serait une garde qu'on découvre cassée le jour de la release.
+fake_stamp() {
+    printf 'scenario_sha256=x\ncast_sha256=x\nartefact=docs/assets/demo.svg\nartefact_sha256=x\nversion=%s\nformat=svg\n' \
+        "$1" > "$2"
+}
+
+@test "check-freshness.sh existe, est exécutable et POSIX" {
+    [ -x "$DEMO/check-freshness.sh" ]
+    run sh -n "$DEMO/check-freshness.sh"
+    [ "$status" -eq 0 ]
+}
+
+@test "GARDE 4: une démo à jour passe" {
+    tmp="$BATS_TEST_TMPDIR/demo.stamp"
+    fake_stamp "$(cat "$ROOT/.version")" "$tmp"
+    run env NIVUUS_DEMO_STAMP="$tmp" "$DEMO/check-freshness.sh" minor
+    [ "$status" -eq 0 ] || { echo "$output"; false; }
+}
+
+@test "GARDE 4: une démo en retard d'une mineure fait échouer une release mineure" {
+    tmp="$BATS_TEST_TMPDIR/demo.stamp"
+    fake_stamp "1.0.0" "$tmp"
+    run env NIVUUS_DEMO_STAMP="$tmp" "$DEMO/check-freshness.sh" minor
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"record.sh"* ]]   # le refus dit quoi faire
+}
+
+@test "GARDE 4: une démo en retard NE bloque PAS un patch" {
+    # Le coût serait constant pour un bénéfice nul : une correction de bug
+    # ne change pas ce que la démo montre.
+    tmp="$BATS_TEST_TMPDIR/demo.stamp"
+    fake_stamp "1.0.0" "$tmp"
+    run env NIVUUS_DEMO_STAMP="$tmp" "$DEMO/check-freshness.sh" patch
+    [ "$status" -eq 0 ]
+}
+
+@test "GARDE 4: une release mineure sans démo du tout est refusée" {
+    # Tant qu'aucun enregistrement n'existe, les gardes 3 se taisent. La
+    # garde 4, elle, ne se tait pas : sortir une mineure SANS démo est un
+    # choix, il doit être vu au moment de la release.
+    run env NIVUUS_DEMO_STAMP="$BATS_TEST_TMPDIR/absent.stamp" \
+        "$DEMO/check-freshness.sh" minor
+    [ "$status" -ne 0 ]
+}
+
+@test "GARDE 4: la release appelle réellement la garde" {
+    # Sans cette ligne, le script existerait sans jamais tourner : le mode
+    # de défaillance classique d'un garde-fou écrit et oublié.
+    grep -qF 'tools/demo/check-freshness.sh' "$ROOT/.github/workflows/release.yml"
+}
