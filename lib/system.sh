@@ -134,6 +134,43 @@ fi
 ZSH_DROPIN_EOF
 }
 
+# Un chemin qui vit dans le $HOME de quelqu'un ne peut pas servir d'arbre
+# PARTAGÉ. Le cas n'est pas théorique : un administrateur qui utilise Nivuus
+# a NIVUUS_SHELL_DIR exporté dans sa session, et « sudo nivuus enable --all »
+# poserait alors, pour TOUS les comptes de la machine, un drop-in pointant
+# vers le ~/.nivuus-shell d'une seule personne -- un arbre que les autres ne
+# peuvent pas lire, et qui disparaît le jour où son propriétaire s'en va.
+nivuus_system_path_in_home() {
+    case "$1" in
+        /home/*|/Users/*) return 0 ;;
+    esac
+    if [ -n "${HOME:-}" ] && [ "$HOME" != "/" ]; then
+        case "$1" in
+            "$HOME"/*) return 0 ;;
+        esac
+    fi
+    return 1
+}
+
+# L'arbre qu'une activation MACHINE a le droit de désigner.
+#
+# NIVUUS_SHELL_DIR fait foi -- c'est ainsi qu'un arbre de paquet
+# (/usr/share/nivuus-shell) est activé pour toute la machine -- mais
+# SEULEMENT s'il est partagé. Sinon on retombe sur l'arbre système, en le
+# disant.
+nivuus_system_activation_tree() {
+    _cand="${NIVUUS_SHELL_DIR:-}"
+    if [ -n "$_cand" ] && ! nivuus_system_path_in_home "$_cand"; then
+        printf '%s\n' "$_cand"
+        return 0
+    fi
+    if [ -n "$_cand" ]; then
+        log_warn "$_cand vit dans un \$HOME : une activation machine ne peut pas y pointer."
+        log_warn "L'arbre système est désigné à la place : $(nivuus_system_tree)"
+    fi
+    printf '%s\n' "$(nivuus_system_tree)"
+}
+
 # UNE ligne, et une seule, dans le fichier de la distribution.
 # /etc/zsh/zshrc est un conffile dpkg : retirer une ligne CONNUE est
 # réversible à l'octet près, réécrire le conffile ne l'est pas. Le contenu

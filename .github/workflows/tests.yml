@@ -219,6 +219,8 @@ jobs:
             tests/integration/test_install_system.bats
           grep -q "INVARIANT: aucune ligne CHSH" tests/integration/test_install_system.bats
           grep -q "INVARIANT: retrait bit-exact" tests/integration/test_uninstall_system.bats
+          grep -q "INVARIANT n° 3" tests/ci/run-system-target.sh
+          grep -q "INVARIANT: jamais de double source" tests/e2e/test_system_user_override.bats
 
   # Niveau 2 sur macOS : étroit, car facturé x10. Première exécution réelle.
   e2e-macos:

@@ -159,6 +159,20 @@ as_user bob "zsh -i -c 'print -r -- \$NIVUUS_ACTIVATED_BY'" | grep -qx system
 # la défaire à l'étape 13, conffile de la distribution compris. La retirer
 # ici affaiblirait l'invariant n° 4 en lui épargnant le cas le plus dur.
 
+echo "== Étape 12 : INVARIANT n° 3 -- installation utilisateur par-dessus, un seul source =="
+# Release servie par file:// : la preuve ne dépend d'aucun réseau.
+. ./tests/helpers/release.bash
+make_release "$SRC" "$WORK/rel" 9.9.9
+make_release_api "$WORK/api" fake/nivuus 9.9.9
+chmod -R a+rX "$WORK"
+as_user bob "NIVUUS_RELEASE_BASE_URL=file://$WORK/rel NIVUUS_GITHUB_API=file://$WORK/api \
+             NIVUUS_VERSION=9.9.9 sh $SRC/install.sh --non-interactive"
+as_user bob "zsh -i -c 'print -r -- \$NIVUUS_SHELL_DIR'" | grep -q "$BOB/.nivuus-shell"
+# Le compteur de réentrance : un seul chargement, malgré le drop-in machine.
+as_user bob "zsh -i -c 'print -r -- \$_nivuus_load_count'" | grep -qx 1
+# Et bob redevient bit-identique : son installation personnelle se retire.
+as_user bob "\$HOME/.nivuus-shell/bin/nivuus uninstall --yes --purge"
+
 echo "== Étape 13 : INVARIANT n° 4 -- retrait bit-exact de /etc, /usr/local et /var/lib =="
 as_user alice "nivuus enable --yes"      # une activation SURVIT au retrait : c'est voulu
 fp "$ALICE" alice.pre13

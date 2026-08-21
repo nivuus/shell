@@ -128,3 +128,16 @@ teardown() { rm -rf "$TMP"; }
     [ "$status" -ne 0 ]
     [ ! -f "$TMP/etc/zsh/zshrc.d/10-nivuus.zsh" ]
 }
+
+@test "enable --all refuse de désigner l'arbre PERSONNEL de l'administrateur" {
+    # Le cas réel : un administrateur qui utilise Nivuus a NIVUUS_SHELL_DIR
+    # exporté dans sa session. Sans garde, « sudo nivuus enable --all »
+    # activerait le ~/.nivuus-shell d'une seule personne pour TOUS les
+    # comptes de la machine.
+    "$ROOT/bin/nivuus" install --system --yes
+    mkdir -p "$HOME/.nivuus-shell"
+    run env NIVUUS_SHELL_DIR="$HOME/.nivuus-shell" "$ROOT/bin/nivuus" enable --all --print
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"$TMP/usr/local/share/nivuus-shell"* ]]
+    [[ "$output" != *"NIVUUS_SHELL_DIR=\"$HOME/.nivuus-shell\""* ]]
+}
