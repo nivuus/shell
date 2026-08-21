@@ -2,7 +2,36 @@
 # bin/nivuus — point d'entrée unique de gestion de Nivuus Shell.
 set -euo pipefail
 
-NIVUUS_SRC_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Racine de l'arbre Nivuus, liens symboliques résolus.
+#
+# Sans cette résolution, un /usr/bin/nivuus -> /usr/share/nivuus-shell/bin/nivuus
+# donnerait BASH_SOURCE=/usr/bin/nivuus, donc une racine /usr, et le premier
+# « . $NIVUUS_SRC_ROOT/lib/log.sh » échouerait. C'est exactement ce que
+# produisent bin.install_symlink (Homebrew) et le ln -s usuel d'un PKGBUILD.
+#
+# readlink -f est écarté : absent des BSD et de macOS avant coreutils. La
+# boucle est BORNÉE (32 sauts) pour terminer même sur un cycle de liens.
+_nivuus_self="${BASH_SOURCE[0]}"
+_nivuus_hops=0
+while [ -L "$_nivuus_self" ] && [ "$_nivuus_hops" -lt 32 ]; do
+    _nivuus_link="$(ls -ld -- "$_nivuus_self" | sed 's/.*-> //')"
+    case "$_nivuus_link" in
+        /*) _nivuus_self="$_nivuus_link" ;;
+        # Un lien relatif n'a de sens que depuis le répertoire du lien.
+        *)  _nivuus_self="$(dirname -- "$_nivuus_self")/$_nivuus_link" ;;
+    esac
+    _nivuus_hops=$((_nivuus_hops + 1))
+done
+NIVUUS_SRC_ROOT="$(cd -- "$(dirname -- "$_nivuus_self")/.." && pwd)"
+unset _nivuus_self _nivuus_link _nivuus_hops
+
+# Crochet de test : imprime la racine calculée et sort, avant tout source.
+# Aucune valeur en production ; il n'apparaît pas dans usage().
+if [ "${NIVUUS_PRINT_SRC_ROOT:-}" = "1" ] && [ "${1:-}" = "__srcroot" ]; then
+    printf '%s\n' "$NIVUUS_SRC_ROOT"
+    exit 0
+fi
+
 # shellcheck source=/dev/null
 . "$NIVUUS_SRC_ROOT/lib/log.sh"
 . "$NIVUUS_SRC_ROOT/lib/detect.sh"
