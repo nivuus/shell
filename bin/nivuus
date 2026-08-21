@@ -212,7 +212,10 @@ cmd_install() {
         # La recommandation du canal de paquets parle AVANT le refus de
         # privilège : un administrateur sans sudo sous la main doit quand
         # même apprendre que le .deb existe.
-        nivuus_system_recommend_package || { log_info "Annulé. Rien n'a été écrit."; return 0; }
+        if nivuus_system_package_notice; then
+            confirm "Continuer avec --system quand même ?" \
+                || { log_info "Annulé. Rien n'a été écrit."; return 0; }
+        fi
 
         # --dry-run n'exige rien : on doit pouvoir auditer avant d'élever.
         if [ -z "${NIVUUS_DRY_RUN:-}" ]; then

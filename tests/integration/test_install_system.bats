@@ -129,3 +129,12 @@ install_system() { "$ROOT/bin/nivuus" install --system --yes "$@"; }
     [ ! -e "$TMP/usr/local/share/nivuus-shell" ]
     [ ! -e "$TMP/var/lib/nivuus" ]
 }
+
+@test "sur Debian, l'installation système informe du .deb avant d'écrire" {
+    printf 'ID=debian\n' > "$TMP/os-release"
+    unset NIVUUS_SYSTEM_ASSUME_NO_PACKAGE
+    NIVUUS_OS_RELEASE="$TMP/os-release" run install_system
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"apt install"* ]]
+    [ -d "$TMP/usr/local/share/nivuus-shell" ]      # informé, PAS bloqué
+}

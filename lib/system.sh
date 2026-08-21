@@ -79,9 +79,34 @@ nivuus_system_legacy_tree() {
 # purge transactionnelle). On le dit avant d'écrire. Ailleurs -- Fedora,
 # RHEL, openSUSE, Alpine, conteneurs -- il n'y a rien à recommander : c'est
 # exactement la raison d'être de ce mode.
-# TALON — remplacé par la Task 8 (« recommander le .deb là où il existe »).
-# Ne dit rien, n'empêche rien : le comportement complet arrive avec son test.
-nivuus_system_recommend_package() { return 0; }
+# Sur Debian et Ubuntu, « apt install ./nivuus-shell_*.deb » couvre 90 % de
+# ce que --system apporte, et le couvre MIEUX (inventaire dpkg, dpkg -V,
+# purge transactionnelle). On le dit -- une fois, avant toute écriture.
+#
+# Ce n'est PAS un refus : un administrateur peut légitimement préférer un
+# arbre sous /usr/local qu'aucune mise à jour de distribution ne touchera.
+# Là où aucun canal n'existe (Fedora, RHEL, openSUSE, Alpine, images de
+# base), on se tait : c'est le périmètre propre de ce mode.
+#
+# Sort en 0 quand il y a quelque chose à dire, en 1 sinon -- l'appelant en
+# fait une question.
+nivuus_system_package_notice() {
+    [ -n "${NIVUUS_SYSTEM_ASSUME_NO_PACKAGE:-}" ] && return 1
+    _chan="$(nivuus_system_package_channel)"
+    [ -n "$_chan" ] || return 1
+    case "$_chan" in
+        deb)
+            log_info "Nivuus est disponible en paquet sur cette distribution :"
+            log_info "    apt install ./nivuus-shell_<version>_all.deb      (release GitHub)"
+            log_info "Le paquet est inventorié par dpkg -- vérifiable par « dpkg -V », retiré par"
+            log_info "« apt purge » -- ce que --system doit refaire lui-même dans /var/lib/nivuus."
+            log_info "--system garde deux avantages : un arbre sous /usr/local qu'aucune mise à jour"
+            log_info "de distribution ne touche, et les activations machine (--skel, --activate-all)."
+            return 0
+            ;;
+    esac
+    return 1
+}
 
 # SELinux : rétablit l'étiquette que la politique prescrit DÉJÀ pour ces
 # chemins. Ne crée ni ne supprime rien, donc rien à journaliser -- le
