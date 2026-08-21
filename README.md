@@ -2,11 +2,13 @@
 
 > A modern, fast, AI-powered ZSH shell with a configurable theme/prompt and intelligent features
 
-![Version](https://img.shields.io/github/v/release/maximeallanic/nivuus-shell?label=version)
+[![Version](https://img.shields.io/github/v/release/maximeallanic/nivuus-shell?label=version)](https://github.com/maximeallanic/nivuus-shell/releases)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Shell](https://img.shields.io/badge/shell-ZSH-green.svg)
-![Performance](https://img.shields.io/badge/startup-<100ms-brightgreen.svg)
-![Tests](https://github.com/maximeallanic/nivuus-shell/workflows/Tests/badge.svg)
+![Startup](https://img.shields.io/badge/startup-<300ms-brightgreen.svg)
+[![Tests](https://github.com/maximeallanic/nivuus-shell/actions/workflows/tests.yml/badge.svg?branch=master)](https://github.com/maximeallanic/nivuus-shell/actions/workflows/tests.yml)
+[![uninstall verified](https://github.com/maximeallanic/nivuus-shell/actions/workflows/uninstall-verified.yml/badge.svg?branch=master)](https://github.com/maximeallanic/nivuus-shell/actions/workflows/uninstall-verified.yml)
+[![Matrix](https://github.com/maximeallanic/nivuus-shell/actions/workflows/matrix.yml/badge.svg?branch=master)](https://github.com/maximeallanic/nivuus-shell/actions/workflows/matrix.yml)
 
 ## ✨ Features
 
@@ -82,6 +84,27 @@ machines, pour toujours.
 exec zsh
 # or just restart your terminal
 ```
+
+## 🧪 Plateformes testées
+
+Chaque nuit, et avant chaque release, Nivuus est installé puis désinstallé sur chacune de ces
+cibles ; l'empreinte de `$HOME` doit être identique bit pour bit avant et après. Le badge
+**uninstall verified** ci-dessus rougit dès qu'une trace subsiste.
+
+| Cible | Niveau de preuve |
+|---|---|
+| Ubuntu 22.04 | installation, shell réel, désinstallation, empreinte |
+| Ubuntu 24.04 | installation, shell réel, désinstallation, empreinte |
+| Debian 12 | installation, shell réel, désinstallation, empreinte |
+| Arch Linux | installation, shell réel, désinstallation, empreinte |
+| Fedora 41 | installation, shell réel, désinstallation, empreinte |
+| Alpine 3.20 (musl) | installation, shell réel, désinstallation, empreinte — valide le chemin sans coreutils GNU |
+| Ubuntu (GitHub runner) | matrice complète, quatre niveaux |
+| macOS 14 (arm64) | installation, désinstallation, empreinte |
+| WSL2 | **simulé** : marqueurs `/proc/version` et `WSL_DISTRO_NAME` injectés dans un conteneur Ubuntu. Valide la branche de code, pas l'environnement. |
+
+Cette liste est vérifiée contre `.github/matrix.json` par `tests/unit/test_readme_badges.bats` :
+ajouter une cible à la matrice sans l'ajouter ici fait échouer la CI, et inversement.
 
 ## 📖 Usage
 
