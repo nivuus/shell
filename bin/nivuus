@@ -6,6 +6,7 @@ NIVUUS_SRC_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck source=/dev/null
 . "$NIVUUS_SRC_ROOT/lib/log.sh"
 . "$NIVUUS_SRC_ROOT/lib/detect.sh"
+. "$NIVUUS_SRC_ROOT/lib/deps.sh"
 . "$NIVUUS_SRC_ROOT/lib/manifest.sh"
 . "$NIVUUS_SRC_ROOT/lib/zshrc.sh"
 . "$NIVUUS_SRC_ROOT/lib/steps.sh"

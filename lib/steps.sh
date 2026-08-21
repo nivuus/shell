@@ -51,24 +51,5 @@ nivuus_step_write_version() {
     nivuus_install_file "$src/.version" "$dst/.version"
 }
 
-nivuus_step_check_required_deps() {
-    local missing='' c
-    for c in zsh git curl; do
-        command -v "$c" >/dev/null 2>&1 || missing="$missing $c"
-    done
-    [ -n "$missing" ] || return 0
-
-    log_error "Dépendances requises manquantes :$missing"
-    if command -v apt-get >/dev/null 2>&1; then
-        log_error "Installe-les avec : sudo apt-get install$missing"
-    elif command -v dnf >/dev/null 2>&1; then
-        log_error "Installe-les avec : sudo dnf install$missing"
-    elif command -v pacman >/dev/null 2>&1; then
-        log_error "Installe-les avec : sudo pacman -S$missing"
-    elif command -v brew >/dev/null 2>&1; then
-        log_error "Installe-les avec : brew install$missing"
-    else
-        log_error "Installe-les avec ton gestionnaire de paquets :$missing"
-    fi
-    return 1
-}
+# Conservé comme façade : lib/deps.sh porte désormais la politique.
+nivuus_step_check_required_deps() { nivuus_deps_check_required "$@"; }
