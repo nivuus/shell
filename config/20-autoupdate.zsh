@@ -164,6 +164,35 @@ _nivuus_create_update_backup() {
     echo "$backup_dir"
 }
 
+# Empreinte SHA-256 portable. Fonction pure : ne télécharge rien, ne
+# dépend d'aucun état global.
+#
+# Historique : cette fonction existe parce que _nivuus_download_release
+# appelait `sha256sum` sans repli. `sha256sum` n'existe pas par défaut sur
+# macOS (`shasum` y est l'outil livré) : `actual_sum` y était vide, la
+# comparaison échouait toujours, et TOUTE mise à jour était cassée sur
+# macOS. lib/manifest.sh gérait déjà les deux cas ; l'updater non.
+#
+# Retourne 1 sans rien imprimer si aucun outil n'est disponible. Le
+# « sans rien imprimer » est la partie importante : une chaîne vide
+# comparée à une empreinte attendue est un faux négatif silencieux.
+_nivuus_sha256_of() {
+    local file=$1
+    [[ -r "$file" ]] || return 1
+
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$file" | awk '{print $1}'
+    elif command -v shasum >/dev/null 2>&1; then
+        shasum -a 256 "$file" | awk '{print $1}'
+    elif command -v openssl >/dev/null 2>&1; then
+        # Dernier recours : openssl est de toute façon requis par le
+        # chemin de signature sur la plupart des machines.
+        openssl dgst -sha256 "$file" | awk '{print $NF}'
+    else
+        return 1
+    fi
+}
+
 # Download and verify release archive
 _nivuus_download_release() {
     local version=$1
@@ -202,7 +231,12 @@ _nivuus_download_release() {
             return 1
         fi
 
-        local actual_sum=$(sha256sum "$temp_dir/nivuus-shell.tar.gz" | awk '{print $1}')
+        local actual_sum
+        if ! actual_sum=$(_nivuus_sha256_of "$temp_dir/nivuus-shell.tar.gz"); then
+            echo "❌ Aucun outil SHA-256 disponible (sha256sum, shasum ou openssl requis)"
+            rm -rf "$temp_dir"
+            return 1
+        fi
 
         if [[ "$expected_sum" != "$actual_sum" ]]; then
             echo "❌ Checksum verification failed!"
