@@ -162,3 +162,23 @@ readme_env_vars() {
     run grep -niE 'command.not.found|command that does not exist' "$README"
     [ "$status" -eq 0 ]
 }
+
+@test "le chemin de sauvegarde du README est celui que lib/manifest.sh écrit" {
+    # Dérivé du code, jamais recopié : c'est la seule forme de documentation
+    # de chemin qui ne périme pas.
+    grep -q 'NIVUUS_BACKUP_DIR="\$NIVUUS_STATE_DIR/backups"' "$ROOT/lib/manifest.sh"
+    grep -qF '.local/state/nivuus/backups' "$README" \
+        || { echo "le README n'annonce pas le répertoire de sauvegarde réel"; false; }
+}
+
+@test "le chemin de sauvegarde périmé n'est plus présenté comme celui de l'installation" {
+    # ~/.config/nivuus-shell-backup existe TOUJOURS : config_backup /
+    # config_restore (config/13-system.zsh) et les sauvegardes pre-update
+    # (config/20-autoupdate.zsh) y écrivent. Ce qui est faux, et seulement
+    # cela, c'est de le présenter comme le répertoire écrit PAR
+    # L'INSTALLATION : lib/manifest.sh écrit dans
+    # ~/.local/state/nivuus/backups. Interdire le chemin partout rendrait
+    # la procédure de rollback indocumentable.
+    run grep -rniE 'install[a-z]*.*nivuus-shell-backup' "$README" "$ROOT/doc"
+    [ "$status" -ne 0 ] || { echo "chemin périmé présenté comme celui de l'installation : $output"; false; }
+}

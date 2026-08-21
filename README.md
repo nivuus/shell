@@ -371,9 +371,14 @@ config_backup           # Create manual backup
 config_restore          # Restore from backup
 ```
 
-Automatic backups are created at:
-- During installation: `~/.config/nivuus-shell-backup/`
-- Auto-maintenance: Weekly cleanup
+Nivuus keeps two kinds of backup, and they are not interchangeable:
+
+- **Install-time backup** — every file `nivuus install` was about to overwrite is
+  copied, content-addressed, into `~/.local/state/nivuus/backups/`. This is what
+  `nivuus uninstall` restores from, byte for byte. Removed only by
+  `nivuus uninstall --purge`.
+- **Manual config backup** — `config_backup` / `config_restore`, for your own
+  snapshots of the shell configuration.
 
 ## 🔄 Updating
 

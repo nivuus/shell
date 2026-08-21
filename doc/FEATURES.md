@@ -444,7 +444,10 @@ config_backup           # Create manual backup
 config_restore          # Restore from backup
 ```
 
-**Automatic backups** are created during installation to `~/.config/nivuus-shell-backup/`
+`config_backup` writes to `~/.config/nivuus-shell-backup/`. It is *not* the
+install-time backup: `nivuus install` records every file it was about to
+overwrite in `~/.local/state/nivuus/backups/`, and that is what
+`nivuus uninstall` restores from.
 
 ### Performance Tuning
 
