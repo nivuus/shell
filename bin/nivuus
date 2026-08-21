@@ -9,6 +9,7 @@ NIVUUS_SRC_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 . "$NIVUUS_SRC_ROOT/lib/deps.sh"
 . "$NIVUUS_SRC_ROOT/lib/manifest.sh"
 . "$NIVUUS_SRC_ROOT/lib/keys.sh"
+. "$NIVUUS_SRC_ROOT/lib/migrate.sh"
 . "$NIVUUS_SRC_ROOT/lib/zshrc.sh"
 . "$NIVUUS_SRC_ROOT/lib/steps.sh"
 
@@ -20,6 +21,7 @@ Usage :
   nivuus install   [--dry-run] [--yes] [--prefix DIR] [--minimal|--no-minimal]
                    [--with-deps] [--verify-key EMPREINTE]
   nivuus uninstall [--dry-run] [--yes] [--purge]
+  nivuus migrate   [--dry-run] [--yes] [--prefix DIR]
   nivuus update
   nivuus doctor
   nivuus help
@@ -37,6 +39,9 @@ Options :
                 (voir SECURITY.md). Si elle ne correspond pas, l'installation
                 est refusée AVANT toute écriture. C'est l'ancrage hors bande :
                 obtiens l'empreinte par un canal de ton choix, colle-la ici.
+  migrate     Met de côté le dépôt git que l'installeur de la v3.0.0
+              laissait dans ~/.nivuus-shell et qui bloque les mises à jour.
+              Le dépôt est DÉPLACÉ, jamais supprimé, et le chemin est affiché.
   --purge     (uninstall) supprime aussi l'état Nivuus (manifeste, sauvegardes).
               Ne supprime que ce que Nivuus a créé : ~/.zsh_local (si présent
               mais non créé par Nivuus) et ~/.zsh_history ne sont JAMAIS supprimés.
@@ -320,13 +325,78 @@ cmd_uninstall() {
     fi
 }
 
+cmd_migrate() {
+    local dir state dst
+    dir="${NIVUUS_SHELL_DIR:-$HOME/.nivuus-shell}"
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --dry-run) export NIVUUS_DRY_RUN=1 ;;
+            --yes|-y)  ASSUME_YES=1 ;;
+            --prefix)
+                shift
+                [ $# -gt 0 ] || { log_error "L'option --prefix attend un chemin."; return 2; }
+                dir="$1" ;;
+            *) log_error "Option inconnue : $1"; return 2 ;;
+        esac
+        shift
+    done
+    : "${NIVUUS_STATE_DIR:=${XDG_STATE_HOME:-$HOME/.local/state}/nivuus}"
+
+    state="$(nivuus_git_state "$dir")"
+    case "$state" in
+        none) log_ok "Rien à migrer : aucun dépôt git dans $dir."; return 0 ;;
+        dev)
+            log_info "Rien à migrer : $dir/.git est un dépôt de travail, pas le dépôt créé par l'ancien installeur."
+            nivuus_git_report "$dir"
+            log_info "Nivuus n'y touchera pas. Si tu développes ici, utilise « git pull » plutôt que la mise à jour par release."
+            return 0 ;;
+        unknown)
+            log_warn "Un dépôt git existe dans $dir mais git n'est pas disponible : impossible de décider."
+            log_warn "Installe git puis relance « nivuus migrate »."
+            return 0 ;;
+    esac
+
+    log_warn "$dir contient le dépôt git que l'installeur de la v3.0.0 créait."
+    log_warn "C'est lui qui désactive silencieusement tes mises à jour : l'updater le prend"
+    log_warn "pour un checkout de développement et refuse d'écraser ton travail."
+    nivuus_git_report "$dir"
+    log_info "La migration le DÉPLACE (elle ne le supprime pas) sous $NIVUUS_STATE_DIR/migration/."
+
+    if [ -z "${ASSUME_YES:-}" ] && ! nivuus_is_tty; then
+        log_info "Aucun terminal pour confirmer : relance avec « nivuus migrate --yes »."
+        return 0
+    fi
+    confirm "Déplacer $dir/.git maintenant ?" || { log_info "Annulé. Rien n'a été touché."; return 0; }
+
+    dst="$NIVUUS_STATE_DIR/migration/$(date +%Y%m%d-%H%M%S)/git"
+    dst="$(nivuus_move_aside "$dir/.git" "$dst")" || { log_error "Migration impossible."; return 1; }
+    log_ok "Dépôt déplacé : $dst"
+    log_info "Pour revenir en arrière : mv \"$dst\" \"$dir/.git\""
+    log_info "Tes mises à jour automatiques sont réactivées."
+}
+
+# Garde AVANT de déléguer à zsh : sans elle, nivuus-update affiche
+# « Development checkout detected » et envoie l'utilisateur dans une impasse.
+cmd_update() {
+    local dir state
+    dir="${NIVUUS_SHELL_DIR:-$HOME/.nivuus-shell}"
+    state="$(nivuus_git_state "$dir")"
+    if [ "$state" = "legacy" ]; then
+        log_error "Les mises à jour sont bloquées par le dépôt git que l'ancien installeur a laissé dans $dir."
+        log_error "Lance « nivuus migrate » pour le mettre de côté, puis relance « nivuus update »."
+        return 1
+    fi
+    exec zsh -ic 'nivuus-update'
+}
+
 main() {
     local cmd="${1:-help}"
     [ $# -gt 0 ] && shift
     case "$cmd" in
         install)   cmd_install "$@" ;;
         uninstall) cmd_uninstall "$@" ;;
-        update)    exec zsh -ic 'nivuus-update' ;;
+        migrate)   cmd_migrate "$@" ;;
+        update)    cmd_update "$@" ;;
         doctor)    exec "$NIVUUS_SRC_ROOT/bin/healthcheck" ;;
         help|--help|-h) usage ;;
         *) log_error "Sous-commande inconnue : $cmd"; usage >&2; return 2 ;;

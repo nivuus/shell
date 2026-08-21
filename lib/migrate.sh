@@ -80,6 +80,8 @@ nivuus_git_report() {
     printf '  remotes            : %s\n' "$(git -C "$dir" remote -v 2>/dev/null | tr '\n' ' ' || printf 'aucun')"
     printf '  branches locales   : %s\n' "$(git -C "$dir" for-each-ref --format='%(refname:short)' refs/heads 2>/dev/null | tr '\n' ' ')"
     printf '  fichiers modifiés  : %s\n' "$(git -C "$dir" status --porcelain --untracked-files=no 2>/dev/null | wc -l | tr -d ' ')"
-    printf '  fichiers non suivis: %s\n' "$(git -C "$dir" status --porcelain --untracked-files=all 2>/dev/null | grep -c '^??' || printf 0)"
+    # grep -c imprime déjà « 0 » quand il ne trouve rien (et sort en 1) :
+    # un « || printf 0 » ajouterait un second zéro sur une seconde ligne.
+    printf '  fichiers non suivis: %s\n' "$(git -C "$dir" status --porcelain --untracked-files=all 2>/dev/null | grep -c '^??')"
     printf '  stash              : %s\n' "$(git -C "$dir" stash list 2>/dev/null | wc -l | tr -d ' ')"
 }
