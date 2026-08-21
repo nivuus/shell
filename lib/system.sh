@@ -108,6 +108,41 @@ nivuus_system_package_notice() {
     return 1
 }
 
+# Contenu du drop-in d'activation machine. Il CÈDE toujours à
+# l'utilisateur : celui qui a son propre bloc dans ~/.zshrc gagne, sans
+# ambiguïté.
+#
+# Coût : un grep sur un fichier, et SEULEMENT sur les machines qui ont
+# opté pour l'activation machine. Il est mesuré par le test de budget des
+# 300 ms, comme le reste.
+#
+# Le corps est du ZSH, pas du sh : le test « option interactive » n'existe
+# qu'en crochets doubles (en crochets simples, zsh répond « [: too many arguments »,
+# mesuré). Le délimiteur ZSH_DROPIN_EOF nomme cette frontière pour que le
+# garde-fou « lib/ reste POSIX » puisse l'exclure sans être affaibli --
+# lib/system.sh, lui, reste bien du sh (« sh -n » le vérifie).
+nivuus_system_dropin_content() {
+    cat <<ZSH_DROPIN_EOF
+# Activation machine de Nivuus Shell (posée par « nivuus enable --all »).
+# Ne fait rien pour un utilisateur qui a sa propre activation : la sienne gagne.
+if [[ -o interactive ]] && ! grep -qs '>>> nivuus shell >>>' "\${ZDOTDIR:-\$HOME}/.zshrc"; then
+    export NIVUUS_SHELL_DIR="$(nivuus_system_tree)"
+    export NIVUUS_ACTIVATED_BY=system
+    [ -r "\$NIVUUS_SHELL_DIR/.zshrc" ] && source "\$NIVUUS_SHELL_DIR/.zshrc"
+fi
+ZSH_DROPIN_EOF
+}
+
+# UNE ligne, et une seule, dans le fichier de la distribution.
+# /etc/zsh/zshrc est un conffile dpkg : retirer une ligne CONNUE est
+# réversible à l'octet près, réécrire le conffile ne l'est pas. Le contenu
+# vit dans un fichier à nous ; ce fichier-ci ne reçoit qu'un pointeur, gardé
+# lui aussi.
+nivuus_system_rc_line() {
+    printf '[ -r "%s" ] && source "%s"  # nivuus-shell (retirer avec: nivuus disable --all)\n' \
+        "$(nivuus_system_dropin)" "$(nivuus_system_dropin)"
+}
+
 # /etc/skel n'existe pas sur macOS. Un drapeau qui ne fait rien sans le
 # dire est la pire des réponses : on refuse, et on nomme le chemin.
 nivuus_system_skel_supported() {

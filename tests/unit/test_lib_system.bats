@@ -97,6 +97,13 @@ teardown() { rm -rf "$TMP"; }
 }
 
 @test "lib/system.sh reste POSIX (bashismes interdits)" {
-    run grep -nE 'BASH_SOURCE|\[\[|\+=|<<<|declare -|mapfile|\$\{[A-Za-z_]+\^\^' "$ROOT/lib/system.sh"
+    # Le drop-in d'activation machine est du ZSH émis par un heredoc : son
+    # « [[ -o interactive ]] » n'a pas d'équivalent en crochets simples.
+    # C'est une DONNÉE, pas du code exécuté par ce fichier -- on l'exclut
+    # nommément, et on prouve à côté que le fichier reste bien du sh.
+    run bash -c "sed '/<<ZSH_DROPIN_EOF/,/^ZSH_DROPIN_EOF\$/d' '$ROOT/lib/system.sh' \
+                 | grep -nE 'BASH_SOURCE|\[\[|\+=|<<<|declare -|mapfile|\\\$\{[A-Za-z_]+\^\^'"
     [ "$status" -ne 0 ]
+    run sh -n "$ROOT/lib/system.sh"
+    [ "$status" -eq 0 ]
 }
