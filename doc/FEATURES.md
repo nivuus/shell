@@ -514,13 +514,18 @@ curl -fsSL https://github.com/maximeallanic/nivuus-shell/releases/latest/downloa
 Install for current user only.
 
 ### System-Wide Installation
+
+For a whole machine, use the administrator command rather than piping the network
+into a privileged shell:
+
 ```bash
-curl -fsSL https://github.com/maximeallanic/nivuus-shell/releases/latest/download/install.sh | sudo bash -s -- --system
+sudo nivuus install --system
 ```
 
-Install for all users on the system.
-
-> **Note:** `--system` is temporarily unavailable (it now exits with an error). Use the per-user installation above instead.
+It lays a shared tree under `/usr/local/share/nivuus-shell`, writes to **no** `$HOME`
+and runs `chsh` for nobody: each user activates it with `nivuus enable`.
+See [INSTALL.md](INSTALL.md) for the full administrator guide, including `--skel`,
+`nivuus enable --all`, updates and removal.
 
 ### Options
 ```bash

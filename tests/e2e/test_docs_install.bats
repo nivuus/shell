@@ -45,8 +45,13 @@ setup() {
     [ "$status" -eq 0 ]
 }
 
-@test "aucune documentation ne recommande sudo ./install.sh --system" {
+@test "aucune documentation ne recommande de piper du réseau dans un sudo" {
+    # La garde d'origine interdisait « sudo ./install.sh --system ». La
+    # forme réellement publiée par doc/FEATURES.md était pire : un curl
+    # dans un sudo bash. Les deux sont interdites.
     run grep -rn 'sudo ./install.sh --system' "$README" "$INSTALL_DOC" "$ROOT/doc/CLAUDE.md"
+    [ "$status" -ne 0 ]
+    run grep -rnE 'curl[^|]*\|[[:space:]]*sudo' "$README" "$INSTALL_DOC" "$ROOT/doc/CLAUDE.md" "$ROOT/doc/FEATURES.md"
     [ "$status" -ne 0 ]
 }
 
