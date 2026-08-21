@@ -96,3 +96,36 @@ nivuus_deps_suggest() {
     log_info "  $(nivuus_pkg_install_cmd $missing)"
     return 0
 }
+
+# Consultative, jamais bloquante : openssl et ssh-keygen ne sont pas des
+# dépendances d'INSTALLATION, ce sont des dépendances de MISE À JOUR.
+# Refuser d'installer parce que la machine ne pourra pas se mettre à jour
+# toute seule serait disproportionné. Mais le dire au moment de
+# l'installation, où l'utilisateur peut encore agir, est le minimum :
+# l'échec réel surviendrait sinon en arrière-plan, une semaine plus tard,
+# dans un fichier temporaire que personne ne lit.
+#
+# Cas réel mesuré (doc/SIGNING.md) : Alpine 3.20 avec zsh/git/curl n'a NI
+# openssl NI ssh-keygen. Ce n'est pas une hypothèse d'école.
+nivuus_deps_check_verify_tools() {
+    if command -v openssl >/dev/null 2>&1; then return 0; fi
+    if command -v ssh-keygen >/dev/null 2>&1; then return 0; fi
+
+    log_warn "Ni « openssl » ni « ssh-keygen » n'est disponible sur cette machine."
+    log_warn "Nivuus ne pourra pas authentifier ses mises à jour : la mise à"
+    log_warn "jour automatique restera inactive (elle n'installera jamais une"
+    log_warn "release non vérifiée)."
+    log_warn "Pour l'activer, installe l'un des deux :"
+    if command -v apt-get >/dev/null 2>&1; then
+        log_warn "  sudo apt-get install openssl"
+    elif command -v apk >/dev/null 2>&1; then
+        log_warn "  sudo apk add openssl"
+    elif command -v dnf >/dev/null 2>&1; then
+        log_warn "  sudo dnf install openssl"
+    elif command -v pacman >/dev/null 2>&1; then
+        log_warn "  sudo pacman -S openssl"
+    else
+        log_warn "  installe « openssl » avec ton gestionnaire de paquets"
+    fi
+    return 0
+}

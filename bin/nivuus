@@ -125,6 +125,8 @@ cmd_install() {
     fi
 
     nivuus_step_check_required_deps || return 1
+    # Consultative : n'échoue jamais, prévient seulement (voir lib/deps.sh).
+    nivuus_step_check_verify_tools
     confirm "Installer Nivuus Shell dans $prefix ?" || { log_info "Annulé."; return 0; }
 
     nivuus_manifest_begin user "$prefix"

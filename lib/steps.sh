@@ -66,6 +66,9 @@ nivuus_step_write_version() {
 # Conservé comme façade : lib/deps.sh porte désormais la politique.
 nivuus_step_check_required_deps() { nivuus_deps_check_required "$@"; }
 
+# Conservé comme façade : lib/deps.sh porte désormais la politique.
+nivuus_step_check_verify_tools() { nivuus_deps_check_verify_tools "$@"; }
+
 # Change le shell de connexion -- une mutation système comme une autre,
 # donc journalisée AVANT d'agir. Ne retourne jamais autre chose que 0 :
 # l'installation elle-même a réussi, le shell de connexion est un confort.
