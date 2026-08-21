@@ -1,267 +1,99 @@
 # Testing Guide - Nivuus Shell
 
-## Quick Start
+Nivuus is tested with [bats](https://github.com/bats-core/bats-core). Four
+levels, four directories, one command each. This page replaces the three
+progress reports that used to live next to it: a report describes a moment,
+a documentation describes a product, and `git log` is the journal.
+
+## Running the suites
 
 ```bash
-# Install zunit
-npm install
-
-# Run all tests
-npm test
-
-# Run specific test suites
-npm run test:unit
-npm run test:performance
-npm run test:integration
-
-# Run with verbose output
-./bin/test --verbose
+./bin/test                 # everything
+./bin/test --unit          # tests/unit/        — pure functions, grep-level rules
+./bin/test --integration   # tests/integration/ — modules combined
+./bin/test --e2e           # tests/e2e/         — install, uninstall, reversibility
+./bin/test --performance   # tests/performance/ — the enforced startup budget
+./bin/test --verbose       # show every assertion
 ```
 
-## Current Test Coverage
+A single file works too: `bats tests/unit/test_prompt.bats`.
 
-### ✅ Implemented (Examples Created)
+The CI runs them through `tests/ci/bats-run.sh`, which is also the way to
+reproduce a CI failure locally. Two families of tests are **excluded by
+default** there: those tagged `docker` (they pull whole images) and `network`
+(they leave for github.com). Set `NIVUUS_CI_DOCKER=1` or `NIVUUS_CI_NETWORK=1`
+to include them.
 
-1. **Unit Tests** - `tests/unit/test_prompt.zsh`
-   - 30+ tests for prompt module (05-prompt.zsh)
-   - SSH/Root detection
-   - Git prompt with caching
-   - Python venv detection
-   - Cloud context (AWS/GCP/Azure)
-   - Firebase detection
-   - Background jobs display
-   - Nord color validation
+`./bin/test-count` prints how many tests each suite holds, and
+`./bin/test-count --check` fails when a suite shrinks. The floor lives in
+`tests/baseline-counts.tsv`; raise it with `--update` in the same commit that
+adds the tests. No count is copied into this page: a copied number is wrong
+at the next commit.
 
-2. **Performance Tests** - `tests/performance/test_startup.zsh`
-   - **CRITICAL**: <300ms startup time validation
-   - Prompt generation speed (<100ms)
-   - Git cache performance (<50ms on cache hit)
-   - Module load times
-   - Compilation verification (.zwc files)
-   - Memory footprint (<100MB)
+Before any suite that reads `config/*.zsh`, run `rm -f config/*.zwc`: zsh
+prefers stale bytecode over a newer source, and a test can pass against a
+module you did not write.
 
-3. **Integration Tests** - `tests/integration/test_ai_workflow.bats`
-   - Backend dispatcher (model resolution, temperature, AI_BACKEND routing)
-   - AI commands (`ask`, `why`, `explain`, `aihelp`) incl. missing credentials
-   - Inline suggestions workflow (ZLE widgets, background generation)
-   - Cache behavior (5min TTL, no duplicate backend call)
-   - Context collection and secret redaction
-   - Terminal titles and AI error capture hooks
+## What each level proves
 
-### 📝 TODO - Remaining Test Files (15 more unit tests)
+| Level | Directory | What it confronts |
+|---|---|---|
+| Unit | `tests/unit/` | One module, or one rule, in isolation. Includes the documentation rules: `test_readme_claims.bats`, `test_readme_badges.bats`, `test_docs_index.bats`, `test_manpage.bats`. |
+| Integration | `tests/integration/` | Several modules loaded together: prompt with theme, AI dispatcher with a backend, autoupdate with the manifest. |
+| End-to-end | `tests/e2e/` | The real thing: `install.sh` in a throwaway `$HOME`, then `nivuus uninstall`, then a fingerprint of `$HOME` that must come back identical (`test_reversibility.bats`). This is the central test of the project. |
+| Performance | `tests/performance/` | The startup budget, enforced: `test_startup.bats` fails past `NIVUUS_STARTUP_BUDGET_MS` (300 by default). |
 
-Complete coverage requires creating these additional test files:
+## Environment
 
-```
-tests/unit/
-├── test_ai_commands.zsh        # 10-ai.zsh (why, explain, ask)
-├── test_safety.zsh             # 21-safety.zsh (dangerous patterns)
-├── test_python_venv.zsh        # 09-python.zsh (venv detection)
-├── test_nodejs.zsh             # 09-nodejs.zsh (NVM lazy loading)
-├── test_vim.zsh                # 08-vim.zsh (env detection)
-├── test_functions.zsh          # 14-functions.zsh (20+ functions)
-├── test_network.zsh            # 12-network.zsh (myip, weather, etc.)
-├── test_system.zsh             # 13-system.zsh (healthcheck, benchmark)
-├── test_git_aliases.zsh        # 06-git.zsh (all git aliases)
-├── test_completion.zsh         # 03-completion.zsh (lazy loading)
-├── test_keybindings.zsh        # 04-keybindings.zsh
-├── test_history.zsh            # 02-history.zsh
-├── test_colorization.zsh       # 17-colorization.zsh
-├── test_files.zsh              # 11-files.zsh
-└── test_aliases.zsh            # 15-aliases.zsh (50+ aliases)
-```
+Tests never touch your real home. Each one gets a temporary `$HOME` and
+`NIVUUS_SHELL_DIR` pointing at the checkout:
 
-### 📝 TODO - Remaining Integration Tests (4 more)
-
-```
-tests/integration/
-├── test_module_loading.zsh     # Load order, dependencies
-├── test_prompt_full.zsh        # All prompt components together
-├── test_git_workflow.zsh       # Aliases + prompt integration
-└── test_cloud_context.zsh      # Multi-cloud detection
-```
-
-### 📝 TODO - Remaining E2E Tests (4 files)
-
-```
-tests/e2e/
-├── test_user_install.zsh       # ./install.sh (user mode)
-├── test_system_install.zsh     # sudo ./install.sh --system
-├── test_healthcheck.zsh        # bin/healthcheck
-└── test_benchmark.zsh          # bin/benchmark
-```
-
-### 📝 TODO - GitHub Actions CI/CD
-
-Create `.github/workflows/tests.yml`:
-- Matrix: Ubuntu + macOS
-- Separate jobs for each test suite
-- Performance validation (<300ms REQUIRED)
-- Coverage reporting
-- CI badge for README
-
-## Test Infrastructure Created
-
-### ✅ Complete
-
-- `package.json` - zunit dependency
-- `tests/README.md` - Comprehensive test documentation
-- `tests/helpers/assertions.zsh` - 15 custom assertions
-- `tests/helpers/mocks.zsh` - Mock utilities for all dependencies
-- `bin/test` - Main test runner with options
-- `.gitignore` - Test artifacts excluded
-
-### 🛠 Test Utilities Available
-
-**Custom Assertions** (`tests/helpers/assertions.zsh`):
-- `assert_performance` - Validate execution time
-- `assert_color` - Check Nord color codes
-- `assert_cached` - Verify caching behavior
-- `assert_file_compiled` - Check .zwc compilation
-- `assert_startup_time` - **CRITICAL** <300ms validation
-- `assert_env_set`, `assert_function_exists`, `assert_alias_exists`
-- `assert_matches`, `assert_file_contains`
-- `assert_success`, `assert_failure`
-
-**Mock Functions** (`tests/helpers/mocks.zsh`):
-- `mock_gemini`, `mock_gemini_error` - AI responses
-- `mock_git_repo`, `mock_git_clean`, `mock_git_dirty` - Git states
-- `mock_ssh_session`, `mock_local_session` - Session types
-- `mock_root_user`, `mock_regular_user` - User privileges
-- `mock_aws_env`, `mock_gcp_env`, `mock_azure_env` - Cloud providers
-- `mock_python_venv`, `mock_no_venv` - Python environments
-- `mock_nvm_installed`, `mock_nvm_not_installed` - NVM states
-- `mock_firebase_config` - Firebase projects
-- `create_mock_git_repo`, `create_mock_nodejs_project`, `create_mock_python_project`
-
-## Running Tests
-
-### All Tests
 ```bash
-npm test
+export NIVUUS_SHELL_DIR="$(pwd)"
 ```
 
-### Specific Suites
+Shared helpers live in `tests/helpers/`:
+
+| Helper | What it gives you |
+|---|---|
+| `assertions.zsh` | `assert_*` shorthands for zsh-level tests |
+| `mocks.zsh` | fake `curl`, fake AI backend, fake package manager |
+| `fingerprint.bash` | `fs_fingerprint`, the `$HOME` hash used by the reversibility test |
+| `portable.bash` | POSIX shims so the same test runs on BusyBox and bash 3.2 |
+| `release.bash`, `signing.bash` | build and sign a fake release locally |
+| `legacy.bash` | reproduce a pre-3.1 git-based installation |
+
+## Writing a new test
+
 ```bash
-npm run test:unit          # Unit tests only
-npm run test:integration   # Integration tests only
-npm run test:performance   # Performance validation
-npm run test:e2e           # End-to-end tests
-```
+#!/usr/bin/env bats
 
-### Individual Test Files
-```bash
-zunit tests/unit/test_prompt.zsh
-zunit tests/performance/test_startup.zsh
-bats tests/integration/test_ai_workflow.bats
-```
-
-### With Verbose Output
-```bash
-./bin/test --verbose
-./bin/test --unit --verbose
-```
-
-## Next Steps to Complete Test Suite
-
-### Priority 1: Critical Tests
-
-1. Complete unit tests for core modules:
-   - `test_ai_commands.zsh` (AI integration)
-   - `test_safety.zsh` (dangerous command detection)
-   - `test_functions.zsh` (utility functions)
-
-2. Add remaining performance tests:
-   - Individual module benchmarks
-   - Cache effectiveness metrics
-
-3. Create GitHub Actions workflow:
-   - Auto-run on push/PR
-   - Fail build if startup >300ms
-   - Generate coverage reports
-
-### Priority 2: Full Coverage
-
-4. Complete all 15 remaining unit test files
-5. Add 4 remaining integration test files
-6. Create 4 E2E test files
-
-## Writing New Tests
-
-### Example Unit Test
-
-```zsh
-#!/usr/bin/env zunit
-
-# Load helpers
-source tests/helpers/assertions.zsh
-source tests/helpers/mocks.zsh
-
-# Setup
-@setup {
-    source themes/nord.zsh
-    source config/XX-module.zsh
+setup() {
+    ROOT="$(cd "${BATS_TEST_DIRNAME}/../.." && pwd)"
 }
 
-# Test
-@test 'function does something' {
-    mock_env_as_needed
-
-    result=$(your_function "input")
-
-    assert "$result" same_as "expected"
+@test "ce que la propriété garantit, en français" {
+    run "$ROOT/bin/nivuus" help
+    [ "$status" -eq 0 ]
 }
 ```
 
-### Example Performance Test
+Conventions:
 
-```zsh
-@test 'function is fast' {
-    assert_performance 100 "your_function"  # <100ms
-}
-```
+- Test names and comments are in French, like every existing test; commit
+  messages and user-facing docs are in English.
+- A test that needs Docker carries `# bats test_tags=docker` on the line
+  above `@test`; one that needs the network carries `network`.
+- Every new test raises the ratchet: run `./bin/test-count --update` and
+  commit `tests/baseline-counts.tsv` in the same commit.
 
-## CI/CD Integration (TODO)
+## CI
 
-Create `.github/workflows/tests.yml`:
+`.github/workflows/tests.yml` runs the four levels on every push, through the
+composite action `.github/actions/setup-tests`. **No workflow installs a
+package directly** — `tests/unit/test_ci_workflows.bats` forbids it; new
+dependencies go into `tests/ci/install-deps.sh`.
 
-```yaml
-name: Tests
-
-on: [push, pull_request]
-
-jobs:
-  test:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
-        with:
-          node-version: '18'
-      - run: npm install
-      - run: npm test
-      - name: Validate startup time
-        run: npm run test:performance
-```
-
-## Current Status
-
-**Infrastructure**: ✅ Complete (100%)
-**Example Tests**: ✅ Created (3 comprehensive examples)
-**Helpers/Mocks**: ✅ Complete (100%)
-**Test Runner**: ✅ Complete (100%)
-**Documentation**: ✅ Complete (100%)
-
-**Total Tests to Write**: ~1000+
-**Tests Created**: ~50 (5%)
-**Ready for**: Development of remaining tests
-
-The foundation is solid. You can now:
-1. Run existing tests: `npm test`
-2. Use examples as templates for new tests
-3. Leverage all helpers and mocks
-4. Add tests incrementally as you develop features
+`.github/workflows/matrix.yml` installs and uninstalls Nivuus on nine targets
+(see `.github/matrix.json`) and checks the `$HOME` fingerprint each time. That
+is what the *uninstall verified* badge reports.
