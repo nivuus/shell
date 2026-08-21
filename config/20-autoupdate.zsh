@@ -208,6 +208,32 @@ _nivuus_key_is_revoked() {
     grep -qxF "$fp" "$keys_dir/revoked" 2>/dev/null
 }
 
+# Recopie allowed_signers en retirant les lignes dont la clé publique est
+# listée dans keys/revoked. ssh-keygen n'ayant pas de notion de
+# révocation utilisable ici, on la matérialise en amont.
+# Empreinte utilisée : celle de `ssh-keygen -lf` (« SHA256:… »).
+#
+# Écart assumé au plan : le plan écrivait les fichiers intermédiaires avec
+# `mktemp`. Impossible ici — le cas « openssl absent » du spec (case 8) est
+# testé avec un PATH réduit qui ne contient PAS mktemp, et la vérification
+# doit fonctionner sur une machine minimale. On utilise donc la
+# substitution de processus zsh `=(...)`, qui crée un fichier temporaire
+# par les moyens internes de zsh, sans aucun binaire externe, et le nettoie
+# elle-même.
+_nivuus_filter_revoked_signers() {
+    local allowed=$1 keys_dir=$2 line fp
+    while IFS= read -r line; do
+        [[ -n "$line" ]] || continue
+        # Format : « <principal> <type> <base64> [commentaire] »
+        fp=$(ssh-keygen -lf =(printf '%s\n' "${line#* }") 2>/dev/null | awk '{print $2}')
+        if [[ -n "$fp" ]] && [[ -r "$keys_dir/revoked" ]] && \
+           grep -qxF "$fp" "$keys_dir/revoked" 2>/dev/null; then
+            continue
+        fi
+        printf '%s\n' "$line"
+    done < "$allowed"
+}
+
 # Vérifie la signature de SHA256SUMS contre le trousseau de confiance.
 #
 # Fonction PURE : ne télécharge rien, n'écrit rien, ne lit aucun état
@@ -247,9 +273,29 @@ _nivuus_verify_signature() {
         fi
     fi
 
-    # --- Chemin de repli : ssh-keygen / SSHSIG (Task 5) ----------------
-    # (ajouté dans la tâche suivante ; le compteur have_tool y est
-    #  incrémenté de la même façon)
+    # --- Chemin de repli : ssh-keygen / SSHSIG -------------------------
+    # Sur les machines sans openssl (fréquent sur les serveurs et
+    # certaines images minimales), OpenSSH est presque toujours là.
+    # Mesuré : sur Fedora 40 + zsh/git/curl, openssl est ABSENT et
+    # ssh-keygen présent — ce repli y porte 100 % du trafic de
+    # vérification (voir doc/SIGNING.md). Sans lui, le refus dur du § 4
+    # supprimerait définitivement l'auto-update sur toute une classe de
+    # machines.
+    if command -v ssh-keygen >/dev/null 2>&1; then
+        have_tool=1
+        local sshsig="$sig_dir/SHA256SUMS.sshsig"
+        local allowed="$keys_dir/allowed_signers"
+        if [[ -s "$sshsig" && -s "$allowed" ]]; then
+            local filtered
+            filtered=$(_nivuus_filter_revoked_signers "$allowed" "$keys_dir")
+            if [[ -n "$filtered" ]] && \
+               ssh-keygen -Y verify -f =(printf '%s\n' "$filtered") \
+                   -I nivuus-release -n nivuus-release -s "$sshsig" \
+                   < "$sums" >/dev/null 2>&1; then
+                return 0
+            fi
+        fi
+    fi
 
     (( have_tool )) || return 2
     return 1

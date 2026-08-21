@@ -83,7 +83,15 @@ verify() {
 }
 
 @test "case 6b: a non-binary garbage .sig is refused" {
+    # ÉCART AU PLAN, assumé : le plan n'enlevait pas le .sshsig ici. Écrit
+    # en Task 4, quand le chemin SSHSIG n'existait pas encore, ce cas
+    # contredisait frontalement le test « an ECDSA signature that fails
+    # does not prevent a valid SSHSIG from being accepted » ajouté en
+    # Task 5. Le contrat du spec est « valide contre l'UN QUELCONQUE des
+    # chemins ⇒ accepté » : c'est donc ce cas-ci qui doit isoler le chemin
+    # openssl, exactement comme le fait le case 6 juste au-dessus.
     printf 'not a signature at all\n' > "$TMP/rel/SHA256SUMS.sig"
+    rm -f "$TMP/rel/SHA256SUMS.sshsig"
     run verify "$TMP/rel/SHA256SUMS" "$TMP/rel" "$TMP/legit/keys"
     [[ "$output" == *"rc=1"* ]]
 }
@@ -130,4 +138,38 @@ verify() {
 @test "a missing SHA256SUMS is refused" {
     run verify "$TMP/nope" "$TMP/rel" "$TMP/legit/keys"
     [[ "$output" == *"rc=1"* ]]
+}
+
+@test "case 8: openssl absent, ssh-keygen present, SSHSIG is accepted" {
+    fake="$(mkfakepath "$TMP/bin" ssh-keygen sha256sum shasum awk zsh grep cat)"
+    run env PATH="$fake" ENABLE_AUTOUPDATE=false NIVUUS_SHELL_DIR="$ROOT" \
+        "$ZSH_BIN" -c "source '$ROOT/config/20-autoupdate.zsh'; \
+            _nivuus_verify_signature '$TMP/rel/SHA256SUMS' '$TMP/rel' '$TMP/legit/keys'; echo rc=\$?"
+    [[ "$output" == *"rc=0"* ]]
+}
+
+@test "case 8b: openssl absent and the SSHSIG was made by an attacker key: refused" {
+    sign_sums "$TMP/evil" "$TMP/rel/SHA256SUMS" "$TMP/rel"
+    fake="$(mkfakepath "$TMP/bin" ssh-keygen sha256sum shasum awk zsh grep cat)"
+    run env PATH="$fake" ENABLE_AUTOUPDATE=false NIVUUS_SHELL_DIR="$ROOT" \
+        "$ZSH_BIN" -c "source '$ROOT/config/20-autoupdate.zsh'; \
+            _nivuus_verify_signature '$TMP/rel/SHA256SUMS' '$TMP/rel' '$TMP/legit/keys'; echo rc=\$?"
+    [[ "$output" == *"rc=1"* ]]
+}
+
+@test "case 8c: openssl absent and no allowed_signers in the store: refused" {
+    rm -f "$TMP/legit/keys/allowed_signers"
+    fake="$(mkfakepath "$TMP/bin" ssh-keygen sha256sum shasum awk zsh grep cat)"
+    run env PATH="$fake" ENABLE_AUTOUPDATE=false NIVUUS_SHELL_DIR="$ROOT" \
+        "$ZSH_BIN" -c "source '$ROOT/config/20-autoupdate.zsh'; \
+            _nivuus_verify_signature '$TMP/rel/SHA256SUMS' '$TMP/rel' '$TMP/legit/keys'; echo rc=\$?"
+    [[ "$output" == *"rc=1"* ]]
+}
+
+@test "an ECDSA signature that fails does not prevent a valid SSHSIG from being accepted" {
+    # Les deux formats sont présents ; le .sig est corrompu, le .sshsig
+    # est bon. Le client doit passer au repli plutôt que d'abandonner.
+    printf 'corrompu' > "$TMP/rel/SHA256SUMS.sig"
+    run verify "$TMP/rel/SHA256SUMS" "$TMP/rel" "$TMP/legit/keys"
+    [[ "$output" == *"rc=0"* ]]
 }
