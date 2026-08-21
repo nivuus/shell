@@ -507,17 +507,22 @@ _nivuus_perform_update() {
         return 1
     fi
 
-    # Create backup
-    local backup_dir=$(_nivuus_create_update_backup)
-    echo "📦 Backup created: $backup_dir"
-
-    # Download release
+    # Vérifier d'abord : une release refusée ne doit rien coûter et ne
+    # rien laisser derrière elle. La sauvegarde ne protège que de
+    # l'INSTALLATION, pas du téléchargement — la créer avant de savoir si
+    # la release est seulement acceptable, c'était recopier toute
+    # l'installation (~50 Mo) à chaque tentative refusée, sur toutes les
+    # machines, une fois par semaine.
     local temp_dir=$(_nivuus_download_release "$target_version" "$interactive")
 
     if [[ -z "$temp_dir" ]] || [[ ! -d "$temp_dir" ]]; then
         echo "❌ Download failed"
         return 1
     fi
+
+    # Create backup
+    local backup_dir=$(_nivuus_create_update_backup)
+    echo "📦 Backup created: $backup_dir"
 
     # Install release
     if _nivuus_install_release "$target_version" "$temp_dir"; then
