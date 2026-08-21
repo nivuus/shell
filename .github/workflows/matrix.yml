@@ -147,6 +147,22 @@ jobs:
       - name: Prove system install, activation and bit-exact removal
         run: ./tests/ci/run-system-target.sh
 
+  demo-replay:
+    name: Demo scenario still runs
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-tests
+      - name: GARDE 2 — replay the demo scenario for real
+        # Le seul garde de la démo qui coûte un conteneur. Il ne tourne donc
+        # pas sur PR : la matrice est nightly, sur workflow_dispatch et
+        # appelable par une release. Les trois autres gardes, eux, sont du
+        # grep et tournent sur chaque PR. Aucune installation de paquet ici :
+        # les dépendances sont dans tools/demo/Dockerfile, qui n'est pas un
+        # workflow.
+        run: ./tools/demo/replay-check.sh
+
   # Les tests qui pilotent eux-mêmes Docker (install-deps, run-target rejoués
   # dans quatre images) : trop lourds pour une PR, à leur place ici.
   docker-tagged:

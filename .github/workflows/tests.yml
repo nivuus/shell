@@ -57,6 +57,34 @@ jobs:
                tests/unit/test_manifest_rollback_activation.bats \
                tests/unit/test_manpage.bats
 
+      - name: Documentation suites (the README is confronted to the repo)
+        run: |
+          # Couvertes par « tests/unit/ » ci-dessus ; nommées ici pour qu'un
+          # refactor de CI ne puisse pas les perdre en silence, comme pour
+          # la signature et l'empaquetage. Ce sont du grep pur : aucun
+          # paquet, aucun conteneur, coût négligeable sur chaque PR.
+          rm -f config/*.zwc     # les règles 5.1 et 5.10 lisent config/
+          ./tests/ci/bats-run.sh tests/unit/test_readme_claims.bats \
+               tests/unit/test_readme_badges.bats \
+               tests/unit/test_docs_index.bats
+          # tests/e2e/test_docs_install.bats tourne dans le job e2e ; nommé
+          # ici pour la même raison : qu'on ne puisse pas le perdre.
+
+      - name: The showcase rules must be present and green
+        run: |
+          # Garde-fou contre une suppression discrète : ce sont ces règles
+          # qui rougissent quand le README recommence à mentir. Sans elles,
+          # la réécriture pourrit en trois mois comme la précédente.
+          grep -q "REGLE 5.1"  tests/unit/test_readme_claims.bats   # commandes citées
+          grep -q "REGLE 5.2"  tests/unit/test_readme_claims.bats   # superlatifs
+          grep -q "REGLE 5.3"  tests/unit/test_readme_claims.bats   # chiffre de démarrage
+          grep -q "REGLE 5.4"  tests/unit/test_readme_badges.bats   # badges sans preuve
+          grep -q "REGLE 5.5"  tests/unit/test_readme_claims.bats   # 200 lignes
+          grep -q "REGLE 5.6"  tests/unit/test_docs_index.bats      # index et liens
+          grep -q "REGLE 5.7"  tests/unit/test_readme_claims.bats   # unilinguisme
+          grep -q "REGLE 5.9"  tests/unit/test_readme_claims.bats   # puces ancrées
+          grep -q "REGLE 5.10" tests/unit/test_readme_claims.bats   # variables citées
+
       - name: Performance (startup budget is enforced, not observed)
         run: ./tests/ci/bats-run.sh tests/performance/
 

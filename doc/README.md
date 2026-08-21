@@ -1,23 +1,30 @@
 # Documentation
 
-This directory contains all documentation for Nivuus Shell.
+Everything Nivuus documents, and nothing else. The README is the front door;
+this is the reference. `tests/unit/test_docs_index.bats` fails the build when
+this index and the directory disagree — in either direction.
 
-## User Documentation
+## Install and remove
 
-- **[FEATURES.md](FEATURES.md)** - Complete feature guide with examples
-- **[PROMPT.md](PROMPT.md)** - Detailed prompt configuration and customization (in French)
+- **[INSTALL.md](INSTALL.md)** — every installation route, per platform, plus `--dry-run`, `--minimal`, `--prefix`, version pinning, and how to verify the signing keyring
+- **[UPDATING.md](UPDATING.md)** — how updates are found, verified and applied; how to roll one back
+- **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** — what `nivuus doctor` cannot fix by itself
 
-## Developer Documentation
+## Use
 
-- **[CLAUDE.md](CLAUDE.md)** - Developer guide, architecture, and best practices for contributing
+- **[FEATURES.md](FEATURES.md)** — the complete feature reference, with examples
+- **[PROMPT.md](PROMPT.md)** — prompt tokens, themes, and layout (in French)
+- **[nivuus.1](nivuus.1)** — the man page, kept in sync with `nivuus help` by `tests/unit/test_manpage.bats`
 
-## Testing Documentation
+## Distribute
 
-- **[TESTING.md](TESTING.md)** - Testing framework and guidelines
-- **[TESTING_UPDATE.md](TESTING_UPDATE.md)** - Testing updates and improvements
-- **[TEST_PROGRESS.md](TEST_PROGRESS.md)** - Current testing progress
-- **[TEST_SUMMARY.md](TEST_SUMMARY.md)** - Test results summary
+- **[PACKAGING.md](PACKAGING.md)** — package mode, `.nivuus-origin`, `nivuus enable` / `disable` (in French)
+- **[SIGNING.md](SIGNING.md)** — how a release is signed and what the verification refuses (in French)
 
-## Getting Started
+## Contribute
 
-For installation and quick start, see the main [README.md](../README.md) in the root directory.
+- **[CLAUDE.md](CLAUDE.md)** — architecture, module layout, conventions
+- **[TESTING.md](TESTING.md)** — the four test levels, how to run them, what each one proves
+
+See also, at the repository root: [SECURITY.md](../SECURITY.md) (threat model),
+[CONTRIBUTING.md](../CONTRIBUTING.md), [CHANGELOG.md](../CHANGELOG.md).

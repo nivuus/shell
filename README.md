@@ -1,596 +1,126 @@
 # Nivuus Shell
 
-> A modern, fast, AI-powered ZSH shell with a configurable theme/prompt and intelligent features
+> **A complete ZSH environment in one command — and one command to remove it,
+> byte for byte.**
 
 [![Version](https://img.shields.io/github/v/release/maximeallanic/nivuus-shell?label=version)](https://github.com/maximeallanic/nivuus-shell/releases)
-![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![Shell](https://img.shields.io/badge/shell-ZSH-green.svg)
-![Startup](https://img.shields.io/badge/startup-<300ms-brightgreen.svg)
 [![Tests](https://github.com/maximeallanic/nivuus-shell/actions/workflows/tests.yml/badge.svg?branch=master)](https://github.com/maximeallanic/nivuus-shell/actions/workflows/tests.yml)
 [![uninstall verified](https://github.com/maximeallanic/nivuus-shell/actions/workflows/uninstall-verified.yml/badge.svg?branch=master)](https://github.com/maximeallanic/nivuus-shell/actions/workflows/uninstall-verified.yml)
 [![Matrix](https://github.com/maximeallanic/nivuus-shell/actions/workflows/matrix.yml/badge.svg?branch=master)](https://github.com/maximeallanic/nivuus-shell/actions/workflows/matrix.yml)
+<!-- badge-proof: tests/performance/test_startup.bats -->
+[![startup <300ms](https://img.shields.io/badge/startup-<300ms-brightgreen.svg)](https://github.com/maximeallanic/nivuus-shell/actions/workflows/matrix.yml)
 
-## ✨ Features
-
-- ⚡ **Lightning Fast** - Sub-100ms startup time (lazy-loaded completion)
-- 🎨 **Configurable Theme & Prompt** - Nord by default, swap themes or the prompt layout via `~/.zsh_local`
-- 🤖 **AI-Powered** - Command suggestions via the Gemini API
-- 📝 **Modern Vim** - Ctrl+C/V/X/A shortcuts
-- 🔍 **Smart Navigation** - History prefix search with ↑/↓
-- 📦 **Auto Node.js** - Version switching with .nvmrc
-- 🐍 **Python Venv** - Auto-detection in prompt (venv/conda/poetry)
-- ☁️ **Cloud Context** - AWS/GCP/Azure in prompt
-- 🛡️ **Safety Checks** - Warns before dangerous commands
-- 🌿 **Git Integration** - Fast shortcuts + beautiful prompt
-- 🛠️ **Zero Config** - Works out of the box
-
-## 🚀 Quick Start
-
-### Installation
+## Install
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/maximeallanic/nivuus-shell/master/install.sh | sh
 ```
 
-The one-liner downloads the latest release archive, **verifies its SHA-256 checksum**, installs
-into `~/.nivuus-shell` and adds a delimited block to your `~/.zshrc`. It leaves no git repository
-and no temporary directory behind, needs no `sudo`, and does not require `git`. `wget` works too
-(`wget -qO- <url> | sh`).
+It verifies a SHA-256 checksum, writes a delimited block into your `~/.zshrc`,
+needs no `sudo` and no `git`. Add `--dry-run` to see everything it would touch
+without touching it. What this **cannot** protect you from — the
+first install itself — is documented, in plain terms, in
+[SECURITY.md](SECURITY.md#first-install).
 
-Other ways to install (manual download with checksum verification, development checkout,
-per-platform prerequisites, `--minimal`, `--dry-run`, `--prefix`, pinning a version): see
-**[doc/INSTALL.md](doc/INSTALL.md)**.
-
-> Nivuus est conçu pour être empaqueté : quand il provient d'un gestionnaire
-> de paquets, les mises à jour automatiques se désactivent et l'activation
-> reste un acte par utilisateur (`nivuus enable`). Voir
-> **[doc/PACKAGING.md](doc/PACKAGING.md)**.
-
-### Uninstall
+## Uninstall
 
 ```bash
-nivuus uninstall              # removes everything Nivuus wrote, restores your .zshrc
-nivuus uninstall --purge      # also removes Nivuus's internal state (manifest, backups)
-nivuus uninstall --dry-run    # shows what would be removed, changes nothing
+nivuus uninstall              # restores every file it touched
+nivuus uninstall --purge      # also removes its own state (manifest, backups)
+nivuus uninstall --dry-run    # shows what it would remove, changes nothing
 ```
 
-Every modified file is restored byte-for-byte from the backup recorded at install time.
-`~/.zsh_local` and `~/.zsh_history` are never deleted.
+Every modified file is restored from a content-addressed backup recorded at
+install time in `~/.local/state/nivuus/backups/`. `~/.zsh_local` and
+`~/.zsh_history` are never deleted. This is checked nightly on every target
+below — that is the *uninstall verified* badge.
 
-If Nivuus was installed by the old one-liner (before v3.1), a git repository was created in
-`~/.nivuus-shell` and has been blocking updates ever since. `nivuus migrate` moves it aside
-(it is moved, never deleted, and the path is printed); `nivuus doctor` reports it.
+Then restart your terminal, or `exec zsh`.
 
-### Vérifier le trousseau de signature à l'installation (optionnel)
+## What you get
 
-Les mises à jour sont authentifiées par des clés publiques livrées avec
-l'installation. Tu peux épingler ce trousseau au moment de l'installer :
+- **Removable.** `nivuus uninstall` restores every file it touched from a content-addressed backup. Verified nightly on the whole matrix — see the badge. → [doc/INSTALL.md](doc/INSTALL.md)
+- **Fast, and held to it.** A CI test fails the build if an interactive shell takes more than 300ms to start. → [doc/FEATURES.md](doc/FEATURES.md)
+- **No plugin manager.** Pure ZSH modules, no oh-my-zsh, no framework underneath. → [doc/CLAUDE.md](doc/CLAUDE.md)
+- **Optional AI, your key, your provider.** Gemini, OpenAI or Anthropic — `??`, `why`, `explain`, and a command-not-found that names the package to install. Nivuus works fully without it. → [doc/FEATURES.md](doc/FEATURES.md)
+- **A prompt you can re-lay-out.** Themes and a token-based prompt format, no code change. → [doc/PROMPT.md](doc/PROMPT.md)
+- **Signed releases.** An update whose signature does not verify is refused outright, with no fallback. → [SECURITY.md](SECURITY.md)
+
+## Proof
+
+Eight targets. Install, uninstall, and a `$HOME` fingerprint that must come
+back bit-identical — every night, and on every release.
+
+| Target | Install | Uninstall |
+|---|---|---|
+| Ubuntu 22.04 | yes | yes |
+| Ubuntu 24.04 | yes | yes |
+| Debian 12 | yes | yes |
+| Arch Linux | yes | yes |
+| Fedora 41 | yes | yes |
+| Alpine 3.20 (musl) | yes | yes |
+| Ubuntu (GitHub runner) | yes | yes |
+| macOS 14 (arm64) | yes | yes |
+
+The startup budget is enforced, not observed: the build fails past **300ms**.
+Typical times measured on that matrix: 26–46 ms, see [tests/performance/](tests/performance/).
+
+The target list is not written here by hand: it comes from
+[.github/matrix.json](.github/matrix.json), and
+`tests/unit/test_readme_badges.bats` fails when this table and that file
+disagree.
+
+## Configure
+
+Nothing here is required. Put what you want in `~/.zsh_local`; Nivuus never
+writes to it.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/maximeallanic/nivuus-shell/master/install.sh \
-  | sh -s -- --verify-key <empreinte>
-```
-
-L'empreinte est publiée dans [SECURITY.md](SECURITY.md). Si le trousseau
-embarqué ne correspond pas, l'installation est refusée **avant** la moindre
-écriture.
-
-**Limite honnête** : cela ne résout pas la **première installation**. Le
-dépôt et la clé publique viennent de la même origine — qui contrôle cette
-origine à cet instant sert son installeur *et* sa clé. Aucune signature ne
-peut résoudre ça (first install / première installation : voir
-[SECURITY.md](SECURITY.md)). Ce que la signature protège, c'est le canal de
-**mise à jour** : récurrent, automatique, invisible, sur toutes les
-machines, pour toujours.
-
-### Restart Your Terminal
-
-```bash
-exec zsh
-# or just restart your terminal
-```
-
-## 🧪 Plateformes testées
-
-Chaque nuit, et avant chaque release, Nivuus est installé puis désinstallé sur chacune de ces
-cibles ; l'empreinte de `$HOME` doit être identique bit pour bit avant et après. Le badge
-**uninstall verified** ci-dessus rougit dès qu'une trace subsiste.
-
-| Cible | Niveau de preuve |
-|---|---|
-| Ubuntu 22.04 | installation, shell réel, désinstallation, empreinte |
-| Ubuntu 24.04 | installation, shell réel, désinstallation, empreinte |
-| Debian 12 | installation, shell réel, désinstallation, empreinte |
-| Arch Linux | installation, shell réel, désinstallation, empreinte |
-| Fedora 41 | installation, shell réel, désinstallation, empreinte |
-| Alpine 3.20 (musl) | installation, shell réel, désinstallation, empreinte — valide le chemin sans coreutils GNU |
-| Ubuntu (GitHub runner) | matrice complète, quatre niveaux |
-| macOS 14 (arm64) | installation, désinstallation, empreinte |
-| WSL2 | **simulé** : marqueurs `/proc/version` et `WSL_DISTRO_NAME` injectés dans un conteneur Ubuntu. Valide la branche de code, pas l'environnement. |
-
-Cette liste est vérifiée contre `.github/matrix.json` par `tests/unit/test_readme_badges.bats` :
-ajouter une cible à la matrice sans l'ajouter ici fait échouer la CI, et inversement.
-
-## 📖 Usage
-
-### AI Commands
-
-Get intelligent command suggestions powered by Gemini:
-
-```bash
-??                      # Get command suggestions
-?? "find large files"   # Ask for specific task
-?git "undo commit"      # Git-specific help
-why "tar -xzf file"     # Explain a command
-explain "complex cmd"   # Detailed explanation
-ask "how to compress"   # General question
-aihelp                  # Show all AI commands
-```
-
-**Setup AI:**
-- AI commands require a Google Gemini API key
-- Get a key: https://aistudio.google.com/apikey
-- Configure: `export GOOGLE_API_KEY='your-api-key'`
-
-### Modern Vim Editing
-
-Edit files with familiar keyboard shortcuts:
-
-```bash
-vedit myfile.txt        # Edit with auto environment detection
-vim.modern myfile.txt   # Full-featured local vim
-vim.ssh myfile.txt      # Optimized for SSH
-vim_help                # Show all shortcuts
-```
-
-**Shortcuts in Vim:**
-- **Ctrl+C** - Copy
-- **Ctrl+X** - Cut
-- **Ctrl+V** - Paste
-- **Ctrl+A** - Select all
-- **Ctrl+S** - Save
-- **Ctrl+Z** - Undo
-
-### Smart Navigation
-
-Type a command prefix, then press ↑ or ↓ to search history:
-
-```bash
-# Type 'git' then press ↑/↓ to cycle through:
-git status
-git add .
-git commit -m "..."
-git push
-```
-
-**Directory shortcuts:**
-```bash
-..                      # Go up one directory
-...                     # Go up two directories
-....                    # Go up three directories
-d                       # List recent directories
-1-5                     # Jump to directory in stack
-```
-
-### Git Shortcuts
-
-```bash
-gs                      # git status
-ga                      # git add
-gc                      # git commit
-gp                      # git push
-gl                      # git log (beautiful)
-gd                      # git diff
-gb                      # git branch
-gco                     # git checkout
-```
-
-### Node.js Auto-Switching
-
-Nivuus automatically switches Node.js versions when you enter a directory with `.nvmrc`:
-
-```bash
-# Just cd into a project
-cd my-project           # Automatically loads correct Node.js version
-
-# NVM utilities
-nvm-install             # Install NVM
-nvm-health              # Check NVM status
-```
-
-### Python Virtual Environments
-
-Automatic detection and display of Python virtual environments:
-
-```bash
-venv                    # Activate venv in current directory
-venv-create             # Create new .venv
-venv-info               # Show active environment info
-```
-
-**Prompt shows:**
-- `(venv)` for venv/virtualenv
-- `(conda:myenv)` for Conda environments
-- `(poetry)` for Poetry
-
-### Cloud Provider Context
-
-See your active cloud context in the prompt:
-
-```bash
-# AWS
-export AWS_PROFILE=production    # Shows: aws:production
-
-# GCP
-gcloud config set project myapp  # Shows: gcp:myapp
-
-# Azure
-az account set --subscription X  # Shows: az:X
-```
-
-### Command Safety
-
-Automatic protection against dangerous commands:
-
-```bash
-rm -rf /                # Requires typing 'yes' to confirm
-chmod 777 file          # Shows warning
-safe-rm .env            # Extra protection for important files
-```
-
-### File Management
-
-```bash
-ll                      # Beautiful file list
-tree                    # Directory tree
-f <pattern>             # Fast file search
-search <pattern>        # Search file contents
-mkcd mydir              # Create and enter directory
-extract archive.tar.gz  # Extract any archive
-backup myfile           # Create timestamped backup
-```
-
-### Network Tools
-
-```bash
-myip                    # Show public IP
-localip                 # Show local IPs
-ports                   # List open ports
-weather Paris           # Get weather forecast
-```
-
-### System Monitoring
-
-```bash
-healthcheck             # Complete system diagnostics
-benchmark               # Performance testing
-cleanup                 # Clean cache and temp files
-zsh_info                # Show shell configuration
-nivuus-version          # Show current version
-nivuus-version --check  # Check for updates
-nivuus-update           # Install latest update
-```
-
-## 🎨 Theme & Prompt
-
-Nivuus ships with the [Nord color scheme](https://www.nordtheme.com/) by default, but the theme
-and the prompt layout are both configurable — no code changes needed.
-
-### Prompt Format (default)
-
-```
-[hostname] > ~/path (venv) aws:prod [firebase-project] git:(branch)○     [jobs]
-```
-
-- **Green `>`** - Last command succeeded
-- **Red `>`** - Last command failed
-- **[hostname]** - Shows in SSH sessions
-- **(venv)** - Active Python virtual environment
-- **aws:prod** - Cloud provider context (AWS/GCP/Azure)
-- **[project]** - Active Firebase project
-- **git:(branch)○** - Git branch with status (○ dirty, ● clean)
-- **[jobs]** - Background jobs on the right (RPROMPT)
-
-### Customization
-
-Edit `~/.zsh_local` to customize:
-
-```bash
-# --- Theme ---
-export NIVUUS_THEME='dracula'          # Built-in: nord (default), dracula
-# export NIVUUS_THEME_DIR="$HOME/.config/nivuus-shell/themes"  # custom theme folder
-# export NIVUUS_THEME_FILE="$HOME/my-theme.zsh"                # or one specific file
-
-# --- Prompt layout ---
-# Tokens: {ssh} {root} {status} {path} {venv} {cloud} {firebase} {git} {jobs}
-export NIVUUS_PROMPT_FORMAT='{status} {path}{git} '
-export NIVUUS_RPROMPT_FORMAT='{jobs}'
-
-# Performance tuning
-export GIT_PROMPT_CACHE_TTL=5          # Git cache (default: 2s)
-export ENABLE_FIREBASE_PROMPT=false    # Disable Firebase info
-export ENABLE_PROJECT_DETECTION=false  # Disable project detection
-
-# Python virtual environments
-export ENABLE_PYTHON_VENV=false        # Disable venv in prompt
-export ENABLE_PYTHON_AUTO_ACTIVATE=true # Auto-activate venv on cd
-
-# Cloud provider context
-export ENABLE_CLOUD_PROMPT=false       # Disable cloud context in prompt
-
-# Command safety
-export ENABLE_SAFETY_CHECKS=false      # Disable safety warnings
-export ENABLE_SAFE_ALIASES=true        # Override rm/chmod with safe versions
-
-# bat (cat) styling
-export BAT_STYLE="plain"                # Options: plain, auto, numbers, grid, header
-                                        # Combine: "numbers,grid"
-
-# AI configuration
-export GOOGLE_API_KEY='your-api-key'   # https://aistudio.google.com/apikey
-export GEMINI_MODEL='gemini-3.1-flash-lite'
-```
-
-See [PROMPT.md](doc/PROMPT.md) for the full list of prompt tokens and the theme file contract
-(to write your own theme, copy `themes/nord.zsh` or `themes/dracula.zsh`).
-
-## 📊 Performance
-
-Nivuus is optimized for speed:
-
-- **Actual:** <100ms startup time (typically 40-60ms)
-- **Lazy-loaded completion** - compinit loads on first TAB (~300ms saved!)
-- **Lazy loading** for NVM and heavy features
-- **Git caching** with 2s TTL
-- **Compiled ZSH files** for faster loading
-- **No external plugins** - pure ZSH
-
-### Benchmark Your Shell
-
-```bash
-benchmark               # Run performance tests
-```
-
-## 🛠️ Configuration
-
-### Edit Configuration
-
-```bash
-config_edit             # Edit main config
-config_edit local       # Edit local customizations
-config_edit functions   # Edit custom functions
-config_edit aliases     # Edit custom aliases
-```
-
-### Backup & Restore
-
-```bash
-config_backup           # Create manual backup
-config_restore          # Restore from backup
-```
-
-Automatic backups are created at:
-- During installation: `~/.config/nivuus-shell-backup/`
-- Auto-maintenance: Weekly cleanup
-
-## 🔄 Updating
-
-Nivuus Shell includes an automatic update system that checks for new releases weekly and installs them automatically. Each release is **signed**; an update whose signature does not verify against a key shipped with your installation is refused outright.
-
-### Check Current Version
-
-```bash
-nivuus-version              # Show current version
-nivuus-version --check      # Check for available updates
-```
-
-### Automatic Updates
-
-- **Weekly checks** - Checks for new releases every 7 days
-- **Release-based** - Updates from official GitHub Releases (stable versions only)
-- **Signature verification** — chaque release est signée ; une mise à jour
-  dont la signature n'est pas valide est refusée, sans repli sur la simple
-  empreinte. Voir [SECURITY.md](SECURITY.md) pour ce que cela garantit —
-  et ce que cela ne garantit pas, notamment pour la première installation.
-- **Automatic installation** - Updates installed automatically with backup
-- **Safe rollback** - Previous versions backed up to `~/.config/nivuus-shell-backup/`
-
-### Manual Update
-
-```bash
-nivuus-update               # Check for and install updates manually
-```
-
-The update system will:
-1. Check the latest release on GitHub
-2. Download the release archive, its `SHA256SUMS` and its signatures
-3. **Verify the signature of `SHA256SUMS`** against the keys in `keys/`
-   (signature first — comparing a digest against an unauthenticated
-   `SHA256SUMS` proves nothing)
-4. Verify the SHA256 digest of the archive
-5. Create a backup of your current installation
-6. Install the new version
-7. Recompile ZSH files
-
-If either verification fails, the update is refused **before** anything is
-written, and your installation is left untouched. There is no fallback.
-
-### Configuration
-
-Customize auto-update behavior in `~/.zsh_local`:
-
-```bash
-# Disable auto-updates
+# ~/.zsh_local
+export NIVUUS_THEME=dracula                # nord (default) or dracula
+export NIVUUS_PROMPT_FORMAT='{path}{git} ' # {ssh} {root} {status} {path} {venv} {cloud} {git} {jobs}
+export AI_BACKEND=anthropic                # gemini (default), openai, anthropic
+export ANTHROPIC_API_KEY=sk-ant-...
+export ENABLE_AI_SUGGESTIONS=false         # every feature has an off switch
 export ENABLE_AUTOUPDATE=false
-
-# Change check frequency (days)
-export AUTOUPDATE_CHECK_FREQUENCY_DAYS=14
-
-# Désactive UNIQUEMENT la comparaison d'empreinte SHA256 (déconseillé).
-# Sans effet sur la vérification de signature, qui n'est jamais
-# désactivable sur le chemin automatique.
-export NIVUUS_VERIFY_CHECKSUMS=false
-
-# Use different GitHub repository
-export NIVUUS_GITHUB_REPO=yourfork/nivuus-shell
 ```
 
-### Rollback
+Full list of tokens, themes and toggles: [doc/PROMPT.md](doc/PROMPT.md) and
+[doc/FEATURES.md](doc/FEATURES.md).
 
-If an update causes issues, restore from the timestamped backup:
+## Everyday commands
 
 ```bash
-# List backups
-ls ~/.config/nivuus-shell-backup/
-
-# Restore from backup
-cp -r ~/.config/nivuus-shell-backup/pre-update-YYYYMMDD-HHMMSS/nivuus-shell ~/.nivuus-shell
-exec zsh
+nivuus doctor      # diagnose an installation that misbehaves
+nivuus update      # fetch and verify the next signed release
+nivuus enable      # activate Nivuus for this user (after a package install)
+nivuus disable     # deactivate it, leaving the tree alone
+nivuus help        # all of the above, with their flags
 ```
 
-### Release Process
+## Documentation
 
-Nivuus Shell uses semantic versioning (MAJOR.MINOR.PATCH):
-- **MAJOR** - Breaking changes
-- **MINOR** - New features (backward compatible)
-- **PATCH** - Bug fixes
+Everything is in [doc/](doc/README.md), which is an index the CI keeps honest.
 
-See [CHANGELOG.md](CHANGELOG.md) for release history.
+- [doc/INSTALL.md](doc/INSTALL.md) — every installation route, per platform, and how to verify the signing keyring
+- [doc/FEATURES.md](doc/FEATURES.md) — the complete feature reference
+- [doc/PROMPT.md](doc/PROMPT.md) — prompt tokens, themes, layout (in French)
+- [doc/UPDATING.md](doc/UPDATING.md) — how updates are verified, applied and rolled back
+- [doc/TROUBLESHOOTING.md](doc/TROUBLESHOOTING.md) — when `nivuus doctor` is not enough
+- [doc/PACKAGING.md](doc/PACKAGING.md) — package mode, for maintainers (in French)
+- [doc/CLAUDE.md](doc/CLAUDE.md) — architecture and conventions
+- [doc/TESTING.md](doc/TESTING.md) — the four test levels and how to run them
 
-## 🔧 Development
+## Contributing · Security · License
 
-Test changes without installing:
+Read [CONTRIBUTING.md](CONTRIBUTING.md) first: this repository tests its own
+documentation, and a pull request that reads well can still fail the build.
 
-```bash
-git clone https://github.com/maximeallanic/nivuus-shell.git
-cd nivuus-shell
-./dev.sh
-```
+Security policy, threat model and keyring fingerprint: [SECURITY.md](SECURITY.md).
 
-This launches a dev shell with:
-- No file copying (uses repo directly)
-- No compilation (instant reload)
-- All changes take effect immediately
+MIT — see [LICENSE](LICENSE).
 
-Edit any file, then restart the shell to see changes:
-```bash
-exec zsh
-```
+## Credits
 
-## 📁 Project Structure
-
-```
-nivuus-shell/
-├── .github/
-│   └── workflows/
-│       ├── tests.yml      # CI/CD testing pipeline
-│       └── release.yml    # Release automation
-├── .zshrc                 # Main entry point
-├── .vimrc.nord            # Vim configuration with Nord theme
-├── install.sh             # Installation script
-├── config/                # Modular configuration
-│   ├── 00-core.zsh        # Core ZSH settings
-│   ├── 05-prompt.zsh      # Configurable prompt (theme + format template)
-│   ├── 06-git.zsh         # Git aliases
-│   ├── 07-navigation.zsh  # Smart navigation
-│   ├── 08-vim.zsh         # Vim integration
-│   ├── 09-nodejs.zsh      # Node.js/NVM
-│   ├── 10-ai.zsh          # AI commands
-│   ├── 20-autoupdate.zsh  # Auto-update system (release-based)
-│   └── ...                # Other modules
-├── themes/
-│   ├── nord.zsh           # Default color palette
-│   └── dracula.zsh        # Second built-in theme / custom-theme template
-├── bin/
-│   ├── healthcheck        # System diagnostics
-│   └── benchmark          # Performance testing
-├── doc/
-│   ├── FEATURES.md        # Complete feature list
-│   ├── PROMPT.md          # Prompt documentation
-│   └── CLAUDE.md          # Developer guide
-├── CHANGELOG.md           # Release history
-└── README.md              # This file
-```
-
-## 🔧 Requirements
-
-### Required
-- **ZSH** 5.0+
-- **Git** 2.0+
-- **Curl** 7.0+
-
-### Optional
-- **Gemini API key** - For AI commands (get one at https://aistudio.google.com/apikey)
-- **jq** - Robust JSON parsing for AI responses (falls back to grep/sed if absent)
-- **NVM** - For Node.js version management
-- **fd** - Fast file search (`cargo install fd-find`)
-- **ripgrep** - Fast content search (`cargo install ripgrep`)
-- **bat** - Better cat (`cargo install bat`)
-- **eza** - Modern ls (`cargo install eza`)
-
-## 📚 Documentation
-
-- **[FEATURES.md](doc/FEATURES.md)** - Complete feature guide
-- **[PROMPT.md](doc/PROMPT.md)** - Prompt configuration details
-- **[CLAUDE.md](doc/CLAUDE.md)** - Developer guide and architecture
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## 📝 License
-
-MIT License - see LICENSE file for details
-
-## 🙏 Credits
-
-- **Nord Theme** - [Arctic Ice Studio](https://www.nordtheme.com/)
-- **Gemini AI** - [Google](https://ai.google.dev/)
-
-## 🐛 Troubleshooting
-
-### Shell loads slowly
-
-```bash
-# Disable features in ~/.zsh_local
-export ENABLE_SYNTAX_HIGHLIGHTING=false
-export ENABLE_PROJECT_DETECTION=false
-export GIT_PROMPT_CACHE_TTL=5
-```
-
-### AI commands not working
-
-```bash
-# Set your Gemini API key (https://aistudio.google.com/apikey)
-export GOOGLE_API_KEY='your-api-key'
-```
-
-### Git prompt not showing
-
-```bash
-# Check if in git repository
-git status
-
-# Increase cache if needed
-export GIT_PROMPT_CACHE_TTL=5
-```
-
-### Vim shortcuts not working
-
-```bash
-# Check clipboard support
-vim --version | grep clipboard
-
-# Use fallback if needed
-vim.ssh myfile  # Uses internal clipboard
-```
-
-## 📞 Support
-
-- **Issues**: [GitHub Issues](https://github.com/maximeallanic/nivuus-shell/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/maximeallanic/nivuus-shell/discussions)
-
----
-
-**Made with ❄️ and the Nord theme**
-
+Colour palette after [Nord](https://www.nordtheme.com/). AI features talk to
+Google Gemini, OpenAI or Anthropic, with your key and your choice.

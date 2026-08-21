@@ -294,3 +294,36 @@ test_workflow_files() {
     done
 }
 
+
+@test "les suites de documentation sont nommées dans tests.yml" {
+    # Même garde-fou que pour la signature et l'empaquetage : elles sont
+    # couvertes par « bats tests/unit/ », mais les nommer interdit qu'un
+    # refactor de CI les perde en silence.
+    f="$WF/tests.yml"
+    for suite in tests/unit/test_readme_claims.bats \
+                 tests/unit/test_readme_badges.bats \
+                 tests/unit/test_docs_index.bats \
+                 tests/e2e/test_docs_install.bats; do
+        grep -qF "$suite" "$f" || { echo "suite de documentation perdue: $suite"; false; }
+    done
+}
+
+@test "les règles de vitrine sont gardées par grep dans tests.yml" {
+    f="$WF/tests.yml"
+    for regle in "REGLE 5.1" "REGLE 5.2" "REGLE 5.3" "REGLE 5.4" \
+                 "REGLE 5.5" "REGLE 5.6" "REGLE 5.7" "REGLE 5.9" "REGLE 5.10"; do
+        grep -qF "$regle" "$f" || { echo "règle non gardée en CI : $regle"; false; }
+    done
+}
+
+@test "les règles de vitrine existent vraiment dans leurs fichiers de test" {
+    # Garde-fou du garde-fou : sans lui, la règle ci-dessus se contenterait
+    # de chaînes mortes dans un YAML.
+    for regle in "REGLE 5.1" "REGLE 5.2" "REGLE 5.3" "REGLE 5.5" \
+                 "REGLE 5.7" "REGLE 5.9" "REGLE 5.10"; do
+        grep -qF "$regle" "$ROOT/tests/unit/test_readme_claims.bats" \
+            || { echo "règle absente de test_readme_claims.bats : $regle"; false; }
+    done
+    grep -qF "REGLE 5.4" "$ROOT/tests/unit/test_readme_badges.bats"
+    grep -qF "REGLE 5.6" "$ROOT/tests/unit/test_docs_index.bats"
+}

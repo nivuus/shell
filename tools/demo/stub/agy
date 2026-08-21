@@ -1,0 +1,33 @@
+#!/bin/sh
+# tools/demo/stub/agy — FAUX Antigravity CLI, pour le tournage de la démo.
+#
+# Il imite la seule surface que config/09-ai-backend-gemini.zsh consomme :
+# « agy -p PROMPT --model M --output-format json », un objet JSON avec
+# .status et .response. Aucune clé, aucun réseau, aucune variabilité.
+#
+# Pourquoi un stub plutôt qu'une vraie clé jetable : la garde n° 2 rejoue ce
+# scénario en conteneur à chaque merge. Un rejeu qui dépend d'une clé tierce
+# est un test qui rougit pour une raison étrangère au produit -- donc un test
+# qu'on finira par désactiver.
+set -eu
+
+prompt=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -p|--print) prompt="${2:-}"; shift 2 || shift ;;
+        --model|--output-format|--print-timeout) shift 2 ;;
+        *) shift ;;
+    esac
+done
+[ -n "$prompt" ] || prompt="$(cat 2>/dev/null || true)"
+
+reply() { printf '{"status":"SUCCESS","response":%s}\n' "$1"; }
+
+case "$prompt" in
+    *ncdu*)
+        reply '"ncdu provides `ncdu`.\n\nsudo apt-get install -y ncdu"' ;;
+    *bigger*|*100M*|*larger*)
+        reply '"find . -type f -size +100M -exec ls -lh {} +"' ;;
+    *)
+        reply '"(demo stub: no canned answer for this prompt)"' ;;
+esac
