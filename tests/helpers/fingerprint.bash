@@ -1,13 +1,19 @@
 # tests/helpers/fingerprint.bash
-# Empreinte reproductible d'une arborescence : chemin, permissions, contenu.
+# Empreinte reproductible d'une arborescence : chemin, permissions,
+# propriétaire, contenu — et les liens symboliques, cible comprise.
 #
-# LIMITE CONNUE : les liens symboliques sont invisibles ici. `find -type d` et
-# `-type f` ne matchent pas un lien (son type est `l`), donc un lien laissé
-# derrière ou mal restauré ne ferait PAS échouer le test. Inerte aujourd'hui —
-# rien dans bin/nivuus ni lib/ ne crée de lien — mais si cela change, ajouter
-# `-type l` ici AVANT de se fier au vert de ce test.
-# Non capturés non plus : attributs étendus, ACL, et mtimes (ces derniers
-# volontairement : la promesse porte sur le contenu, les chemins et les droits).
+# Pourquoi uid/gid : le mode système écrit en root dans /etc et /usr/local.
+# Un chown qui survit à la désinstallation est une trace, et sans ces deux
+# colonnes il serait strictement invisible.
+# Pourquoi les liens : /usr/local/bin/nivuus EST un lien. Sans -type l, un
+# lien mort laissé derrière ne ferait échouer aucun test.
+#
+# Non capturés, et c'est délibéré : les attributs étendus, les ACL, les
+# contextes SELinux (restorecon est best-effort) et les mtimes (la promesse
+# porte sur le contenu, les chemins et les droits).
+# Les MODES d'un lien symbolique ne sont pas capturés : ils ne sont pas
+# portables (Linux les ignore, BSD non). Ce qu'un lien porte réellement,
+# c'est sa cible et son propriétaire.
 
 fs_hash() {
     if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1
@@ -19,13 +25,27 @@ fs_perms() {
     stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1"
 }
 
+# uid:gid NUMÉRIQUES : un nom d'utilisateur dépend de /etc/passwd, qui
+# diffère d'un conteneur à l'autre ; un uid ne dépend de rien.
+# Ni `stat -c` (GNU) ni `stat -f` (BSD) ne suivent un lien symbolique par
+# défaut -- c'est exactement ce qu'on veut ici.
+fs_owner() {
+    stat -c '%u:%g' "$1" 2>/dev/null || stat -f '%u:%g' "$1"
+}
+
 fs_fingerprint() {
     local root="$1"
     { find "$root" -type d | while IFS= read -r d; do
-          printf 'DIR\t%s\t%s\n' "${d#$root}" "$(fs_perms "$d")"
+          printf 'DIR\t%s\t%s\t%s\n' "${d#$root}" "$(fs_perms "$d")" "$(fs_owner "$d")"
       done
       find "$root" -type f | while IFS= read -r f; do
-          printf 'FILE\t%s\t%s\t%s\n' "${f#$root}" "$(fs_perms "$f")" "$(fs_hash "$f")"
+          printf 'FILE\t%s\t%s\t%s\t%s\n' "${f#$root}" "$(fs_perms "$f")" "$(fs_owner "$f")" "$(fs_hash "$f")"
+      done
+      find "$root" -type l | while IFS= read -r l; do
+          # La cible fait office de « contenu » : c'est tout ce qu'un lien
+          # transporte. readlink (sans -f) ne résout PAS la chaîne : on veut
+          # ce que le lien dit, pas où il finit.
+          printf 'LINK\t%s\t%s\t%s\n' "${l#$root}" "$(fs_owner "$l")" "$(readlink "$l")"
       done
     } | LC_ALL=C sort
 }
