@@ -24,11 +24,19 @@ nivuus_origin() {
     value="$(nivuus_origin_field "$1" origin 2>/dev/null || printf 'source')"
     case "$value" in
         package) printf 'package\n' ;;
+        # Arbre partagé posé par « nivuus install --system ». Ce n'est PAS
+        # un paquet : personne d'autre ne le possède, c'est le manifeste de
+        # /var/lib/nivuus qui en répond. Le message diffère, la décision
+        # (aucune mise à jour automatique) est la même.
+        system)  printf 'system\n' ;;
         *)       printf 'source\n' ;;
     esac
 }
 
 nivuus_origin_is_package() { [ "$(nivuus_origin "$1")" = "package" ]; }
+
+# Même décision, deux messages : voir config/20-autoupdate.zsh.
+nivuus_origin_is_managed() { [ "$(nivuus_origin "$1")" != "source" ]; }
 
 nivuus_origin_channel() {
     nivuus_origin_field "$1" channel 2>/dev/null || printf 'unknown\n'

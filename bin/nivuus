@@ -708,6 +708,15 @@ cmd_update() {
         return 0
     fi
 
+    # Arbre système : on répond ici, sans déléguer à un shell interactif --
+    # un conteneur, une CI ou un cron n'en ont pas, et le message est le même.
+    if [ "$(nivuus_origin "$dir")" = "system" ]; then
+        log_info "Nivuus est installé pour la machine ($dir)."
+        log_info "Les mises à jour sont l'affaire de l'administrateur :"
+        log_info "  sudo nivuus update"
+        return 0
+    fi
+
     state="$(nivuus_git_state "$dir")"
     if [ "$state" = "legacy" ]; then
         log_error "Les mises à jour sont bloquées par le dépôt git que l'ancien installeur a laissé dans $dir."

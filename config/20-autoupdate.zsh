@@ -50,6 +50,10 @@ _nivuus_origin() {
     [[ -r "$f" ]] || { print -r -- source; return 0 }
     v="${$(sed -n 's/^origin=//p' "$f" 2>/dev/null | head -n1):-source}"
     [[ "$v" == "package" ]] && { print -r -- package; return 0 }
+    # origin=system : un arbre partagé posé par « nivuus install --system ».
+    # Ce n'est PAS un paquet -- le message diffère -- mais la décision est la
+    # même : aucune mise à jour automatique depuis un shell utilisateur.
+    [[ "$v" == "system" ]] && { print -r -- system; return 0 }
     print -r -- source
 }
 
@@ -80,6 +84,12 @@ _nivuus_origin_package_version() {
 # s'exécuter là où il détruirait autre chose que lui-même. La symétrie
 # garantit qu'on ne peut pas corriger l'une en oubliant l'autre.
 _nivuus_is_package_install() { [[ "$(_nivuus_origin)" == "package" ]] }
+
+# origin=system rejoint origin=package du côté de la DÉCISION (aucune mise à
+# jour automatique) tout en gardant son propre MESSAGE : un administrateur a
+# une commande à taper, un utilisateur de paquet a son gestionnaire. Une
+# seule condition, deux messages.
+_nivuus_is_managed_install() { [[ "$(_nivuus_origin)" != "source" ]] }
 
 # Get current installed version
 _nivuus_current_version() {
@@ -639,7 +649,7 @@ _nivuus_check_update_async() {
 # d'honorer ce réglage qui ne produise pas un système incohérent.
 if [[ "$ENABLE_AUTOUPDATE" == "true" ]] \
    && ! _nivuus_is_dev_checkout \
-   && ! _nivuus_is_package_install; then
+   && ! _nivuus_is_managed_install; then
     # Check if it's time for an update check
     days_since_check=$(_nivuus_days_since_check)
 
@@ -659,9 +669,20 @@ nivuus-update() {
     # question légitime et a reçu la réponse exacte ; ce n'est pas un échec.
     # Un code non nul ferait crier les scripts et les tâches planifiées qui
     # appellent nivuus update, sans rien apprendre à personne.
-    if _nivuus_is_package_install; then
+    if _nivuus_is_managed_install; then
         local channel pkg version
         channel="$(_nivuus_origin_channel)"
+        if [[ "$(_nivuus_origin)" == "system" ]]; then
+            version="$(_nivuus_origin_package_version 2>/dev/null || _nivuus_current_version)"
+            print -r -- "Nivuus est installé pour la machine (${NIVUUS_SHELL_DIR}), en v${version}."
+            print -r -- "Les mises à jour sont l'affaire de l'administrateur :"
+            print -r -- ""
+            print -r -- "    sudo nivuus update"
+            print -r -- ""
+            print -r -- "Pour repasser à une installation personnelle avec mises à jour automatiques :"
+            print -r -- "    curl -fsSL https://raw.githubusercontent.com/${NIVUUS_GITHUB_REPO}/master/install.sh | sh"
+            return 0
+        fi
         pkg="$(_nivuus_origin_package_name)"
         version="$(_nivuus_origin_package_version 2>/dev/null || _nivuus_current_version)"
         case "$channel" in
