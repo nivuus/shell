@@ -49,11 +49,22 @@ nivuus_manifest_begin() {
         # répertoire XDG préexistant.
         missing="$(_nivuus_missing_levels "$NIVUUS_BACKUP_DIR")"
         mkdir -p "$NIVUUS_BACKUP_DIR"
+        # Le store de sauvegardes peut contenir la copie d'un fichier de
+        # /etc dont le mode d'origine était restrictif : élargir ses droits
+        # élargirait ceux du contenu sauvegardé.
+        if [ -n "${NIVUUS_BACKUP_DIR_MODE:-}" ]; then
+            chmod "$NIVUUS_BACKUP_DIR_MODE" "$NIVUUS_BACKUP_DIR" 2>/dev/null || :
+        fi
     fi
 
     printf '#nivuus-manifest v1\tinstalled_at=%s\tmode=%s\tdir=%s\n' \
         "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$mode" "$install_dir" \
         > "$NIVUUS_MANIFEST_TMP"
+    # Le manifeste ne contient que des chemins et des empreintes : il doit
+    # rester lisible par un utilisateur non privilégié qui lance « doctor ».
+    if [ -n "${NIVUUS_MANIFEST_MODE:-}" ]; then
+        chmod "$NIVUUS_MANIFEST_MODE" "$NIVUUS_MANIFEST_TMP" 2>/dev/null || :
+    fi
 
     if [ -n "$missing" ]; then
         # Du plus superficiel au plus profond (ordre de création), pour que

@@ -79,6 +79,10 @@ nivuus_system_legacy_tree() {
 # purge transactionnelle). On le dit avant d'écrire. Ailleurs -- Fedora,
 # RHEL, openSUSE, Alpine, conteneurs -- il n'y a rien à recommander : c'est
 # exactement la raison d'être de ce mode.
+# TALON — remplacé par la Task 8 (« recommander le .deb là où il existe »).
+# Ne dit rien, n'empêche rien : le comportement complet arrive avec son test.
+nivuus_system_recommend_package() { return 0; }
+
 # SELinux : rétablit l'étiquette que la politique prescrit DÉJÀ pour ces
 # chemins. Ne crée ni ne supprime rien, donc rien à journaliser -- le
 # retrait du fichier emporte son étiquette. Son absence est signalée, jamais

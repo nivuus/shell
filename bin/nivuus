@@ -50,7 +50,7 @@ nivuus — gestion de Nivuus Shell
 
 Usage :
   nivuus install   [--dry-run] [--yes] [--prefix DIR] [--minimal|--no-minimal]
-                   [--with-deps] [--verify-key EMPREINTE]
+                   [--with-deps] [--verify-key EMPREINTE] [--system]
   nivuus enable    [--dry-run] [--yes] [--prefix DIR] [--minimal|--no-minimal]
   nivuus disable   [--dry-run] [--yes] [--purge]
   nivuus uninstall [--dry-run] [--yes] [--purge]
@@ -68,6 +68,10 @@ Options :
   --with-deps   Propose UNE commande groupée pour installer les dépendances
                 recommandées et optionnelles, après confirmation. Sans elle,
                 Nivuus se contente d'afficher la commande.
+  --system    Installe pour TOUTE la machine (exige root) : arbre partagé
+              sous /usr/local/share/nivuus-shell, inventorié dans
+              /var/lib/nivuus. N'écrit dans AUCUN $HOME et ne fait de chsh
+              pour personne : chaque utilisateur lance « nivuus enable ».
   --verify-key  Empreinte attendue du jeu de clés de signature embarqué
                 (voir SECURITY.md). Si elle ne correspond pas, l'installation
                 est refusée AVANT toute écriture. C'est l'ancrage hors bande :
@@ -150,11 +154,12 @@ cmd_install() {
     fi
 
     local prefix="$HOME/.nivuus-shell" MINIMAL='' FORCE_MINIMAL='' FORCE_FULL='' WITH_DEPS=''
-    local verify_key=''
+    local verify_key='' SYSTEM='' manifest_mode='user' legacy=''
     while [ $# -gt 0 ]; do
         case "$1" in
             --dry-run) export NIVUUS_DRY_RUN=1 ;;
             --yes|-y)  ASSUME_YES=1 ;;
+            --system)  SYSTEM=1 ;;
             --minimal)     FORCE_MINIMAL=1 ;;
             --no-minimal)  FORCE_FULL=1 ;;
             --with-deps)   WITH_DEPS=1 ;;
@@ -172,6 +177,48 @@ cmd_install() {
         esac
         shift
     done
+
+    # --- Mode système : le domaine root -------------------------------
+    # Tout est décidé ICI, avant la première écriture : les chemins, le
+    # journal, les modes, et le droit d'agir. Aucune étape ne relit ce
+    # choix depuis l'environnement.
+    if [ -n "$SYSTEM" ]; then
+        manifest_mode='system'
+        prefix="$(nivuus_system_tree)"
+        NIVUUS_STATE_DIR="$(nivuus_system_state_dir)"; export NIVUUS_STATE_DIR
+        # L'umask de l'administrateur ne décide de rien : un sudo en 077
+        # produirait un arbre que personne ne peut lire.
+        umask 022
+        NIVUUS_INSTALL_DIR_MODE=755;  export NIVUUS_INSTALL_DIR_MODE
+        NIVUUS_INSTALL_FILE_MODE=644; export NIVUUS_INSTALL_FILE_MODE
+        NIVUUS_BACKUP_DIR_MODE=700;   export NIVUUS_BACKUP_DIR_MODE
+        NIVUUS_MANIFEST_MODE=644;     export NIVUUS_MANIFEST_MODE
+        if nivuus_system_is_root; then
+            NIVUUS_INSTALL_OWNER=root:root; export NIVUUS_INSTALL_OWNER
+        fi
+        # Ni chsh, ni extras interactifs : le shell de connexion d'autrui
+        # ne nous regarde pas (l'admin a usermod -s et useradd -s).
+        FORCE_MINIMAL=1
+        FORCE_FULL=''
+
+        legacy="$(nivuus_system_legacy_tree || true)"
+        if [ -n "$legacy" ]; then
+            log_error "$legacy contient une installation faite par l'ancien --system."
+            log_error "Elle n'a pas de manifeste : Nivuus ne peut pas la retirer sans risque, et refuse"
+            log_error "d'installer par-dessus. Procédure manuelle : voir doc/INSTALL.md, section « héritage »."
+            return 1
+        fi
+
+        # La recommandation du canal de paquets parle AVANT le refus de
+        # privilège : un administrateur sans sudo sous la main doit quand
+        # même apprendre que le .deb existe.
+        nivuus_system_recommend_package || { log_info "Annulé. Rien n'a été écrit."; return 0; }
+
+        # --dry-run n'exige rien : on doit pouvoir auditer avant d'élever.
+        if [ -z "${NIVUUS_DRY_RUN:-}" ]; then
+            nivuus_system_require_root "installer Nivuus pour la machine" || return 1
+        fi
+    fi
 
     # Le mode se décide ici, une fois, et se transmet ensuite explicitement
     # (jamais relu depuis l'environnement au fond d'une étape).
@@ -208,7 +255,7 @@ cmd_install() {
     nivuus_step_check_verify_tools
     confirm "Installer Nivuus Shell dans $prefix ?" || { log_info "Annulé."; return 0; }
 
-    nivuus_manifest_begin user "$prefix"
+    nivuus_manifest_begin "$manifest_mode" "$prefix"
     # Hérite les entrées d'une installation précédente ET pose elle-même la
     # marque post-inherit dont nivuus_manifest_abort a besoin pour ne
     # défaire que sa propre part si CETTE installation échoue, jamais une
@@ -224,8 +271,22 @@ cmd_install() {
     # ne le supprimera donc jamais, préexistant ou non. S'il n'existe pas
     # encore, un MKDIR l'autorise à être repris par rmdir plus tard s'il
     # finit vide -- sans jamais toucher à un ~/.cache non vide ou déjà là.
-    [ -d "$HOME/.cache" ] || nivuus_manifest_record MKDIR "$HOME/.cache" '-' '-'
-    if ! nivuus_step_copy_tree "$NIVUUS_SRC_ROOT" "$prefix" \
+    # En mode système, RIEN dans un $HOME : pas même le MKDIR de ~/.cache.
+    if [ -z "$SYSTEM" ]; then
+        [ -d "$HOME/.cache" ] || nivuus_manifest_record MKDIR "$HOME/.cache" '-' '-'
+    fi
+    if [ -n "$SYSTEM" ]; then
+        if ! nivuus_step_copy_tree "$NIVUUS_SRC_ROOT" "$prefix" \
+            || ! nivuus_step_write_version "$NIVUUS_SRC_ROOT" "$prefix" \
+            || ! nivuus_step_write_origin "$prefix" system selfhosted \
+            || ! nivuus_step_install_man "$NIVUUS_SRC_ROOT" "$(nivuus_system_man)" \
+            || ! nivuus_install_symlink "$prefix/bin/nivuus" "$(nivuus_system_bin)"; then
+            log_error "Installation interrompue."
+            nivuus_manifest_abort
+            return 1
+        fi
+        nivuus_system_restorecon "$prefix" "$(nivuus_system_bin)"
+    elif ! nivuus_step_copy_tree "$NIVUUS_SRC_ROOT" "$prefix" \
         || ! nivuus_step_write_version "$NIVUUS_SRC_ROOT" "$prefix" \
         || ! nivuus_step_write_zshrc "$HOME/.zshrc" "$prefix" "$MINIMAL"; then
         log_error "Installation interrompue."
@@ -236,7 +297,9 @@ cmd_install() {
         nivuus_manifest_abort
         return 1
     fi
-    if [ -z "${MINIMAL:-}" ]; then
+    # Aucun chsh en mode système, pour personne : root changeant le shell de
+    # connexion d'autrui est hors de question.
+    if [ -z "${MINIMAL:-}" ] && [ -z "$SYSTEM" ]; then
         if confirm "Faire de zsh ton shell de connexion ?"; then
             nivuus_step_chsh
         else
@@ -248,6 +311,10 @@ cmd_install() {
 
     if [ -n "${NIVUUS_DRY_RUN:-}" ]; then
         log_info "Aucune modification effectuée (--dry-run)."
+    elif [ -n "$SYSTEM" ]; then
+        log_ok "Nivuus Shell installé pour la machine dans $prefix"
+        log_info "Aucun ~/.zshrc n'a été modifié : l'activation est un acte par utilisateur."
+        log_info "Chacun lance, sans privilège :  nivuus enable"
     else
         log_ok "Nivuus Shell installé dans $prefix"
         log_info "Lance « exec zsh » pour démarrer."
