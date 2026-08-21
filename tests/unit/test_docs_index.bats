@@ -32,3 +32,102 @@ setup() {
     # et toujours en se demandant pourquoi un test « ne tourne pas ».
     grep -qE 'docker|network' "$DOC/TESTING.md"
 }
+
+# Tous les fichiers de doc/, index exclu.
+doc_files() {
+    find "$DOC" -maxdepth 1 -type f ! -name 'README.md' -exec basename {} \; \
+        | LC_ALL=C sort
+}
+
+# Tous les fichiers cités par l'index, sous forme de lien Markdown.
+indexed_files() {
+    grep -oE '\]\([^)]+\)' "$INDEX" | sed 's/^](//; s/)$//' \
+        | sed 's/#.*$//' | grep -v '^\.\./' | grep -v '^http' \
+        | LC_ALL=C sort -u
+}
+
+@test "REGLE 5.6: tout fichier de doc/ est listé dans doc/README.md" {
+    manquants=""
+    for f in $(doc_files); do
+        indexed_files | grep -qx "$f" || manquants="$manquants $f"
+    done
+    [ -z "$manquants" ] || { echo "absents de l'index :$manquants"; false; }
+}
+
+@test "REGLE 5.6: tout fichier listé par l'index existe" {
+    fantomes=""
+    for f in $(indexed_files); do
+        [ -e "$DOC/$f" ] || fantomes="$fantomes $f"
+    done
+    [ -z "$fantomes" ] || { echo "listés mais inexistants :$fantomes"; false; }
+}
+
+@test "REGLE 5.6: aucun rapport d'avancement n'est présenté comme de la documentation" {
+    # Un rapport de chantier décrit un moment ; une documentation décrit un
+    # produit. Les confondre, c'est publier un instantané périmé.
+    run ls "$DOC/TESTING_UPDATE.md" "$DOC/TEST_PROGRESS.md" "$DOC/TEST_SUMMARY.md"
+    [ "$status" -ne 0 ] || { echo "rapports d'avancement encore présents"; false; }
+}
+
+# --- Liens relatifs et ancres, dans les deux sens ---
+
+# Imprime chaque lien relatif d'un fichier.
+relative_links() {
+    grep -oE '\]\([^)]+\)' "$1" | sed 's/^](//; s/)$//' \
+        | grep -v '^http' | grep -v '^#' | grep -v '^mailto:'
+}
+
+# Un titre Markdown slugifié à la façon de GitHub, version volontairement
+# simple : minuscules, ponctuation retirée, espaces en tirets. Suffisante
+# pour les titres de ce dépôt, et sans dépendance.
+anchors_of() {
+    grep -E '^#{1,6} ' "$1" \
+        | sed 's/^#\{1,6\} //' \
+        | tr '[:upper:]' '[:lower:]' \
+        | sed 's/[^a-z0-9 _-]//g; s/  */ /g; s/^ //; s/ $//; s/ /-/g'
+    # Échappatoire assumée : une ancre HTML explicite vaut un titre. C'est
+    # ce qui permet d'ancrer une section d'un document en français depuis un
+    # README en anglais, sans traduire le document.
+    grep -oE '<a id="[^"]+"' "$1" 2>/dev/null | sed 's/.*id="//; s/"$//'
+}
+
+@test "REGLE 5.6: tout lien relatif du README pointe un fichier existant" {
+    morts=""
+    for l in $(relative_links "$README"); do
+        cible="${l%%#*}"
+        [ -n "$cible" ] || continue
+        [ -e "$ROOT/$cible" ] || morts="$morts $cible"
+    done
+    [ -z "$morts" ] || { echo "liens morts dans le README :$morts"; false; }
+}
+
+@test "REGLE 5.6: toute ancre citée par le README existe dans sa cible" {
+    morts=""
+    for l in $(relative_links "$README"); do
+        case "$l" in *'#'*) : ;; *) continue ;; esac
+        cible="${l%%#*}"; ancre="${l#*#}"
+        [ -f "$ROOT/$cible" ] || continue      # couvert par le test précédent
+        anchors_of "$ROOT/$cible" | grep -qx "$ancre" || morts="$morts $l"
+    done
+    [ -z "$morts" ] || { echo "ancres inexistantes :$morts"; false; }
+}
+
+@test "REGLE 5.6: tout lien relatif de doc/*.md pointe une cible existante" {
+    morts=""
+    for f in "$DOC"/*.md; do
+        for l in $(relative_links "$f"); do
+            cible="${l%%#*}"
+            [ -n "$cible" ] || continue
+            base="$(dirname "$f")"
+            [ -e "$base/$cible" ] || morts="$morts
+  $(basename "$f") -> $cible"
+        done
+    done
+    [ -z "$morts" ] || { echo "liens morts dans doc/ :$morts"; false; }
+}
+
+@test "l'index couvre aussi la page de manuel" {
+    # doc/nivuus.1 n'est pas un .md : c'est exactement le genre de fichier
+    # qu'un index écrit à la main oublie.
+    grep -qF 'nivuus.1' "$INDEX"
+}
