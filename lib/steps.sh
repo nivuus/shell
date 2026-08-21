@@ -53,3 +53,45 @@ nivuus_step_write_version() {
 
 # Conservé comme façade : lib/deps.sh porte désormais la politique.
 nivuus_step_check_required_deps() { nivuus_deps_check_required "$@"; }
+
+# Change le shell de connexion -- une mutation système comme une autre,
+# donc journalisée AVANT d'agir. Ne retourne jamais autre chose que 0 :
+# l'installation elle-même a réussi, le shell de connexion est un confort.
+nivuus_step_chsh() {
+    local zsh_path="${1:-}" current
+    [ -n "$zsh_path" ] || zsh_path="$(nivuus_zsh_path 2>/dev/null || true)"
+    if [ -z "$zsh_path" ]; then
+        log_warn "zsh introuvable : shell de connexion inchangé."
+        return 0
+    fi
+
+    current="$(nivuus_current_login_shell)"
+    if [ "$current" = "$zsh_path" ]; then
+        log_info "zsh est déjà ton shell de connexion."
+        return 0
+    fi
+
+    # LE cas qui casse macOS + Homebrew : /opt/homebrew/bin/zsh n'est pas
+    # dans /etc/shells, chsh refuse. On ne modifie PAS /etc/shells nous-mêmes
+    # (fichier système, sudo non demandé) : on donne la commande exacte.
+    if ! nivuus_shell_is_listed "$zsh_path"; then
+        log_warn "$zsh_path n'est pas listé dans $NIVUUS_ETC_SHELLS : chsh le refuserait."
+        log_warn "Pour l'autoriser puis changer de shell, lance ces deux commandes :"
+        log_warn "  echo $zsh_path | sudo tee -a $NIVUUS_ETC_SHELLS"
+        log_warn "  chsh -s $zsh_path"
+        return 0
+    fi
+
+    if [ -n "${NIVUUS_DRY_RUN:-}" ]; then
+        log_dry "chsh -s $zsh_path (shell actuel : $current)"
+        return 0
+    fi
+
+    nivuus_manifest_record CHSH "$HOME" '-' "$current"
+    if chsh -s "$zsh_path" >/dev/null 2>&1; then
+        log_ok "Shell de connexion : $zsh_path (ouvre un nouveau terminal pour l'appliquer)"
+    else
+        log_warn "chsh a échoué. Change-le à la main avec : chsh -s $zsh_path"
+    fi
+    return 0
+}

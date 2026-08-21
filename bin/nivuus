@@ -155,6 +155,13 @@ cmd_install() {
         nivuus_manifest_abort
         return 1
     fi
+    if [ -z "${MINIMAL:-}" ]; then
+        if confirm "Faire de zsh ton shell de connexion ?"; then
+            nivuus_step_chsh
+        else
+            log_info "Shell de connexion inchangé."
+        fi
+    fi
     install_optional_deps
     nivuus_manifest_commit
 
