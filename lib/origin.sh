@@ -54,3 +54,18 @@ nivuus_origin_update_command() {
 # c'est pour ça que le marqueur existe en plus. Le marqueur porte le MESSAGE,
 # le garde-fou porte la SÛRETÉ ; aucun des deux ne suffit seul.
 nivuus_origin_tree_writable() { [ -d "$1" ] && [ -w "$1" ]; }
+
+# Commande de RETRAIT du paquet, dérivée du même champ channel=. Affichée,
+# jamais exécutée : « uninstall » n'appelle jamais le gestionnaire de paquets
+# à la place de l'utilisateur.
+nivuus_origin_update_command_remove() {
+    local dir="$1" channel pkg
+    channel="$(nivuus_origin_channel "$dir")"
+    pkg="$(nivuus_origin_field "$dir" package 2>/dev/null || printf 'nivuus-shell')"
+    case "$channel" in
+        homebrew) printf 'brew uninstall %s\n' "$pkg" ;;
+        aur)      printf 'sudo pacman -Rns %s\n' "$pkg" ;;
+        deb)      printf 'sudo apt purge %s\n' "$pkg" ;;
+        *)        printf '%s\n' "retire le paquet avec ton gestionnaire" ;;
+    esac
+}
