@@ -8,13 +8,13 @@ setup() {
 }
 
 @test "AI suggestions module loads without errors" {
-    run zsh -c "source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/19-ai-suggestions.zsh' && echo \$NIVUUS_AI_SUGGESTIONS_LOADED"
+    run zsh -c "source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh' && source '$NIVUUS_SHELL_DIR/config/19-ai-suggestions.zsh' && echo \$NIVUUS_AI_SUGGESTIONS_LOADED"
     [ "$status" -eq 0 ]
     [[ "$output" == *"1"* ]]
 }
 
 @test "AI suggestions defines required widgets" {
-    run zsh -c "source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/19-ai-suggestions.zsh' && zle -l | grep -E '(_ai_show_inline|_ai_accept_inline|_ai_clear_inline)'"
+    run zsh -c "source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh' && source '$NIVUUS_SHELL_DIR/config/19-ai-suggestions.zsh' && zle -l | grep -E '(_ai_show_inline|_ai_accept_inline|_ai_clear_inline)'"
     [ "$status" -eq 0 ]
 }
 
@@ -24,17 +24,17 @@ setup() {
 }
 
 @test "AI cache associative arrays are initialized" {
-    run zsh -c "source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/19-ai-suggestions.zsh' && typeset -p _AI_CACHE 2>&1"
+    run zsh -c "source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh' && source '$NIVUUS_SHELL_DIR/config/19-ai-suggestions.zsh' && typeset -p _AI_CACHE 2>&1"
     [ "$status" -eq 0 ]
 }
 
 @test "AI generation function exists" {
-    run zsh -c "source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/19-ai-suggestions.zsh' && typeset -f _ai_generate"
+    run zsh -c "source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh' && source '$NIVUUS_SHELL_DIR/config/19-ai-suggestions.zsh' && typeset -f _ai_generate"
     [ "$status" -eq 0 ]
 }
 
-@test "Animation dots cycle function exists" {
-    run zsh -c "source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/19-ai-suggestions.zsh' && typeset -f _ai_animate_dots"
+@test "Animation spinner tick function exists" {
+    run zsh -c "source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh' && source '$NIVUUS_SHELL_DIR/config/19-ai-suggestions.zsh' && typeset -f _ai_spinner_tick"
     [ "$status" -eq 0 ]
 }
 
@@ -49,11 +49,11 @@ setup() {
 }
 
 @test "Cancel generation function exists" {
-    run zsh -c "source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/19-ai-suggestions.zsh' && typeset -f _ai_cancel_generation"
+    run zsh -c "source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh' && source '$NIVUUS_SHELL_DIR/config/19-ai-suggestions.zsh' && typeset -f _ai_cancel_generation"
     [ "$status" -eq 0 ]
 }
 
 @test "Keybindings are registered (Ctrl+2, Ctrl+Down, Shift+Tab)" {
-    run zsh -c "source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/19-ai-suggestions.zsh' && bindkey | grep -E '(ai-show-inline|ai-accept-inline|ai-clear-inline)'"
+    run zsh -c "source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh' && source '$NIVUUS_SHELL_DIR/config/19-ai-suggestions.zsh' && bindkey | grep -E '(ai-show-inline|ai-accept-inline|ai-clear-inline)'"
     [ "$status" -eq 0 ]
 }
