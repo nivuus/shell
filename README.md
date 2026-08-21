@@ -12,7 +12,7 @@
 
 ## ✨ Features
 
-- ⚡ **Lightning Fast** - Sub-100ms startup time (lazy-loaded completion)
+- ⚡ **Fast, and held to it** - A CI test fails the build if an interactive shell takes more than 300ms to start
 - 🎨 **Configurable Theme & Prompt** - Nord by default, swap themes or the prompt layout via `~/.zsh_local`
 - 🤖 **AI-Powered** - Command suggestions via the Gemini API
 - 📝 **Modern Vim** - Ctrl+C/V/X/A shortcuts
@@ -336,10 +336,12 @@ See [PROMPT.md](doc/PROMPT.md) for the full list of prompt tokens and the theme 
 
 ## 📊 Performance
 
-Nivuus is optimized for speed:
+The startup budget is **enforced**, not observed: `tests/performance/test_startup.bats`
+fails the build past 300ms. That is what makes the number worth printing.
 
-- **Actual:** <100ms startup time (typically 40-60ms)
-- **Lazy-loaded completion** - compinit loads on first TAB (~300ms saved!)
+- **Enforced budget:** 300ms — see [tests/performance/](tests/performance/)
+- Typical times measured on the CI matrix: 26–46 ms — see [tests/performance/](tests/performance/)
+- **Lazy-loaded completion** - compinit loads on first TAB
 - **Lazy loading** for NVM and heavy features
 - **Git caching** with 2s TTL
 - **Compiled ZSH files** for faster loading
