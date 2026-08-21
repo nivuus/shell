@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+# =============================================================================
+# Compte les tests par suite et interdit toute régression du nombre de tests.
+# =============================================================================
+# Le compte vient de `bats --count`, qui lit les fichiers sans les exécuter.
+# La garde est un cliquet, pas un seuil : un seuil absolu périme, un cliquet
+# attrape le vrai risque — des tests supprimés pour faire passer la CI.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+TESTS_DIR="${NIVUUS_TESTS_DIR:-$ROOT/tests}"
+BASELINE="${NIVUUS_COUNT_BASELINE:-$ROOT/tests/baseline-counts.tsv}"
+SUITES="${NIVUUS_COUNT_SUITES:-unit integration e2e performance}"
+
+count_suite() {   # count_suite <suite> -> nombre de tests, 0 si la suite a disparu
+    local dir="$TESTS_DIR/$1"
+    [ -d "$dir" ] || { printf '0\n'; return 0; }
+    local files
+    files="$(find "$dir" -name '*.bats' -type f | LC_ALL=C sort)"
+    [ -n "$files" ] || { printf '0\n'; return 0; }
+    # shellcheck disable=SC2086
+    bats --count $files
+}
+
+emit_counts() {
+    local total=0 n suite
+    for suite in $SUITES; do
+        n="$(count_suite "$suite")"
+        printf '%s\t%s\n' "$suite" "$n"
+        total=$((total + n))
+    done
+    printf 'total\t%s\n' "$total"
+}
+
+baseline_for() {   # baseline_for <suite> -> compte enregistré, 0 si absent
+    [ -f "$BASELINE" ] || { printf '0\n'; return 0; }
+    awk -F'\t' -v s="$1" '$1 == s { print $2; found = 1 } END { if (!found) print 0 }' "$BASELINE"
+}
+
+case "${1:-}" in
+    --update)
+        emit_counts | grep -v '^total	' > "$BASELINE"
+        echo "baseline mise à jour : $BASELINE"
+        cat "$BASELINE"
+        ;;
+    --check)
+        status=0
+        grew=0
+        for suite in $SUITES; do
+            now="$(count_suite "$suite")"
+            was="$(baseline_for "$suite")"
+            if [ "$now" -lt "$was" ]; then
+                echo "RÉGRESSION: $suite est passé de $was à $now tests" >&2
+                status=1
+            elif [ "$now" -gt "$was" ]; then
+                echo "$suite: $was -> $now tests"
+                grew=1
+            else
+                echo "$suite: $now tests"
+            fi
+        done
+        if [ "$grew" -eq 1 ] && [ "$status" -eq 0 ]; then
+            echo "La suite a grossi. Fige le nouveau plancher : ./bin/test-count --update"
+        fi
+        exit "$status"
+        ;;
+    ''|--print)
+        emit_counts
+        ;;
+    *)
+        echo "usage: test-count [--print|--check|--update]" >&2
+        exit 2
+        ;;
+esac

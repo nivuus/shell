@@ -55,55 +55,20 @@ jobs:
             exit 1
           fi
 
-      - name: Test count validation
-        run: |
-          unit_count=$(bats tests/unit/ 2>&1 | head -1 | sed 's/1\.\.//')
-          perf_count=$(bats tests/performance/ 2>&1 | head -1 | sed 's/1\.\.//')
-          total=$((unit_count + perf_count))
+      - name: Test count must never regress
+        run: ./bin/test-count --check
 
-          echo "Unit tests: $unit_count"
-          echo "Performance tests: $perf_count"
-          echo "Total: $total tests"
-
-          # Minimum expected tests
-          if [ "$total" -lt 100 ]; then
-            echo "❌ Test count below minimum (expected ≥100, got $total)"
-            exit 1
-          fi
-
-          echo "✅ Test count: $total tests passing"
-
-      - name: Generate test summary
+      - name: Test summary
         if: always()
         run: |
-          echo "## Test Results 🧪" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
+          {
+            echo "## Tests"
+            echo
+            echo '```'
+            ./bin/test-count
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
-          # Run all tests and capture output
-          if bats tests/unit/ tests/performance/ > test_results.txt 2>&1; then
-            echo "✅ All tests passed!" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "❌ Some tests failed" >> $GITHUB_STEP_SUMMARY
-          fi
-
-          # Count tests
-          unit_count=$(bats tests/unit/ 2>&1 | head -1 | sed 's/1\.\.//')
-          perf_count=$(bats tests/performance/ 2>&1 | head -1 | sed 's/1\.\.//')
-          total=$((unit_count + perf_count))
-
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Test Breakdown" >> $GITHUB_STEP_SUMMARY
-          echo "- Unit tests: $unit_count" >> $GITHUB_STEP_SUMMARY
-          echo "- Performance tests: $perf_count" >> $GITHUB_STEP_SUMMARY
-          echo "- **Total: $total tests**" >> $GITHUB_STEP_SUMMARY
-
-          # Extract startup time (if not skipped in CI)
-          startup_output=$(bats tests/performance/test_startup.bats 2>&1 | grep "Average startup time" || true)
-          if [ -n "$startup_output" ]; then
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "### Performance ⚡" >> $GITHUB_STEP_SUMMARY
-            echo "$startup_output" >> $GITHUB_STEP_SUMMARY
-          fi
 
   e2e:
     name: Installation E2E
@@ -273,41 +238,3 @@ jobs:
           done
 
           echo "✅ All ZSH files have valid syntax"
-
-  coverage:
-    name: Test Coverage Report
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup test environment
-        uses: ./.github/actions/setup-tests
-
-      - name: Generate coverage report
-        run: |
-          echo "# Test Coverage Report" > coverage_report.md
-          echo "" >> coverage_report.md
-          echo "## Module Coverage" >> coverage_report.md
-          echo "" >> coverage_report.md
-
-          # List all test files and their test counts
-          echo "| Test File | Tests |" >> coverage_report.md
-          echo "|-----------|-------|" >> coverage_report.md
-
-          for test_file in tests/unit/*.bats tests/performance/*.bats; do
-            if [ -f "$test_file" ]; then
-              count=$(bats "$test_file" 2>&1 | head -1 | sed 's/1\.\.//')
-              basename=$(basename "$test_file")
-              echo "| $basename | $count |" >> coverage_report.md
-            fi
-          done
-
-          cat coverage_report.md
-
-      - name: Upload coverage report
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-report
-          path: coverage_report.md

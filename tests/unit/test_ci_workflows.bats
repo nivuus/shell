@@ -95,3 +95,18 @@ test_workflow_files() {
     grep -qF "INVARIANT: no verification tool at all is REFUSED" "$f"
     grep -qF "install-verify-tools.sh" "$f"
 }
+
+@test "no workflow parses a bats plan line with sed" {
+    # Le comptage historique relançait TOUTE la suite pour lire « 1..N ».
+    # bin/test-count le fait avec `bats --count`, qui n'exécute rien.
+    for f in $(test_workflow_files); do
+        run grep -n "sed 's/1" "$f"
+        [ "$status" -ne 0 ] || { echo "$f compte les tests avec sed"; false; }
+    done
+}
+
+@test "the fragile absolute threshold is gone, replaced by a ratchet" {
+    grep -q "bin/test-count --check" "$WF/tests.yml"
+    run grep -n "Test count below minimum" "$WF/tests.yml"
+    [ "$status" -ne 0 ]
+}
