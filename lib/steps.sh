@@ -40,6 +40,11 @@ nivuus_step_copy_tree() {
             nivuus_install_file "$src/$f" "$dst/$f" || return 1
         fi
     done
+    # Page de manuel : installée dans /usr/share/man/man1 par les paquets,
+    # simplement copiée avec l'arbre pour une installation par l'installeur.
+    if [ -f "$src/doc/nivuus.1" ]; then
+        nivuus_install_file "$src/doc/nivuus.1" "$dst/doc/nivuus.1" || return 1
+    fi
     return 0
 }
 
