@@ -331,6 +331,14 @@ _ai_clear_postdisplay() {
 _ai_show_inline() {
     local prefix="$BUFFER"
 
+    # Inline ghost text is the only display mode; AI_INLINE_MODE=false turns it
+    # off while keeping the widgets/keybindings defined. Guard here rather than
+    # at load time so the auto-debounce path (which ends up calling this
+    # widget) is covered too.
+    if [[ "${AI_INLINE_MODE:-true}" != "true" ]]; then
+        return
+    fi
+
     # Cancel any pending debounce timer, animation, and generation
     _ai_cancel_debounce
     _ai_cancel_animation
