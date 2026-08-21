@@ -14,58 +14,14 @@ on:
         default: patch
 
 jobs:
-  # First, run all tests to ensure quality
+  # Aucune release ne sort si une cible de la matrice ne prouve plus
+  # l'installation ou la désinstallation (spec, section 4, budget CI).
+  # Cette matrice couvre les six conteneurs, les deux runners, la suite
+  # complète et le budget de démarrage : strictement plus que la poignée
+  # de tests que ce job exécutait à la main.
   test:
-    name: Run All Tests
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y zsh bats
-
-      - name: Setup test environment
-        run: |
-          echo "NIVUUS_SHELL_DIR=$GITHUB_WORKSPACE" >> $GITHUB_ENV
-
-      - name: Run all tests
-        run: |
-          echo "Running smoke tests..."
-          bats tests/unit/test_smoke.bats
-
-          echo "Running unit tests..."
-          bats tests/unit/
-
-          echo "Running performance tests..."
-          bats tests/performance/
-
-      - name: Validate startup time requirement
-        run: |
-          output=$(bats tests/performance/test_startup.bats 2>&1)
-          echo "$output"
-
-          if echo "$output" | grep -q "ok 1 CRITICAL"; then
-            echo "✅ Startup time requirement met (<300ms)"
-          else
-            echo "❌ Startup time requirement FAILED"
-            exit 1
-          fi
-
-      - name: Validate ZSH syntax
-        run: |
-          echo "Validating all ZSH files..."
-          zsh -n .zshrc
-
-          for file in config/*.zsh themes/*.zsh; do
-            echo "  Checking $file..."
-            zsh -n "$file"
-          done
-
-          echo "✅ All ZSH files have valid syntax"
+    name: Full matrix
+    uses: ./.github/workflows/matrix.yml
 
   # Create the release if tests pass
   release:

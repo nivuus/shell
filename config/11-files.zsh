@@ -161,5 +161,10 @@ _show_tool_suggestions() {
     fi
 }
 
-# Run suggestions check (async, non-blocking)
-(_show_tool_suggestions &)
+# Run suggestions check (async, non-blocking).
+# Interactif SEULEMENT : un `zsh -c "source .zshrc"` (script, test, CI) doit
+# recevoir un flux de sortie vide. La suggestion est une courtoisie pour un
+# humain devant un terminal, pas une donnée pour un programme.
+if [[ -o interactive ]]; then
+    (_show_tool_suggestions &)
+fi

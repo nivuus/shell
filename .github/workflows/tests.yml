@@ -1,157 +1,92 @@
 name: Tests
 
+# Boucle rapide : ce que toute PR doit prouver, en ~5 min de temps mur.
+# La matrice exhaustive (6 conteneurs + 2 runners) vit dans matrix.yml et ne
+# tourne JAMAIS ici : six pulls d'image par PR coûteraient plus que tout le
+# reste réuni, pour une information que le nightly donne déjà.
+
 on:
   push:
     branches: [ master, main, develop ]
   pull_request:
     branches: [ master, main, develop ]
 
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
-  test:
-    name: Run Test Suite
-    runs-on: ${{ matrix.os }}
-
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest]
-        # Future: Add macOS support
-        # os: [ubuntu-latest, macos-latest]
-
+  # Niveau 1 (unitaire) + intégration + budget de démarrage. ~2 min.
+  unit:
+    name: Unit + integration
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install ZSH
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y zsh
-
-      - name: Install bats
-        run: |
-          sudo apt-get install -y bats
-
       - name: Setup test environment
+        uses: ./.github/actions/setup-tests
+
+      - name: Smoke
+        run: ./tests/ci/bats-run.sh tests/unit/test_smoke.bats
+
+      - name: Unit
         run: |
-          echo "NIVUUS_SHELL_DIR=$GITHUB_WORKSPACE" >> $GITHUB_ENV
+          rm -f config/*.zwc     # un .zwc périmé masquerait le module
+          ./tests/ci/bats-run.sh tests/unit/
 
-      - name: Run smoke tests
-        run: |
-          bats tests/unit/test_smoke.bats
+      - name: Integration
+        run: ./tests/ci/bats-run.sh tests/integration/
 
-      - name: Run unit tests
-        run: |
-          bats tests/unit/
+      - name: Performance (startup budget is enforced, not observed)
+        run: ./tests/ci/bats-run.sh tests/performance/
 
-      - name: Run performance tests (CRITICAL <300ms)
-        run: |
-          bats tests/performance/
+      - name: Test count must never regress
+        run: ./bin/test-count --check
 
-      - name: Validate startup time requirement
-        run: |
-          # Extract startup time from performance tests
-          output=$(bats tests/performance/test_startup.bats 2>&1)
-          echo "$output"
-
-          # Check if startup test passed or was skipped (both are OK)
-          if echo "$output" | grep -q "ok 1 CRITICAL"; then
-            if echo "$output" | grep -q "# skip"; then
-              echo "⏭️  Startup time test skipped in CI (use bin/benchmark locally)"
-            else
-              echo "✅ Startup time requirement met (<300ms)"
-            fi
-          else
-            echo "❌ Startup time requirement FAILED"
-            exit 1
-          fi
-
-      - name: Test count validation
-        run: |
-          unit_count=$(bats tests/unit/ 2>&1 | head -1 | sed 's/1\.\.//')
-          perf_count=$(bats tests/performance/ 2>&1 | head -1 | sed 's/1\.\.//')
-          total=$((unit_count + perf_count))
-
-          echo "Unit tests: $unit_count"
-          echo "Performance tests: $perf_count"
-          echo "Total: $total tests"
-
-          # Minimum expected tests
-          if [ "$total" -lt 100 ]; then
-            echo "❌ Test count below minimum (expected ≥100, got $total)"
-            exit 1
-          fi
-
-          echo "✅ Test count: $total tests passing"
-
-      - name: Generate test summary
+      - name: Test summary
         if: always()
         run: |
-          echo "## Test Results 🧪" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
+          {
+            echo "## Tests"
+            echo
+            echo '```'
+            ./bin/test-count
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
-          # Run all tests and capture output
-          if bats tests/unit/ tests/performance/ > test_results.txt 2>&1; then
-            echo "✅ All tests passed!" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "❌ Some tests failed" >> $GITHUB_STEP_SUMMARY
-          fi
-
-          # Count tests
-          unit_count=$(bats tests/unit/ 2>&1 | head -1 | sed 's/1\.\.//')
-          perf_count=$(bats tests/performance/ 2>&1 | head -1 | sed 's/1\.\.//')
-          total=$((unit_count + perf_count))
-
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Test Breakdown" >> $GITHUB_STEP_SUMMARY
-          echo "- Unit tests: $unit_count" >> $GITHUB_STEP_SUMMARY
-          echo "- Performance tests: $perf_count" >> $GITHUB_STEP_SUMMARY
-          echo "- **Total: $total tests**" >> $GITHUB_STEP_SUMMARY
-
-          # Extract startup time (if not skipped in CI)
-          startup_output=$(bats tests/performance/test_startup.bats 2>&1 | grep "Average startup time" || true)
-          if [ -n "$startup_output" ]; then
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "### Performance ⚡" >> $GITHUB_STEP_SUMMARY
-            echo "$startup_output" >> $GITHUB_STEP_SUMMARY
-          fi
-
+  # Niveaux 2, 3 et 4 sur la plateforme de référence. ~2 min.
   e2e:
-    name: Installation E2E
+    name: Installation E2E (Ubuntu)
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Install ZSH
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y zsh
-
-      - name: Install bats
-        run: |
-          sudo apt-get install -y bats
+        with:
+          # tests/e2e/test_upgrade_from_v3.bats reconstruit l'installation
+          # v3.0.0 depuis le TAG v3.0.0 ; sans les tags, son helper échoue
+          # volontairement plutôt que de se taire.
+          fetch-tags: true
+          fetch-depth: 0
 
       - name: Setup test environment
-        run: |
-          echo "NIVUUS_SHELL_DIR=$GITHUB_WORKSPACE" >> $GITHUB_ENV
+        uses: ./.github/actions/setup-tests
 
       - name: Library unit tests
-        run: |
-          bats tests/unit/test_lib_*.bats
+        run: ./tests/ci/bats-run.sh tests/unit/test_lib_*.bats
 
-      - name: Install / uninstall E2E
+      - name: End-to-end (install, uninstall, reversibility, level 4)
         run: |
-          bats tests/e2e/test_nivuus_cli.bats tests/e2e/test_install_sh_compat.bats
-
-      - name: Platform, deps and minimal-mode E2E
-        run: |
-          bats tests/e2e/test_platform.bats tests/e2e/test_with_deps.bats tests/e2e/test_minimal_mode.bats
+          rm -f config/*.zwc
+          ./tests/ci/bats-run.sh tests/e2e/
 
       - name: Signature verification suite
         run: |
           rm -f config/*.zwc     # un .zwc périmé masquerait le module
-          bats tests/unit/test_keys_repo.bats \
+          ./tests/ci/bats-run.sh tests/unit/test_keys_repo.bats \
                tests/unit/test_autoupdate_sha256.bats \
                tests/unit/test_release_signature.bats \
                tests/unit/test_autoupdate_download.bats \
@@ -163,7 +98,7 @@ jobs:
       - name: Signature E2E (forged release must be refused)
         run: |
           rm -f config/*.zwc
-          bats tests/e2e/test_update_signature.bats \
+          ./tests/ci/bats-run.sh tests/e2e/test_update_signature.bats \
                tests/e2e/test_install_keys.bats \
                tests/e2e/test_verify_key.bats
 
@@ -178,166 +113,121 @@ jobs:
             tests/unit/test_release_signature.bats
           grep -c "INVARIANT" tests/e2e/test_update_signature.bats
 
-      - name: Reversibility (HOME must be bit-identical)
-        run: |
-          bats tests/e2e/test_reversibility.bats
-
+  # Niveau 2 sur macOS : étroit, car facturé x10. Première exécution réelle.
   e2e-macos:
     name: Installation E2E (macOS)
     runs-on: macos-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install zsh and bats
-        run: brew install bats-core zsh
-
       - name: Setup test environment
-        run: echo "NIVUUS_SHELL_DIR=$GITHUB_WORKSPACE" >> $GITHUB_ENV
+        uses: ./.github/actions/setup-tests
 
       - name: Library unit tests
-        run: bats tests/unit/test_lib_*.bats tests/unit/test_helpers_portable.bats
+        run: ./tests/ci/bats-run.sh tests/unit/test_lib_*.bats tests/unit/test_helpers_portable.bats
 
-      - name: Install / uninstall E2E
-        run: bats tests/e2e/test_nivuus_cli.bats tests/e2e/test_install_sh_compat.bats tests/e2e/test_minimal_mode.bats
+      - name: Install / uninstall
+        run: |
+          ./tests/ci/bats-run.sh tests/e2e/test_nivuus_cli.bats \
+               tests/e2e/test_install_sh_compat.bats \
+               tests/e2e/test_minimal_mode.bats
 
       - name: Signature suites (macOS = le cas « shasum, pas sha256sum »)
         run: |
           rm -f config/*.zwc
-          bats tests/unit/test_autoupdate_sha256.bats \
+          ./tests/ci/bats-run.sh tests/unit/test_autoupdate_sha256.bats \
                tests/unit/test_release_signature.bats \
                tests/unit/test_autoupdate_download.bats \
                tests/unit/test_autoupdate_hard_refusal.bats \
                tests/unit/test_lib_keys.bats
-          bats tests/e2e/test_update_signature.bats tests/e2e/test_install_keys.bats
+          ./tests/ci/bats-run.sh tests/e2e/test_update_signature.bats tests/e2e/test_install_keys.bats
 
       - name: Reversibility (HOME must be bit-identical)
-        run: bats tests/e2e/test_reversibility.bats
+        run: ./tests/ci/bats-run.sh tests/e2e/test_reversibility.bats
 
+  # Alpine reste sur la boucle rapide : seule cible sans coreutils GNU,
+  # c'est là que les régressions de portabilité se voient en premier.
   e2e-alpine:
-    name: Installation E2E (Alpine / musl, no GNU coreutils)
+    name: Installation E2E (Alpine / musl)
     runs-on: ubuntu-latest
     container:
       image: alpine:3.20
-
     steps:
-      - name: Install the minimum (deliberately no GNU coreutils)
-        run: apk add --no-cache bash zsh git curl ncurses
+      - name: BOOTSTRAP git before checkout (Alpine has none)
+        shell: sh
+        # BOOTSTRAP : seule installation de paquet tolérée hors install-deps.sh,
+        # et elle ne dure qu'une ligne. actions/checkout sait se rabattre sur
+        # l'API REST quand git manque, mais ce chemin n'a jamais été exercé ici,
+        # alors que l'ordre « paquets puis checkout » l'est depuis la phase 3.
+        # On garde l'ordre prouvé ; tout le reste passe par l'action composite.
+        run: apk add --no-cache git  # BOOTSTRAP
 
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install bats
-        run: |
-          git clone --depth 1 https://github.com/bats-core/bats-core.git /tmp/bats
-          /tmp/bats/install.sh /usr/local
-
       - name: Setup test environment
-        run: echo "NIVUUS_SHELL_DIR=$GITHUB_WORKSPACE" >> $GITHUB_ENV
+        uses: ./.github/actions/setup-tests
 
       - name: Library unit tests
-        run: bats tests/unit/test_lib_*.bats tests/unit/test_helpers_portable.bats
+        run: ./tests/ci/bats-run.sh tests/unit/test_lib_*.bats tests/unit/test_helpers_portable.bats
 
-      - name: Install / uninstall E2E
-        run: bats tests/e2e/test_nivuus_cli.bats tests/e2e/test_minimal_mode.bats
+      - name: Install / uninstall
+        run: ./tests/ci/bats-run.sh tests/e2e/test_nivuus_cli.bats tests/e2e/test_minimal_mode.bats
 
       - name: No verification tool at all is refused (Alpine's real state)
         run: |
           # Mesuré (doc/SIGNING.md) : alpine:3.20 + zsh/git/curl n'a NI
           # openssl NI ssh-keygen. C'est donc ici, et nulle part ailleurs,
           # que le code de retour 2 (« aucun outil ») se joue en vrai.
+          # install-deps.sh n'installe délibérément aucun des deux.
           rm -f config/*.zwc
-          bats tests/unit/test_lib_steps_verify_tools.bats
+          ./tests/ci/bats-run.sh tests/unit/test_lib_steps_verify_tools.bats
 
       - name: Signature suites (needs the tools it verifies)
         run: |
           # Les suites GÉNÈRENT leurs clés éphémères : sans openssl ni
           # ssh-keygen, elles n'ont rien à signer. On les installe donc
           # ici -- l'étape ci-dessus a déjà couvert l'Alpine nue.
-          apk add --no-cache openssl openssh-keygen
+          ./tests/ci/install-verify-tools.sh
           rm -f config/*.zwc
-          bats tests/unit/test_release_signature.bats \
+          ./tests/ci/bats-run.sh tests/unit/test_release_signature.bats \
                tests/unit/test_autoupdate_sha256.bats \
                tests/unit/test_autoupdate_download.bats \
                tests/unit/test_lib_keys.bats \
                tests/e2e/test_update_signature.bats
 
       - name: Reversibility (HOME must be bit-identical)
-        run: bats tests/e2e/test_reversibility.bats
+        run: ./tests/ci/bats-run.sh tests/e2e/test_reversibility.bats
 
   lint:
-    name: Syntax Validation
+    name: Syntax validation
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install ZSH
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y zsh
+      - name: Setup test environment
+        uses: ./.github/actions/setup-tests
 
-      - name: Validate ZSH syntax
+      - name: ZSH syntax
         run: |
-          echo "Validating .zshrc..."
           zsh -n .zshrc
-
-          echo "Validating config files..."
-          for file in config/*.zsh; do
-            echo "  Checking $file..."
+          for file in config/*.zsh themes/*.zsh; do
             zsh -n "$file"
           done
 
-          echo "Validating theme files..."
-          for file in themes/*.zsh; do
-            echo "  Checking $file..."
-            zsh -n "$file"
+      - name: POSIX sh syntax (lib/, tests/ci/ and install.sh run under dash and busybox)
+        run: |
+          for file in lib/*.sh tests/ci/*.sh install.sh; do
+            sh -n "$file"
           done
 
-          echo "✅ All ZSH files have valid syntax"
-
-  coverage:
-    name: Test Coverage Report
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y zsh bats
-
-      - name: Setup environment
-        run: |
-          echo "NIVUUS_SHELL_DIR=$GITHUB_WORKSPACE" >> $GITHUB_ENV
-
-      - name: Generate coverage report
-        run: |
-          echo "# Test Coverage Report" > coverage_report.md
-          echo "" >> coverage_report.md
-          echo "## Module Coverage" >> coverage_report.md
-          echo "" >> coverage_report.md
-
-          # List all test files and their test counts
-          echo "| Test File | Tests |" >> coverage_report.md
-          echo "|-----------|-------|" >> coverage_report.md
-
-          for test_file in tests/unit/*.bats tests/performance/*.bats; do
-            if [ -f "$test_file" ]; then
-              count=$(bats "$test_file" 2>&1 | head -1 | sed 's/1\.\.//')
-              basename=$(basename "$test_file")
-              echo "| $basename | $count |" >> coverage_report.md
-            fi
-          done
-
-          cat coverage_report.md
-
-      - name: Upload coverage report
-        uses: actions/upload-artifact@v4
+      - name: Workflow syntax
+        uses: raven-actions/actionlint@v2
         with:
-          name: coverage-report
-          path: coverage_report.md
+          # shellcheck désactivé : il rapporte des « info » de style sur des
+          # workflows que ce plan ne possède pas (release.yml). Le lint de
+          # structure, lui, est bloquant. Les scripts, eux, sont vérifiés
+          # par les deux steps ci-dessus.
+          flags: -shellcheck=

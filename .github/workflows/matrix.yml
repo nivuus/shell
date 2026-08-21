@@ -1,0 +1,181 @@
+name: Matrix
+
+# Matrice exhaustive : coûteuse, donc jamais sur PR (voir le budget CI du spec).
+# La boucle de PR est .github/workflows/tests.yml.
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+  workflow_call:
+
+concurrency:
+  group: matrix-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    name: Read matrix targets
+    runs-on: ubuntu-latest
+    outputs:
+      containers: ${{ steps.read.outputs.containers }}
+      runners: ${{ steps.read.outputs.runners }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: read
+        run: |
+          {
+            echo "containers=$(jq -c '.containers' .github/matrix.json)"
+            echo "runners=$(jq -c '.runners' .github/matrix.json)"
+          } >> "$GITHUB_OUTPUT"
+
+  containers:
+    name: ${{ matrix.target.label }}
+    needs: prepare
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ matrix.target.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.prepare.outputs.containers) }}
+    steps:
+      - name: BOOTSTRAP git before checkout on images that lack it
+        shell: sh
+        # BOOTSTRAP : documenté et volontairement minimal. actions/checkout
+        # sait se rabattre sur l'API REST, mais l'ordre « git puis checkout »
+        # est celui qui a été rejoué en local sous Docker ; on garde le prouvé.
+        run: |
+          command -v git >/dev/null 2>&1 && exit 0
+          if   command -v apk     >/dev/null 2>&1; then apk add --no-cache git          # BOOTSTRAP
+          elif command -v dnf     >/dev/null 2>&1; then dnf -y install git              # BOOTSTRAP
+          elif command -v pacman  >/dev/null 2>&1; then pacman -Sy --noconfirm git      # BOOTSTRAP
+          elif command -v apt-get >/dev/null 2>&1; then apt-get update && apt-get install -y git  # BOOTSTRAP
+          fi
+
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-tests
+      - name: Prove install, uninstall and reversibility
+        run: ./tests/ci/run-target.sh
+
+  runners:
+    name: ${{ matrix.target.label }}
+    needs: prepare
+    runs-on: ${{ matrix.target['runs-on'] }}
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.prepare.outputs.runners) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-tests
+      - name: Prove install, uninstall and reversibility
+        run: ./tests/ci/run-target.sh
+
+  # WSL2 : aucun runner GitHub n'en fournit. On SIMULE les marqueurs que
+  # lib/detect.sh lit, dans un conteneur Ubuntu. Cela valide la branche de
+  # code, pas l'environnement — le README le dit en toutes lettres.
+  wsl-simulated:
+    name: WSL2 (simulated markers)
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-tests
+      - name: Platform detection with WSL markers injected
+        run: |
+          # lib/detect.sh lit $NIVUUS_PROC_VERSION (défaut /proc/version) et
+          # $WSL_DISTRO_NAME. On fabrique les deux marqueurs : c'est la seule
+          # forme de couverture WSL possible sans runner Windows.
+          printf 'Linux version 5.15.0-microsoft-standard-WSL2\n' > "$RUNNER_TEMP/proc-version"
+          NIVUUS_PROC_VERSION="$RUNNER_TEMP/proc-version" \
+          WSL_DISTRO_NAME=Ubuntu-24.04 \
+            ./tests/ci/bats-run.sh tests/e2e/test_platform.bats tests/unit/test_lib_detect.bats
+
+  # release.yml validait la syntaxe ZSH avant de publier ; en déléguant son
+  # job `test` à cette matrice, la garde devait suivre, sinon une release
+  # pouvait sortir avec un module ZSH qui ne parse pas.
+  syntax:
+    name: Syntax validation
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-tests
+      - name: ZSH syntax
+        run: |
+          zsh -n .zshrc
+          for file in config/*.zsh themes/*.zsh; do
+            zsh -n "$file"
+          done
+      - name: POSIX sh syntax
+        run: |
+          for file in lib/*.sh tests/ci/*.sh install.sh; do
+            sh -n "$file"
+          done
+
+  # Les tests qui pilotent eux-mêmes Docker (install-deps, run-target rejoués
+  # dans quatre images) : trop lourds pour une PR, à leur place ici.
+  docker-tagged:
+    name: Docker-tagged tests
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-tests
+      - name: Container-driving tests
+        env:
+          NIVUUS_CI_DOCKER: '1'
+        run: ./tests/ci/bats-run.sh tests/e2e/test_ci_deps_script.bats
+
+  full-suite:
+    name: Full suite (unit + integration + e2e + performance)
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Même raison que dans tests.yml : le tag v3.0.0 est une dépendance
+          # de tests/e2e/test_upgrade_from_v3.bats.
+          fetch-tags: true
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-tests
+      - run: ./tests/ci/bats-run.sh tests/unit/
+      - run: ./tests/ci/bats-run.sh tests/integration/
+      - run: ./tests/ci/bats-run.sh tests/e2e/
+      - run: ./tests/ci/bats-run.sh tests/performance/
+      - run: ./bin/test-count --check
+
+  notify:
+    name: Report a failed nightly
+    needs: [containers, runners, wsl-simulated, syntax, docker-tagged, full-suite]
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const title = 'Nightly matrix is red';
+            const url = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = `La matrice nightly a échoué : ${url}\n\nUne cible de la matrice ne prouve plus l'installation ou la désinstallation. Le badge « uninstall verified » peut rester vert (il ne couvre que trois plateformes) : ce n'est pas une raison d'attendre.`;
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: 'open', labels: 'ci',
+            });
+            const hit = existing.data.find(i => i.title === title);
+            if (hit) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: hit.number, body,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner, repo: context.repo.repo,
+                title, body, labels: ['ci'],
+              });
+            }
+

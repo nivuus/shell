@@ -1,0 +1,57 @@
+name: uninstall verified
+
+# Ce workflow existe pour porter un badge, et il ne fait qu'une chose :
+# prouver le niveau 3 du spec — empreinte de $HOME avant installation,
+# égale bit pour bit à l'empreinte après désinstallation.
+#
+# Ne jamais y ajouter un autre test : un badge qui rougit pour une raison
+# étrangère à la désinstallation ne veut plus rien dire. Et ne jamais y
+# ajouter `continue-on-error` : un badge décoratif est pire que pas de badge.
+# tests/unit/test_ci_workflows.bats vérifie ces deux règles à chaque PR.
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  schedule:
+    - cron: '47 3 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: uninstall-verified-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  ubuntu:
+    name: Reversibility (Ubuntu)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-tests
+      - run: ./tests/ci/bats-run.sh tests/e2e/test_reversibility.bats
+
+  macos:
+    name: Reversibility (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-tests
+      - run: ./tests/ci/bats-run.sh tests/e2e/test_reversibility.bats
+
+  alpine:
+    name: Reversibility (Alpine / musl)
+    runs-on: ubuntu-latest
+    container:
+      image: alpine:3.20
+    steps:
+      - name: BOOTSTRAP git before checkout (Alpine has none)
+        shell: sh
+        # BOOTSTRAP : voir tests.yml, même raison, même unique ligne.
+        run: apk add --no-cache git  # BOOTSTRAP
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-tests
+      - run: ./tests/ci/bats-run.sh tests/e2e/test_reversibility.bats
