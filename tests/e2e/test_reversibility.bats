@@ -3,6 +3,7 @@
 # strictement identique, empreinte par empreinte (chemin, permissions, contenu).
 
 load '../helpers/fingerprint'
+load '../helpers/portable'
 
 setup() {
     ROOT="${BATS_TEST_DIRNAME}/../.."
@@ -111,7 +112,7 @@ teardown() { rm -rf "$TMP"; }
     # The user edits their own file while Nivuus is installed, in a way
     # that changes the byte layout the next merge produces (prepending,
     # not appending, so the second install is not a no-op on .zshrc).
-    sed -i '1i alias early=1' "$HOME/.zshrc"
+    pt_prepend_line "$HOME/.zshrc" 'alias early=1'
     "$NIVUUS" install --yes --prefix "$HOME/.nivuus-shell"
     "$NIVUUS" uninstall --yes --purge
     # The original backup must never have been overwritten by the
