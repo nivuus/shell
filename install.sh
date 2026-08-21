@@ -20,6 +20,8 @@ while [ $# -gt 0 ]; do
         --no-backup)       : ;;   # accepté, sans effet : le manifeste sauvegarde toujours
         --dry-run)          ARGS+=(--dry-run) ;;
         --minimal)           ARGS+=(--minimal) ;;
+        --with-deps)       ARGS+=(--with-deps) ;;
+        --no-minimal)      ARGS+=(--no-minimal) ;;
         --prefix)
             shift
             [ $# -gt 0 ] || { printf "L'option --prefix attend un chemin.\n" >&2; exit 2; }

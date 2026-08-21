@@ -16,7 +16,8 @@ usage() {
 nivuus — gestion de Nivuus Shell
 
 Usage :
-  nivuus install   [--dry-run] [--yes] [--prefix DIR] [--minimal]
+  nivuus install   [--dry-run] [--yes] [--prefix DIR] [--minimal|--no-minimal]
+                   [--with-deps]
   nivuus uninstall [--dry-run] [--yes] [--purge]
   nivuus update
   nivuus doctor
@@ -27,6 +28,10 @@ Options :
   --yes       Ne pose aucune question.
   --prefix    Répertoire d'installation (défaut : ~/.nivuus-shell).
   --minimal   Mode serveur/container : pas de chsh, pas d'extras.
+  --no-minimal  Force le mode complet, même en container/SSH/sans TTY.
+  --with-deps   Propose UNE commande groupée pour installer les dépendances
+                recommandées et optionnelles, après confirmation. Sans elle,
+                Nivuus se contente d'afficher la commande.
   --purge     (uninstall) supprime aussi l'état Nivuus (manifeste, sauvegardes).
               Ne supprime que ce que Nivuus a créé : ~/.zsh_local (si présent
               mais non créé par Nivuus) et ~/.zsh_history ne sont JAMAIS supprimés.
@@ -41,13 +46,57 @@ confirm() {
     case "$reply" in [Nn]*) return 1 ;; *) return 0 ;; esac
 }
 
+# Niveaux 2 et 3 de la politique de dépendances (spec §3). Deux modes, et
+# aucun troisième : soit on imprime une ligne copiable, soit on demande une
+# seule fois l'autorisation d'exécuter UNE commande groupée. Nivuus
+# n'installe jamais rien sans passer par ici.
+install_optional_deps() {
+    local missing cmd pkg
+    if [ -n "${MINIMAL:-}" ]; then
+        log_info "Mode minimal : dépendances recommandées et optionnelles ignorées."
+        return 0
+    fi
+    if [ -z "${WITH_DEPS:-}" ]; then
+        nivuus_deps_suggest recommended
+        nivuus_deps_suggest optional
+        return 0
+    fi
+
+    missing="$( { nivuus_deps_missing recommended; nivuus_deps_missing optional; } | tr '\n' ' ')"
+    missing="${missing% }"
+    [ -n "$missing" ] || { log_info "Rien à installer : tout est déjà là."; return 0; }
+
+    cmd="$(nivuus_pkg_install_cmd $missing)"
+    log_info "Une seule commande privilégiée sera exécutée :"
+    log_info "  $cmd"
+    confirm "L'exécuter maintenant ?" || { log_info "Ignoré. Tu peux la lancer plus tard."; return 0; }
+
+    if [ -n "${NIVUUS_DRY_RUN:-}" ]; then
+        log_dry "exécuterait : $cmd"
+        return 0
+    fi
+
+    if sh -c "$cmd"; then
+        for pkg in $missing; do
+            nivuus_manifest_record PKG "$pkg" '-' "$(nivuus_pkg_manager || printf 'inconnu')"
+        done
+        log_ok "Dépendances installées : $missing"
+    else
+        # Non fatal : Nivuus fonctionne en mode dégradé sans elles.
+        log_warn "L'installation des dépendances a échoué. Nivuus continue sans."
+    fi
+    return 0
+}
+
 cmd_install() {
-    local prefix="$HOME/.nivuus-shell"
+    local prefix="$HOME/.nivuus-shell" MINIMAL='' FORCE_MINIMAL='' FORCE_FULL='' WITH_DEPS=''
     while [ $# -gt 0 ]; do
         case "$1" in
             --dry-run) export NIVUUS_DRY_RUN=1 ;;
             --yes|-y)  ASSUME_YES=1 ;;
-            --minimal) export NIVUUS_MINIMAL=1 ;;
+            --minimal)     FORCE_MINIMAL=1 ;;
+            --no-minimal)  FORCE_FULL=1 ;;
+            --with-deps)   WITH_DEPS=1 ;;
             --prefix)
                 shift
                 [ $# -gt 0 ] || { log_error "L'option --prefix attend un chemin."; return 2; }
@@ -57,6 +106,23 @@ cmd_install() {
         esac
         shift
     done
+
+    # Le mode se décide ici, une fois, et se transmet ensuite explicitement
+    # (jamais relu depuis l'environnement au fond d'une étape).
+    if [ -n "${FORCE_FULL:-}" ]; then
+        MINIMAL=''
+        export NIVUUS_NO_MINIMAL=1
+    elif [ -n "${FORCE_MINIMAL:-}" ]; then
+        MINIMAL=1
+        export NIVUUS_MINIMAL=1
+    elif nivuus_should_minimal; then
+        MINIMAL=1
+    else
+        MINIMAL=''
+    fi
+    if [ -n "$MINIMAL" ]; then
+        log_info "Mode minimal (serveur, container, SSH ou sans TTY) : pas de chsh, pas d'extras."
+    fi
 
     nivuus_step_check_required_deps || return 1
     confirm "Installer Nivuus Shell dans $prefix ?" || { log_info "Annulé."; return 0; }
@@ -89,6 +155,7 @@ cmd_install() {
         nivuus_manifest_abort
         return 1
     fi
+    install_optional_deps
     nivuus_manifest_commit
 
     if [ -n "${NIVUUS_DRY_RUN:-}" ]; then
