@@ -114,3 +114,46 @@ EOF
     [ "$total" -le 35000 ] || { echo "scénario de ${total}ms (budget: 35000)"; false; }
     [ "$total" -ge 20000 ] || { echo "scénario de ${total}ms : trop court pour être lisible"; false; }
 }
+
+@test "le conteneur de tournage est décrit et reproductible" {
+    [ -f "$DEMO/Dockerfile" ]
+    # Base épinglée : une démo tournée sur « latest » n'est pas reproductible.
+    grep -qE '^FROM [a-z]+:[0-9]' "$DEMO/Dockerfile"
+    # Le nom d'hôte est fixé : sinon chaque enregistrement diffère du
+    # précédent par le prompt, et le .cast n'est plus diffable.
+    grep -qF 'demo' "$DEMO/Dockerfile"
+}
+
+@test "le conteneur n'embarque jamais de clé réelle" {
+    # Le risque de fuite est faible mais réel : on le ferme par construction.
+    run grep -nE '(API_KEY|GOOGLE_API_KEY|sk-[A-Za-z0-9]{8})' "$DEMO/Dockerfile"
+    [ "$status" -ne 0 ] || { echo "clé dans le Dockerfile : $output"; false; }
+    grep -qF 'GEMINI_AUTH_MODE=cli' "$DEMO/Dockerfile"
+    grep -qF 'AGY_DAEMON_ENABLED=false' "$DEMO/Dockerfile"
+}
+
+@test "replay-check.sh existe, est exécutable et POSIX" {
+    [ -x "$DEMO/replay-check.sh" ]
+    run sh -n "$DEMO/replay-check.sh"
+    [ "$status" -eq 0 ]
+}
+
+# bats test_tags=docker
+@test "GARDE 2: le scénario rejoué dans le conteneur passe de bout en bout" {
+    command -v docker >/dev/null 2>&1 || skip "docker indisponible"
+    run "$DEMO/replay-check.sh"
+    [ "$status" -eq 0 ] || { echo "$output"; false; }
+    [[ "$output" == *"HOME is byte-identical"* ]]
+}
+
+# bats test_tags=docker
+@test "GARDE 2: une commande supprimée du produit fait échouer le rejeu" {
+    # Garde-fou du garde-fou : on prouve que le rejeu SAIT échouer, sinon
+    # il ne serait qu'un job vert décoratif.
+    command -v docker >/dev/null 2>&1 || skip "docker indisponible"
+    tmp="$BATS_TEST_TMPDIR/scenario.txt"
+    cp "$SCENARIO" "$tmp"
+    printf '500\trun\tnivuus-cette-commande-nexiste-pas\n' >> "$tmp"
+    run env NIVUUS_DEMO_SCENARIO="$tmp" "$DEMO/replay-check.sh"
+    [ "$status" -ne 0 ]
+}

@@ -51,3 +51,21 @@ figées. Il est posé sur le `PATH` du conteneur de tournage, avec
 `GEMINI_AUTH_MODE=cli` — le chemin de production existant, sans un seul
 crochet ajouté dans `config/`. Aucune clé réelle n'entre jamais dans un
 enregistrement. La légende sous l'image du README le dit ; un test l'exige.
+
+## Ce que la garde 2 a trouvé le jour de sa naissance
+
+Le premier rejeu du scénario a échoué sur `??`, et la cause n'est pas la démo :
+
+`config/20-terminal-title.zsh` accroche un hook `chpwd` qui écrit une séquence
+OSC sur la **sortie standard**. `_ai_gemini_cli_call`
+(`config/09-ai-backend-gemini.zsh`) capture `$(cd "$workspace" && agy …)` : la
+séquence se retrouve donc dans la réponse, `jq` échoue à la parser, et l'appel
+est rapporté comme `agy call failed (status: unknown)`. Le chemin one-shot de
+`GEMINI_AUTH_MODE=cli` est cassé dès que `$TERM` supporte les titres — c'est-à-dire
+partout. Il ne se voit pas parce que le daemon (`AGY_DAEMON_ENABLED=true` par
+défaut) prend le pas ; la démo, elle, désactive le daemon, et l'a donc exposé.
+
+Corriger cela demande de toucher `config/`, ce que ce chantier s'interdit
+(spec § 6). En attendant, `replay-check.sh` rejoue avec `TERM=dumb`, ce qui
+désactive le module de titre par son propre mécanisme. **Conséquence assumée :
+ce garde ne verra pas une régression de ce défaut-là.**
