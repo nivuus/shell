@@ -191,3 +191,26 @@ anchors_of() {
     # empreinte dupliquée est une empreinte qui divergera.
     grep -qF 'SECURITY.md' "$DOC/INSTALL.md"
 }
+
+@test "CONTRIBUTING.md existe et nomme la commande de test" {
+    [ -f "$ROOT/CONTRIBUTING.md" ]
+    grep -qF './bin/test' "$ROOT/CONTRIBUTING.md"
+}
+
+@test "CONTRIBUTING.md prévient que la documentation est testée" {
+    # La règle la plus surprenante du dépôt, et celle sur laquelle une
+    # première PR se casse : un README qui se lit bien peut faire rougir
+    # la CI. La découvrir dans un rapport d'échec est une mauvaise façon.
+    grep -qiE 'documentation.*(test|tested)|test.*documentation' "$ROOT/CONTRIBUTING.md"
+    grep -qF 'tests/unit/test_readme_claims.bats' "$ROOT/CONTRIBUTING.md"
+}
+
+@test "CONTRIBUTING.md donne la convention de commit du dépôt" {
+    grep -qE 'feat\(|fix\(|docs\(' "$ROOT/CONTRIBUTING.md"
+}
+
+@test "CONTRIBUTING.md ne recopie aucun compte de tests" {
+    run grep -nE '\b[0-9]{3,4} tests\b' "$ROOT/CONTRIBUTING.md"
+    [ "$status" -ne 0 ] || { echo "compte recopié : $output"; false; }
+    grep -qF 'bin/test-count' "$ROOT/CONTRIBUTING.md"
+}

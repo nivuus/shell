@@ -112,9 +112,8 @@ Everything is in [doc/](doc/README.md), which is an index the CI keeps honest.
 
 ## Contributing · Security · License
 
-This repository tests its own documentation: a pull request that reads well can
-still fail the build. Run `./bin/test` before opening one, and read
-[doc/TESTING.md](doc/TESTING.md) and [doc/CLAUDE.md](doc/CLAUDE.md) first.
+Read [CONTRIBUTING.md](CONTRIBUTING.md) first: this repository tests its own
+documentation, and a pull request that reads well can still fail the build.
 
 Security policy, threat model and keyring fingerprint: [SECURITY.md](SECURITY.md).
 

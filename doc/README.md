@@ -27,4 +27,4 @@ this index and the directory disagree — in either direction.
 - **[TESTING.md](TESTING.md)** — the four test levels, how to run them, what each one proves
 
 See also, at the repository root: [SECURITY.md](../SECURITY.md) (threat model),
-[CHANGELOG.md](../CHANGELOG.md).
+[CONTRIBUTING.md](../CONTRIBUTING.md), [CHANGELOG.md](../CHANGELOG.md).
