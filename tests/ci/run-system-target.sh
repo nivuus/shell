@@ -36,6 +36,21 @@ TREE=/usr/local/share/nivuus-shell
 # attribuer un responsable. L'imputer à Nivuus rendrait cette preuve rouge
 # sur deux cibles pour une raison qui n'a rien à voir avec elle.
 fp() { fs_fingerprint "$1" | grep -v '/\.zcompdump' > "$WORK/$2"; }
+
+# /etc porte les bases de comptes, et c'est le HARNAIS qui les modifie --
+# « mk_user carol » à l'étape 10, « rm_user » à la fin -- jamais Nivuus, qui
+# n'y écrit pas une ligne : aucun chsh n'est fait en mode système, et un
+# INVARIANT de tests/integration/test_install_system.bats interdit qu'une
+# entrée CHSH apparaisse dans un manifeste système. Les exclure, c'est
+# mesurer Nivuus plutôt que le harnais ; les garder ferait échouer l'étape
+# 13 pour un compte que le test a créé lui-même.
+fp_etc() {
+    fs_fingerprint /etc | awk -F"$(printf '\t')" '
+        $2 ~ /^\/(passwd|group|shadow|gshadow|subuid|subgid)-?$/ { next }
+        $2 ~ /\.zcompdump/ { next }
+        { print }
+    ' > "$WORK/$1"
+}
 same() {
     if diff -u "$WORK/$1" "$WORK/$2" > "$WORK/diff.$1.$2"; then return 0; fi
     printf '%s\n' "DIVERGENCE entre $1 et $2 :" >&2
@@ -48,7 +63,7 @@ echo "== Étape 1 : deux utilisateurs réels et les empreintes de référence ==
 mk_user alice
 mk_user bob
 ALICE="$(user_home alice)"; BOB="$(user_home bob)"
-fp /etc            etc.0
+fp_etc etc.0
 fp /usr/local      local.0
 fp /var/lib        var.0
 fp "$ALICE"        alice.0
@@ -110,12 +125,37 @@ echo "== Étape 9 : alice se désactive, son \$HOME redevient bit-identique =="
 as_user alice "nivuus disable --yes --purge"
 fp "$ALICE" alice.9; same alice.0 alice.9
 
+# /etc/skel n'existe PAS partout : alpine:3.20 n'en a aucun (BusyBox
+# adduser ne s'en sert pas), et macOS non plus. Mesuré, pas supposé. Les
+# deux branches sont des preuves, pas un contournement : là où le
+# répertoire existe, --skel active les comptes créés ensuite ; là où il
+# n'existe pas, --skel REFUSE au lieu d'être ignoré en silence -- ce qui
+# est exactement la promesse de la décision « opt-in, jamais muet ».
+if [ -d /etc/skel ]; then
+    echo "== Étape 10 : /etc/skel n'active QUE les comptes créés après =="
+    "$SRC/bin/nivuus" install --system --skel --yes
+    mk_user carol
+    CAROL="$(user_home carol)"
+    grep -q "nivuus shell" "$CAROL/.zshrc" || die "carol n'a pas hérité de /etc/skel"
+    as_user carol "zsh -i -c 'print -r -- \$NIVUUS_SHELL_DIR'" | grep -qx "$TREE"
+else
+    echo "== Étape 10 : pas de /etc/skel ici -- --skel doit REFUSER, pas ignorer =="
+    if "$SRC/bin/nivuus" install --system --skel --yes > "$WORK/skel.out" 2>&1; then
+        die "--skel aurait dû être refusé en l'absence de /etc/skel"
+    fi
+    grep -q "n'existe pas" "$WORK/skel.out" || die "le refus de --skel ne nomme pas la cause"
+    [ -d "$TREE" ] || die "le refus de --skel a emporté l'installation existante"
+fi
+# Et bob, qui existait AVANT, n'a toujours rien : c'est la limite, et on
+# ne prétend pas le contraire.
+fp "$BOB" bob.10; same bob.0 bob.10
+
 echo "== Étape 13 : INVARIANT n° 4 -- retrait bit-exact de /etc, /usr/local et /var/lib =="
 as_user alice "nivuus enable --yes"      # une activation SURVIT au retrait : c'est voulu
 fp "$ALICE" alice.pre13
 fp "$BOB"   bob.pre13
 "$SRC/bin/nivuus" uninstall --system --yes --purge
-fp /etc       etc.13;   same etc.0   etc.13
+fp_etc etc.13;   same etc.0   etc.13
 fp /usr/local local.13; same local.0 local.13
 fp /var/lib   var.13;   same var.0   var.13
 # Et la commande n'a modifié aucun $HOME -- ni celui d'alice, encore activée.
@@ -137,5 +177,5 @@ grep -qi "arbre\|tree" "$WORK/doc.out"
 grep -q "nivuus disable" "$WORK/doc.out"
 
 rm -rf "$WORK"
-rm_user alice; rm_user bob
+rm_user alice; rm_user bob; rm_user carol
 echo "== Cible système OK =="

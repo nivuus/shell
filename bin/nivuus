@@ -50,7 +50,7 @@ nivuus — gestion de Nivuus Shell
 
 Usage :
   nivuus install   [--dry-run] [--yes] [--prefix DIR] [--minimal|--no-minimal]
-                   [--with-deps] [--verify-key EMPREINTE] [--system]
+                   [--with-deps] [--verify-key EMPREINTE] [--system] [--skel]
   nivuus enable    [--dry-run] [--yes] [--prefix DIR] [--minimal|--no-minimal]
   nivuus disable   [--dry-run] [--yes] [--purge]
   nivuus uninstall [--dry-run] [--yes] [--purge] [--system]
@@ -68,6 +68,8 @@ Options :
   --with-deps   Propose UNE commande groupée pour installer les dépendances
                 recommandées et optionnelles, après confirmation. Sans elle,
                 Nivuus se contente d'afficher la commande.
+  --skel      (avec --system) pose /etc/skel/.zshrc : n'affecte QUE les
+              comptes créés ensuite, jamais ceux qui existent déjà.
   --system    Installe pour TOUTE la machine (exige root) : arbre partagé
               sous /usr/local/share/nivuus-shell, inventorié dans
               /var/lib/nivuus. N'écrit dans AUCUN $HOME et ne fait de chsh
@@ -154,12 +156,13 @@ cmd_install() {
     fi
 
     local prefix="$HOME/.nivuus-shell" MINIMAL='' FORCE_MINIMAL='' FORCE_FULL='' WITH_DEPS=''
-    local verify_key='' SYSTEM='' manifest_mode='user' legacy=''
+    local verify_key='' SYSTEM='' SKEL='' manifest_mode='user' legacy=''
     while [ $# -gt 0 ]; do
         case "$1" in
             --dry-run) export NIVUUS_DRY_RUN=1 ;;
             --yes|-y)  ASSUME_YES=1 ;;
             --system)  SYSTEM=1 ;;
+            --skel)    SKEL=1 ;;
             --minimal)     FORCE_MINIMAL=1 ;;
             --no-minimal)  FORCE_FULL=1 ;;
             --with-deps)   WITH_DEPS=1 ;;
@@ -204,6 +207,15 @@ cmd_install() {
         # ne nous regarde pas (l'admin a usermod -s et useradd -s).
         FORCE_MINIMAL=1
         FORCE_FULL=''
+
+        # /etc/skel n'existe pas partout : refuser AVANT toute écriture,
+        # plutôt qu'ignorer le drapeau en silence.
+        if [ -n "$SKEL" ] && ! nivuus_system_skel_supported; then
+            log_error "$(dirname "$(nivuus_system_skel)") n'existe pas sur cette plateforme."
+            log_error "C'est le cas de macOS, et d'Alpine (BusyBox adduser ne s'en sert pas)."
+            log_error "--skel est refusé plutôt qu'ignoré. Les comptes s'activent avec « nivuus enable »."
+            return 1
+        fi
 
         legacy="$(nivuus_system_legacy_tree || true)"
         if [ -n "$legacy" ]; then
@@ -292,6 +304,25 @@ cmd_install() {
             nivuus_manifest_abort
             return 1
         fi
+        if [ -n "$SKEL" ]; then
+            # MÊME chemin de code que l'activation d'un utilisateur, et pas
+            # un simple « écris le bloc » : un /etc/skel/.zshrc rédigé par
+            # l'administrateur doit survivre intact, le bloc s'ajoutant à ce
+            # qui s'y trouve. C'est nivuus_zshrc_merge qui sait faire ça, et
+            # il est déjà prouvé par le domaine utilisateur -- une seconde
+            # écriture « à la main » ici serait une variante non testée.
+            #
+            # Le bloc est écrit SANS le marqueur « minimal » : --skel décide
+            # de l'activation, pas du mode de chaque futur compte.
+            if ! nivuus_step_write_zshrc "$(nivuus_system_skel)" "$prefix" ''; then
+                nivuus_manifest_abort
+                return 1
+            fi
+            log_ok "$(nivuus_system_skel) écrit."
+            log_warn "Il ne s'applique QU'AUX COMPTES CRÉÉS APRÈS cette commande."
+            log_warn "Les $(nivuus_system_existing_users) comptes déjà présents ne sont pas activés :"
+            log_warn "chacun peut lancer « nivuus enable », ou utilise --activate-all pour toute la machine."
+        fi
         nivuus_system_restorecon "$prefix" "$(nivuus_system_bin)"
         # « Une installation qui ne peut pas être prouvée est annulée. »
         if [ -z "${NIVUUS_DRY_RUN:-}" ] && ! nivuus_system_probe_tree "$prefix"; then
@@ -342,6 +373,7 @@ cmd_uninstall() {
             --yes|-y)  ASSUME_YES=1 ;;
             --purge)   purge=1 ;;
             --system)  SYSTEM=1 ;;
+            --skel)    SKEL=1 ;;
             *) log_error "Option inconnue : $1"; return 2 ;;
         esac
         shift

@@ -108,6 +108,20 @@ nivuus_system_package_notice() {
     return 1
 }
 
+# /etc/skel n'existe pas sur macOS. Un drapeau qui ne fait rien sans le
+# dire est la pire des réponses : on refuse, et on nomme le chemin.
+nivuus_system_skel_supported() {
+    [ -d "$(dirname "$(nivuus_system_skel)")" ]
+}
+
+# Comptes humains déjà présents : uid >= 1000, shell non nologin. Lu dans
+# /etc/passwd, JAMAIS en parcourant /home -- un stat sur un $HOME NFS
+# déclenche l'automonteur, ce qui est un effet de bord réel sur un serveur.
+nivuus_system_existing_users() {
+    awk -F: '$3 >= 1000 && $3 < 65534 && $7 !~ /(nologin|false)$/ { n++ } END { print n + 0 }' \
+        "${NIVUUS_PASSWD_FILE:-/etc/passwd}" 2>/dev/null || printf '0\n'
+}
+
 # Un manifeste système qui décrit un $HOME est corrompu ou fabriqué :
 # install --system n'en écrit JAMAIS (un test l'interdit). Plutôt que de
 # faire confiance à cette propriété au moment le plus dangereux -- un rejeu
