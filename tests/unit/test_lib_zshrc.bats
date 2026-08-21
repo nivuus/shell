@@ -1,5 +1,7 @@
 #!/usr/bin/env bats
 
+load '../helpers/portable'
+
 setup() {
     LIB="${BATS_TEST_DIRNAME}/../../lib"
     source "$LIB/log.sh"
@@ -114,7 +116,7 @@ teardown() { rm -rf "$TMP"; }
     # subsequent install.
     nivuus_zshrc_block "$DIR" > "$TMP/.zshrc"
     printf 'export MINE=42\n' >> "$TMP/.zshrc"
-    sed -i 's/$/\r/' "$TMP/.zshrc"
+    pt_to_crlf "$TMP/.zshrc"
 
     run nivuus_zshrc_state "$TMP/.zshrc"
     [ "$output" = "present" ]
@@ -132,7 +134,7 @@ teardown() { rm -rf "$TMP"; }
 @test "strip on a CRLF file removes the block despite the trailing \\r" {
     nivuus_zshrc_block "$DIR" > "$TMP/.zshrc"
     printf 'export KEEP=1\n' >> "$TMP/.zshrc"
-    sed -i 's/$/\r/' "$TMP/.zshrc"
+    pt_to_crlf "$TMP/.zshrc"
 
     run nivuus_zshrc_strip "$TMP/.zshrc"
     [[ "$output" != *"nivuus shell"* ]]
@@ -175,4 +177,11 @@ teardown() { rm -rf "$TMP"; }
     printf 'export FOO=1\n' > "$TMP/.zshrc"
     run nivuus_zshrc_detect_framework "$TMP/.zshrc"
     [ "$output" = "" ]
+}
+
+@test "the block carries NIVUUS_MINIMAL only when asked" {
+    run bash -c "source '$LIB/zshrc.sh'; nivuus_zshrc_block /opt/nivuus"
+    [[ "$output" != *"NIVUUS_MINIMAL"* ]]
+    run bash -c "source '$LIB/zshrc.sh'; nivuus_zshrc_block /opt/nivuus 1"
+    [[ "$output" == *"export NIVUUS_MINIMAL=1"* ]]
 }

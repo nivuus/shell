@@ -152,12 +152,18 @@
 }
 
 @test "Clean status uses THEME_SUCCESS" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -B 2 '●' config/05-prompt.zsh | grep 'THEME_SUCCESS'"
+    # Le glyphe passe par $NIVUUS_GLYPH_GIT_CLEAN (défaut ●, ASCII en mode
+    # minimal) ; la couleur, elle, doit rester celle du thème.
+    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -B 2 'NIVUUS_GLYPH_GIT_CLEAN}%' config/05-prompt.zsh | grep 'THEME_SUCCESS'"
+    [ "$status" -eq 0 ]
+    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep 'NIVUUS_GLYPH_GIT_CLEAN:=●' config/05-prompt.zsh"
     [ "$status" -eq 0 ]
 }
 
 @test "Dirty status uses THEME_ERROR" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -B 2 '○' config/05-prompt.zsh | grep 'THEME_ERROR'"
+    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -B 2 'NIVUUS_GLYPH_GIT_DIRTY}%' config/05-prompt.zsh | grep 'THEME_ERROR'"
+    [ "$status" -eq 0 ]
+    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep 'NIVUUS_GLYPH_GIT_DIRTY:=○' config/05-prompt.zsh"
     [ "$status" -eq 0 ]
 }
 

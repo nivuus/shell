@@ -144,9 +144,66 @@ jobs:
         run: |
           bats tests/e2e/test_nivuus_cli.bats tests/e2e/test_install_sh_compat.bats
 
+      - name: Platform, deps and minimal-mode E2E
+        run: |
+          bats tests/e2e/test_platform.bats tests/e2e/test_with_deps.bats tests/e2e/test_minimal_mode.bats
+
       - name: Reversibility (HOME must be bit-identical)
         run: |
           bats tests/e2e/test_reversibility.bats
+
+  e2e-macos:
+    name: Installation E2E (macOS)
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install zsh and bats
+        run: brew install bats-core zsh
+
+      - name: Setup test environment
+        run: echo "NIVUUS_SHELL_DIR=$GITHUB_WORKSPACE" >> $GITHUB_ENV
+
+      - name: Library unit tests
+        run: bats tests/unit/test_lib_*.bats tests/unit/test_helpers_portable.bats
+
+      - name: Install / uninstall E2E
+        run: bats tests/e2e/test_nivuus_cli.bats tests/e2e/test_install_sh_compat.bats tests/e2e/test_minimal_mode.bats
+
+      - name: Reversibility (HOME must be bit-identical)
+        run: bats tests/e2e/test_reversibility.bats
+
+  e2e-alpine:
+    name: Installation E2E (Alpine / musl, no GNU coreutils)
+    runs-on: ubuntu-latest
+    container:
+      image: alpine:3.20
+
+    steps:
+      - name: Install the minimum (deliberately no GNU coreutils)
+        run: apk add --no-cache bash zsh git curl ncurses
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install bats
+        run: |
+          git clone --depth 1 https://github.com/bats-core/bats-core.git /tmp/bats
+          /tmp/bats/install.sh /usr/local
+
+      - name: Setup test environment
+        run: echo "NIVUUS_SHELL_DIR=$GITHUB_WORKSPACE" >> $GITHUB_ENV
+
+      - name: Library unit tests
+        run: bats tests/unit/test_lib_*.bats tests/unit/test_helpers_portable.bats
+
+      - name: Install / uninstall E2E
+        run: bats tests/e2e/test_nivuus_cli.bats tests/e2e/test_minimal_mode.bats
+
+      - name: Reversibility (HOME must be bit-identical)
+        run: bats tests/e2e/test_reversibility.bats
 
   lint:
     name: Syntax Validation

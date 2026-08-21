@@ -308,7 +308,18 @@ _nivuus_place() {
         new_hash="$(nivuus_hash_file "$src")"
     else
         nivuus_mkdir_p "$(dirname "$dst")"
-        cp -p "$src" "$dst" || return 1
+        # BusyBox cp (Alpine) REMPLACE un lien symbolique par un fichier
+        # ordinaire là où GNU cp écrit à travers : sur cette plateforme, le
+        # lien stow/chezmoi de l'utilisateur disparaîtrait -- et l'empreinte
+        # de réversibilité ne voit pas les liens, donc en silence. On écrit
+        # donc à travers nous-mêmes par redirection, ce que toute plateforme
+        # fait à l'identique, en préservant le lien, l'inode et les droits
+        # de la vraie cible.
+        if [ -L "$dst" ]; then
+            cat "$src" > "$dst" || return 1
+        else
+            cp -p "$src" "$dst" || return 1
+        fi
         new_hash="$(nivuus_hash_file "$dst")"
     fi
 
@@ -437,7 +448,13 @@ nivuus_restore_entry() {
             if [ -n "${NIVUUS_DRY_RUN:-}" ]; then
                 log_dry "restaurerait $path"
             else
-                cp -p "$NIVUUS_BACKUP_DIR/$ref" "$path"
+                # Même précaution qu'à l'installation (voir _nivuus_place) :
+                # ne jamais remplacer un lien symbolique par un fichier.
+                if [ -L "$path" ]; then
+                    cat "$NIVUUS_BACKUP_DIR/$ref" > "$path"
+                else
+                    cp -p "$NIVUUS_BACKUP_DIR/$ref" "$path"
+                fi
                 # cp -p préserve l'horodatage d'origine (antérieur à
                 # l'installation), qui peut être plus vieux que le .zwc écrit
                 # pendant la session : zsh préférerait alors le bytecode
@@ -463,11 +480,28 @@ nivuus_restore_entry() {
             fi
             ;;
         CHSH)
+            # Dépendance douce (command -v) : lib/manifest.sh reste
+            # sourçable seule, comme pour nivuus_zshrc_state.
+            if command -v nivuus_current_login_shell >/dev/null 2>&1; then
+                current="$(nivuus_current_login_shell)"
+            else
+                current="${SHELL:-}"
+            fi
+            if [ "$current" = "$ref" ]; then
+                return 0        # déjà restauré (ou jamais changé)
+            fi
             if [ -n "${NIVUUS_DRY_RUN:-}" ]; then
                 log_dry "restaurerait le shell de connexion : $ref"
+                return 0
+            fi
+            if command -v chsh >/dev/null 2>&1 && chsh -s "$ref" >/dev/null 2>&1; then
+                log_ok "Shell de connexion restauré : $ref"
             else
-                log_info "Shell de connexion d'origine : $ref"
-                log_info "Restaure-le avec : chsh -s $ref"
+                # Jamais de sudo, jamais d'édition de /etc/passwd : on
+                # explique. Une entrée CHSH non appliquée n'est pas un
+                # survivant au sens du manifeste (aucun fichier en jeu).
+                log_warn "Shell de connexion non restauré automatiquement."
+                log_warn "Restaure-le avec : chsh -s $ref"
             fi
             ;;
         PKG)

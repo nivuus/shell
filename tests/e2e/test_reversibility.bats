@@ -3,6 +3,7 @@
 # strictement identique, empreinte par empreinte (chemin, permissions, contenu).
 
 load '../helpers/fingerprint'
+load '../helpers/portable'
 
 setup() {
     ROOT="${BATS_TEST_DIRNAME}/../.."
@@ -111,7 +112,7 @@ teardown() { rm -rf "$TMP"; }
     # The user edits their own file while Nivuus is installed, in a way
     # that changes the byte layout the next merge produces (prepending,
     # not appending, so the second install is not a no-op on .zshrc).
-    sed -i '1i alias early=1' "$HOME/.zshrc"
+    pt_prepend_line "$HOME/.zshrc" 'alias early=1'
     "$NIVUUS" install --yes --prefix "$HOME/.nivuus-shell"
     "$NIVUUS" uninstall --yes --purge
     # The original backup must never have been overwritten by the
@@ -163,4 +164,31 @@ teardown() { rm -rf "$TMP"; }
     fs_fingerprint "$HOME" > "$TMP/after"
     run diff "$TMP/before" "$TMP/after"
     [ "$status" -eq 0 ]
+}
+
+@test "install then uninstall restores the login shell too" {
+    mkdir -p "$TMP/bin"
+    printf '#!/bin/sh\nprintf "%%s\\n" "$2" > "%s/loginshell"\n' "$TMP" > "$TMP/bin/chsh"
+    chmod +x "$TMP/bin/chsh"
+    printf '/bin/bash\n' > "$TMP/loginshell"
+    printf '/bin/bash\n%s\n' "$(command -v zsh || echo /usr/bin/zsh)" > "$TMP/shells"
+
+    export PATH="$TMP/bin:$PATH"
+    export NIVUUS_LOGIN_SHELL_FILE="$TMP/loginshell"
+    export NIVUUS_ETC_SHELLS="$TMP/shells"
+    # --no-minimal : sous bats il n'y a pas de TTY, donc pas de chsh par défaut.
+    printf 'export MINE=1\n' > "$HOME/.zshrc"
+
+    before_shell="$(fs_login_shell)"
+    fs_fingerprint "$HOME" > "$TMP/before"
+
+    "$NIVUUS" install --yes --no-minimal --prefix "$HOME/.nivuus-shell"
+    [ "$(fs_login_shell)" != "$before_shell" ]      # le chsh a bien eu lieu
+
+    "$NIVUUS" uninstall --yes --purge
+    fs_fingerprint "$HOME" > "$TMP/after"
+
+    run diff "$TMP/before" "$TMP/after"
+    [ "$status" -eq 0 ]
+    [ "$(fs_login_shell)" = "$before_shell" ]
 }

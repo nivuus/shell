@@ -66,10 +66,12 @@ teardown() { rm -rf "$TMP"; }
     [ -f "$TMP/d/keep" ]
 }
 
-@test "CHSH restoration never executes chsh" {
+@test "CHSH restoration runs chsh itself but never sudo" {
     mkdir -p "$TMP/fakebin"
     printf '#!/bin/sh\n: > "%s/EXECUTED-chsh"\n' "$TMP" > "$TMP/fakebin/chsh"
-    chmod +x "$TMP/fakebin/chsh"
+    printf '#!/bin/sh\n: > "%s/EXECUTED-sudo"\n' "$TMP" > "$TMP/fakebin/sudo"
+    chmod +x "$TMP/fakebin/chsh" "$TMP/fakebin/sudo"
+    printf '/usr/bin/zsh\n' > "$TMP/loginshell"
 
     nivuus_manifest_record CHSH "$HOME" - /bin/bash
     nivuus_manifest_commit
@@ -78,16 +80,18 @@ teardown() { rm -rf "$TMP"; }
     # externes) mais fakebin passe devant : le faux chsh masque le vrai.
     run bash -c "
         PATH='$TMP/fakebin:$PATH'
+        NIVUUS_LOGIN_SHELL_FILE='$TMP/loginshell'
         source '$LIB/log.sh'
+        source '$LIB/detect.sh'
         source '$LIB/manifest.sh'
         NIVUUS_MANIFEST='$NIVUUS_MANIFEST'
         NIVUUS_BACKUP_DIR='$NIVUUS_BACKUP_DIR'
         nivuus_manifest_rollback
     "
     [ "$status" -eq 0 ]
-    [[ "$output" == *"/bin/bash"* ]]      # la commande est bien indiquée...
     run ls "$TMP"
-    [[ "$output" != *"EXECUTED-chsh"* ]]  # ...mais jamais exécutée
+    [[ "$output" == *"EXECUTED-chsh"* ]]   # la restauration est effective...
+    [[ "$output" != *"EXECUTED-sudo"* ]]   # ...sans jamais élever les privilèges
 }
 
 @test "PKG entries are ignored by rollback without warning" {
@@ -104,4 +108,51 @@ teardown() { rm -rf "$TMP"; }
     run nivuus_manifest_rollback
     [ "$status" -eq 0 ]
     [[ "$output" == *"inconnue"* ]]
+}
+
+@test "CHSH restore puts the original login shell back" {
+    mkdir -p "$TMP/bin"
+    printf '#!/bin/sh\nprintf "%%s\\n" "$2" > "%s/loginshell"\n' "$TMP" > "$TMP/bin/chsh"
+    chmod +x "$TMP/bin/chsh"
+    printf '/usr/bin/zsh\n' > "$TMP/loginshell"
+    printf '/bin/bash\n/usr/bin/zsh\n' > "$TMP/shells"
+
+    run env PATH="$TMP/bin:$PATH" \
+        NIVUUS_LOGIN_SHELL_FILE="$TMP/loginshell" NIVUUS_ETC_SHELLS="$TMP/shells" \
+        bash -c "source '$LIB/log.sh'; source '$LIB/detect.sh'; source '$LIB/manifest.sh'; \
+                 nivuus_restore_entry CHSH '$HOME' '-' '/bin/bash' 2>&1"
+    [ "$status" -eq 0 ]
+    [ "$(cat "$TMP/loginshell")" = "/bin/bash" ]
+}
+
+@test "CHSH restore is a no-op when the login shell is already the original" {
+    mkdir -p "$TMP/bin"
+    printf '#!/bin/sh\n: > "%s/CHSH_RAN"\n' "$TMP" > "$TMP/bin/chsh"; chmod +x "$TMP/bin/chsh"
+    printf '/bin/bash\n' > "$TMP/loginshell"
+    run env PATH="$TMP/bin:$PATH" NIVUUS_LOGIN_SHELL_FILE="$TMP/loginshell" \
+        bash -c "source '$LIB/log.sh'; source '$LIB/detect.sh'; source '$LIB/manifest.sh'; \
+                 nivuus_restore_entry CHSH '$HOME' '-' '/bin/bash'"
+    [ "$status" -eq 0 ]
+    [ ! -f "$TMP/CHSH_RAN" ]
+}
+
+@test "CHSH restore in dry-run changes nothing" {
+    mkdir -p "$TMP/bin"
+    printf '#!/bin/sh\n: > "%s/CHSH_RAN"\n' "$TMP" > "$TMP/bin/chsh"; chmod +x "$TMP/bin/chsh"
+    printf '/usr/bin/zsh\n' > "$TMP/loginshell"
+    run env PATH="$TMP/bin:$PATH" NIVUUS_DRY_RUN=1 NIVUUS_LOGIN_SHELL_FILE="$TMP/loginshell" \
+        bash -c "source '$LIB/log.sh'; source '$LIB/detect.sh'; source '$LIB/manifest.sh'; \
+                 nivuus_restore_entry CHSH '$HOME' '-' '/bin/bash' 2>&1"
+    [ ! -f "$TMP/CHSH_RAN" ]
+    [[ "$output" == *"dry-run"* ]]
+}
+
+@test "CHSH restore explains what to do when chsh is unavailable" {
+    mkdir -p "$TMP/emptybin"
+    printf '/usr/bin/zsh\n' > "$TMP/loginshell"
+    run env PATH="$TMP/emptybin" NIVUUS_LOGIN_SHELL_FILE="$TMP/loginshell" \
+        "$(command -v bash)" -c "source '$LIB/log.sh'; source '$LIB/detect.sh'; source '$LIB/manifest.sh'; \
+                 nivuus_restore_entry CHSH '$HOME' '-' '/bin/bash' 2>&1"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"chsh -s /bin/bash"* ]]
 }

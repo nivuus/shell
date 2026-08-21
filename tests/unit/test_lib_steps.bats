@@ -104,45 +104,8 @@ teardown() { rm -rf "$TMP"; }
     [ "$(cat "$TMP/install/.version")" = "3.0.0" ]
 }
 
-@test "check_required_deps succeeds when zsh, git and curl are present" {
-    if ! command -v zsh >/dev/null || ! command -v git >/dev/null || ! command -v curl >/dev/null; then
-        skip "dépendances absentes dans cet environnement"
-    fi
-    run nivuus_step_check_required_deps
-    [ "$status" -eq 0 ]
-}
-
-@test "check_required_deps fails and reports when dependencies are missing" {
-    mkdir -p "$TMP/emptybin"
-    run bash -c "
-        PATH='$TMP/emptybin'
-        source '$LIB/log.sh'
-        source '$LIB/steps.sh'
-        nivuus_step_check_required_deps
-    "
+@test "step_check_required_deps still delegates to deps.sh" {
+    run bash -c "source '$LIB/log.sh'; source '$LIB/detect.sh'; source '$LIB/deps.sh'; \
+                 source '$LIB/steps.sh'; PATH=''; nivuus_step_check_required_deps"
     [ "$status" -eq 1 ]
-    [[ "$output" == *"zsh"* ]]
-    [[ "$output" == *"git"* ]]
-    [[ "$output" == *"curl"* ]]
-}
-
-@test "check_required_deps never executes any package manager" {
-    for mgr in apt-get dnf pacman brew; do
-        rm -rf "$TMP/fakebin" "$TMP"/EXECUTED-*
-        mkdir -p "$TMP/fakebin"
-        for tool in sudo "$mgr"; do
-            printf '#!/bin/sh\n: > "%s/EXECUTED-%s"\n' "$TMP" "$tool" > "$TMP/fakebin/$tool"
-            chmod +x "$TMP/fakebin/$tool"
-        done
-        run bash -c "
-            PATH='$TMP/fakebin'
-            source '$LIB/log.sh'
-            source '$LIB/steps.sh'
-            nivuus_step_check_required_deps
-        "
-        [ "$status" -eq 1 ]
-        [[ "$output" == *"$mgr"* ]]          # la bonne commande est bien suggérée
-        run ls "$TMP"
-        [[ "$output" != *"EXECUTED-"* ]]     # ...mais jamais exécutée
-    done
 }
