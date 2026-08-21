@@ -1,7 +1,7 @@
 {
   "name": "nivuus-shell",
   "version": "3.0.0",
-  "description": "Modern ZSH configuration framework with Nord theme and AI integration",
+  "description": "A complete ZSH environment in one command - and one command to remove it, byte for byte.",
   "repository": {
     "type": "git",
     "url": "https://github.com/maximeallanic/nivuus-shell.git"
@@ -18,9 +18,11 @@
   "keywords": [
     "zsh",
     "shell",
-    "nord",
-    "theme",
+    "dotfiles",
+    "prompt",
+    "cli",
     "ai",
+    "nord",
     "productivity"
   ],
   "author": "Maxime Allanic",
