@@ -1,0 +1,66 @@
+name: Verify latest release (canary)
+
+# Ce que ce canari rend tenable : le refus dur côté client. L'objection
+# sérieuse au refus dur est « un bug casse l'auto-update de tout le monde,
+# et personne n'a plus de canal pour recevoir le correctif ». On y répond
+# par de la prévention : une dérive clé/asset est détectée côté mainteneur
+# sous 24 h, avant qu'un utilisateur ne la rencontre.
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+jobs:
+  canary:
+    name: Verify the published release with the committed keys
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install zsh
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then sudo apt-get update && sudo apt-get install -y zsh; fi
+          zsh --version
+
+      - name: Download the latest published release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="$(gh release view --json tagName -q .tagName)"
+          echo "TAG=$tag" >> "$GITHUB_ENV"
+          echo "VERSION=${tag#v}" >> "$GITHUB_ENV"
+          mkdir -p dl
+          gh release download "$tag" --dir dl --clobber
+          mv "dl/nivuus-shell-${tag}.tar.gz" dl/nivuus-shell.tar.gz
+          ls -l dl
+
+      - name: Verify exactly as a user's shell would
+        run: |
+          set -euo pipefail
+          rm -f config/*.zwc
+          ENABLE_AUTOUPDATE=false NIVUUS_SHELL_DIR="$PWD" zsh -c '
+            source config/20-autoupdate.zsh
+            _nivuus_verify_release dl "'"$VERSION"'" keys
+            rc=$?
+            case $rc in
+              0) echo "✅ la release publiée est acceptée par le client" ;;
+              1) echo "❌ SIGNATURE OU EMPREINTE INVALIDE sur la release publiée"; exit 1 ;;
+              2) echo "❌ aucun outil de vérification sur ce runner"; exit 1 ;;
+            esac
+          '
+
+      - name: Verify the SSHSIG path independently
+        run: |
+          # Le chemin de repli doit être vérifié SÉPARÉMENT : sur un
+          # runner où openssl réussit, le SSHSIG pourrait être absent ou
+          # cassé sans que personne ne le voie jusqu'au jour où il porte
+          # le trafic réel. C'est le cas de Fedora, mesuré dans
+          # doc/SIGNING.md : openssl absent, ssh-keygen seul.
+          ssh-keygen -Y verify -f keys/allowed_signers -I nivuus-release \
+              -n nivuus-release -s dl/SHA256SUMS.sshsig < dl/SHA256SUMS
