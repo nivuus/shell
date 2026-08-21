@@ -351,6 +351,7 @@ cmd_install() {
     if [ -n "$SYSTEM" ]; then
         if ! nivuus_step_copy_tree "$NIVUUS_SRC_ROOT" "$prefix" \
             || ! nivuus_step_write_version "$NIVUUS_SRC_ROOT" "$prefix" \
+            || ! nivuus_step_install_updater "$NIVUUS_SRC_ROOT" "$prefix" \
             || ! nivuus_step_write_origin "$prefix" system selfhosted \
             || ! nivuus_step_install_man "$NIVUUS_SRC_ROOT" "$(nivuus_system_man)" \
             || ! nivuus_install_symlink "$prefix/bin/nivuus" "$(nivuus_system_bin)"; then
@@ -910,10 +911,30 @@ cmd_update() {
     # Arbre système : on répond ici, sans déléguer à un shell interactif --
     # un conteneur, une CI ou un cron n'en ont pas, et le message est le même.
     if [ "$(nivuus_origin "$dir")" = "system" ]; then
-        log_info "Nivuus est installé pour la machine ($dir)."
-        log_info "Les mises à jour sont l'affaire de l'administrateur :"
-        log_info "  sudo nivuus update"
-        return 0
+        if ! nivuus_system_is_root; then
+            log_info "Nivuus est installé pour la machine ($dir)."
+            log_info "Les mises à jour sont l'affaire de l'administrateur :"
+            log_info "  sudo nivuus update"
+            log_info "Pour une installation personnelle avec mises à jour automatiques :"
+            log_info "  curl -fsSL https://raw.githubusercontent.com/maximeallanic/nivuus-shell/master/install.sh | sh"
+            return 0
+        fi
+        # Réinstallation VÉRIFIÉE : télécharge, vérifie l'empreinte
+        # (fail-closed) et la signature, extrait, puis délègue à
+        # « install --system », qui est idempotent et différentiel et qui
+        # passe par le manifeste. On n'emprunte JAMAIS le chemin destructif
+        # de l'auto-update (rm -rf puis cp -r dans l'arbre) : dans le
+        # domaine root, ce serait une écriture massive hors inventaire --
+        # exactement ce que le manifeste existe pour empêcher. Un test le
+        # vérifie par grep sur ce fichier.
+        if [ ! -f "$dir/install.sh" ]; then
+            log_error "$dir/install.sh est absent : cet arbre ne peut pas se mettre à jour lui-même."
+            log_error "Réinstalle depuis une release :  sudo nivuus install --system"
+            return 1
+        fi
+        log_info "Mise à jour de l'installation système : réinstallation depuis une release vérifiée."
+        NIVUUS_FORCE_BOOTSTRAP=1; export NIVUUS_FORCE_BOOTSTRAP
+        exec sh "$dir/install.sh" --system --non-interactive
     fi
 
     state="$(nivuus_git_state "$dir")"

@@ -221,6 +221,12 @@ jobs:
           grep -q "INVARIANT: retrait bit-exact" tests/integration/test_uninstall_system.bats
           grep -q "INVARIANT n° 3" tests/ci/run-system-target.sh
           grep -q "INVARIANT: jamais de double source" tests/e2e/test_system_user_override.bats
+          grep -q "INVARIANT: la mise à jour système n'emprunte JAMAIS" \
+            tests/e2e/test_system_update.bats
+          # Le chemin destructif de l'auto-update ne doit jamais réapparaître
+          # dans le noyau : sur un arbre système, ce serait une écriture
+          # massive hors manifeste, en root.
+          ! grep -q "_nivuus_perform_update" bin/nivuus
 
   # Niveau 2 sur macOS : étroit, car facturé x10. Première exécution réelle.
   e2e-macos:

@@ -333,9 +333,27 @@ _nivuus_enforce_modes() {
     return 0
 }
 
+# Nivuus a-t-il CRÉÉ ce chemin (à cette installation ou à une précédente
+# héritée) ? Si oui, le fichier NOUS appartient : une réécriture ultérieure
+# (mise à jour, réinstallation) reste un CREATE dont on rafraîchit
+# l'empreinte, et ne devient PAS un MODIFY avec sauvegarde.
+#
+# Sans cette distinction, une machine mise à jour une fois n'était plus
+# désinstallable proprement : « uninstall » restaurait la version
+# PRÉCÉDENTE de chaque fichier au lieu de le supprimer, et l'arbre survivait
+# au retrait -- ce qui casse la promesse centrale du projet. Mesuré sur le
+# chemin « install --system puis sudo nivuus update puis uninstall ».
+_nivuus_prior_create_exists() {
+    local path="$1"
+    [ -f "$NIVUUS_MANIFEST_TMP" ] || return 1
+    awk -F"$NIVUUS_TAB" -v p="$path" \
+        '$1 == "CREATE" && $2 == p { found=1 } END { exit !found }' \
+        "$NIVUUS_MANIFEST_TMP" 2>/dev/null
+}
+
 # Coeur partagé : $1 = source, $2 = destination.
 _nivuus_place() {
-    local src="$1" dst="$2" existed=0 backup='-' new_hash prior_ref
+    local src="$1" dst="$2" existed=0 ours=0 backup='-' new_hash prior_ref
 
     [ -f "$dst" ] && existed=1
     if [ "$existed" -eq 1 ] && [ "$(nivuus_hash_file "$src")" = "$(nivuus_hash_file "$dst")" ]; then
@@ -383,6 +401,12 @@ _nivuus_place() {
         prior_ref="$(_nivuus_prior_modify_ref "$dst")"
         if [ -n "$prior_ref" ] && [ "$prior_ref" != "-" ]; then
             backup="$prior_ref"
+        elif _nivuus_prior_create_exists "$dst"; then
+            # Ce fichier, c'est NOUS qui l'avons créé : il le reste. Aucune
+            # sauvegarde à prendre (il n'y a pas de contenu « d'avant Nivuus »
+            # à protéger), et l'entrée reste un CREATE pour que le retrait le
+            # supprime au lieu de restaurer une version antérieure.
+            ours=1
         else
             backup="$(nivuus_store_backup "$dst")" || return 1
         fi
@@ -412,7 +436,7 @@ _nivuus_place() {
         _nivuus_enforce_modes "$dst" file
     fi
 
-    if [ "$existed" -eq 1 ]; then
+    if [ "$existed" -eq 1 ] && [ "$ours" -eq 0 ]; then
         nivuus_manifest_record MODIFY "$dst" "$new_hash" "$backup"
     else
         nivuus_manifest_record CREATE "$dst" "$new_hash" '-'

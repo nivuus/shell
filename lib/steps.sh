@@ -82,6 +82,17 @@ nivuus_step_install_man() {
     nivuus_install_file "$src/doc/nivuus.1" "$dst"
 }
 
+# L'installeur, embarqué dans l'arbre système : c'est lui que
+# « sudo nivuus update » relance en mode amorçage pour télécharger et
+# VÉRIFIER une release. Sans lui, l'arbre ne saurait pas se mettre à jour
+# lui-même. Absent des sources (arbre de paquet) : on ne le réinvente pas et
+# on n'échoue pas pour autant.
+nivuus_step_install_updater() {
+    local src="$1" dst="$2"
+    [ -f "$src/install.sh" ] || return 0
+    nivuus_install_file "$src/install.sh" "$dst/install.sh"
+}
+
 nivuus_step_write_version() {
     local src="$1" dst="$2"
     [ -f "$src/.version" ] || return 0

@@ -287,7 +287,14 @@ while [ "$1" != "--" ]; do
 done
 shift    # retire la sentinelle
 
-ROOT="$(nivuus_local_root || true)"
+# $NIVUUS_FORCE_BOOTSTRAP : « sudo nivuus update » lance CE script depuis
+# l'arbre système. Sans cette variable, nivuus_local_root le trouverait et
+# réinstallerait la MÊME version -- une mise à jour qui ne met rien à jour.
+if [ -n "${NIVUUS_FORCE_BOOTSTRAP:-}" ]; then
+    ROOT=''
+else
+    ROOT="$(nivuus_local_root || true)"
+fi
 if [ -z "$ROOT" ]; then
     nivuus_bootstrap "$@"
     exit $?
