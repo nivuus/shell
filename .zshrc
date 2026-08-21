@@ -33,6 +33,7 @@ export ENABLE_AI_TERMINAL_TITLES="${ENABLE_AI_TERMINAL_TITLES:-true}"
 export GIT_PROMPT_CACHE_TTL="${GIT_PROMPT_CACHE_TTL:-2}"
 export ENABLE_AI_AUTO_DEBOUNCE="${ENABLE_AI_AUTO_DEBOUNCE:-true}"
 export AI_INLINE_MODE="${AI_INLINE_MODE:-true}"
+export ENABLE_AI_COMMAND_NOT_FOUND="${ENABLE_AI_COMMAND_NOT_FOUND:-true}"
 
 # =============================================================================
 # Theme & Prompt Configuration
@@ -98,6 +99,7 @@ config_files=(
     21-safety.zsh
     22-ai-errors.zsh
     23-terminal-sanity.zsh
+    24-ai-command-not-found.zsh
     98-syntax.zsh
     99-cleanup.zsh
 )

@@ -56,6 +56,11 @@ AI Terminal Titles:
   Stats:   ai-title-stats
   Help:    ai-title-help
 
+AI Command Not Found:
+  Auto-suggests and installs missing packages on 'command not found'
+  Lookup:  ai-cnf-lookup <command>
+  Help:    ai-cnf-help
+
 Configuration:
   Backend: $AI_BACKEND
   Model: $(_ai_resolve_model)

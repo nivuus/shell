@@ -194,7 +194,7 @@ if [[ "${ENABLE_AI_TERMINAL_TITLES:-false}" == "true" ]]; then
         local prompt="Output ONLY a terminal title (emoji + text, max 30 chars). No preamble! Based on the commands run in this terminal session: $recent_history. Create a fun, creative title that captures what I'm working on right now. Be playful!"
 
         # Call API with timeout
-        local api_result=$(_ai_api_call "$prompt" "$AI_TITLE_MODEL" 25 1.2 3)
+        local api_result=$(_ai_api_call "$prompt" "$AI_TITLE_MODEL" 25 1.2 3 2>/dev/null)
 
         # Extract title - take last non-empty line (skips any preamble)
         local result=$(print -r -- "$api_result" | \
