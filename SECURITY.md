@@ -1,5 +1,6 @@
 # Politique de sécurité
 
+<a id="first-install"></a>
 ## Ce que la signature garantit, et ce qu'elle ne garantit pas
 
 Le fichier `SHA256SUMS` de chaque release est signé. Le client refuse

@@ -169,3 +169,25 @@ anchors_of() {
             || { echo "sous-commande inexistante : $sub"; false; }
     done
 }
+
+@test "SECURITY.md porte une ancre stable pour le problème d'amorçage" {
+    # Le README (anglais) doit pouvoir pointer une section précise d'un
+    # document français sans le traduire. Une ancre HTML explicite est la
+    # seule forme qui survive à une reformulation du titre.
+    grep -qF '<a id="first-install"></a>' "$ROOT/SECURITY.md"
+}
+
+@test "la section ancrée dit ce que le one-liner ne protège PAS" {
+    # Une ancre qui pointe une section rassurante serait pire qu'aucune
+    # ancre : le lecteur y va justement pour connaître la limite.
+    sed -n '/<a id="first-install"><\/a>/,/^## /p' "$ROOT/SECURITY.md" \
+        | grep -qiE 'amor|première|premier téléchargement|ne garantit pas'
+}
+
+@test "le contenu du trousseau vit dans doc/INSTALL.md" {
+    grep -qF -- '--verify-key' "$DOC/INSTALL.md"
+    grep -qiE 'trousseau|keyring' "$DOC/INSTALL.md"
+    # Et l'empreinte attendue n'est PAS recopiée dans deux fichiers : une
+    # empreinte dupliquée est une empreinte qui divergera.
+    grep -qF 'SECURITY.md' "$DOC/INSTALL.md"
+}
