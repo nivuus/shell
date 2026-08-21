@@ -8,7 +8,11 @@ nivuus_step_copy_tree() {
     # Répertoires copiés récursivement, en excluant .zwc et .git.
     local d f list
     list="$(mktemp)"
-    for d in config themes bin plugins lib; do
+    # « keys » n'est pas optionnel : sans le trousseau, l'installation
+    # neuve n'a aucune clé de confiance et REFUSE toutes les mises à jour
+    # (refus dur, cf. config/20-autoupdate.zsh). L'échec serait total,
+    # silencieux, et différé d'une semaine.
+    for d in config themes bin plugins lib keys; do
         [ -d "$src/$d" ] || continue
         # Fichier temporaire plutôt qu'une substitution de processus
         # (bash-only, et interdite par tests/unit/test_lib_posix.bats) ou
