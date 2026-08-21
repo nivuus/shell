@@ -19,6 +19,16 @@ setup() {
     TEST_WORKFLOWS="tests.yml matrix.yml uninstall-verified.yml"
 }
 
+# Les règles portent sur ce que le workflow FAIT, pas sur ce qu'il explique.
+# Sans ce filtre, un commentaire qui cite « continue-on-error » pour dire de
+# ne jamais l'utiliser ferait échouer la règle qui l'interdit.
+noncomment() {   # noncomment <fichier> -> chemin d'une copie sans commentaires
+    local out
+    out="$(mktemp)"
+    sed 's/[[:space:]]*#.*$//' "$1" > "$out"
+    printf '%s\n' "$out"
+}
+
 test_workflow_files() {
     for f in $TEST_WORKFLOWS; do
         [ -f "$WF/$f" ] && printf '%s\n' "$WF/$f"
@@ -140,5 +150,44 @@ test_workflow_files() {
     [ -x "$rt" ]
     grep -q "test_reversibility.bats" "$rt"
     grep -q "zsh -i" "$rt"
+}
+
+@test "the uninstall-verified workflow exists and only does reversibility" {
+    f="$WF/uninstall-verified.yml"
+    [ -f "$f" ]
+    grep -q "tests/e2e/test_reversibility.bats" "$f"
+    # « Seulement » se prouve : aucune autre suite ne doit y figurer.
+    run grep -oE "tests/(unit|integration|e2e|performance)/[a-z_./*]*" "$(noncomment "$f")"
+    [ "$status" -eq 0 ]
+    for suite in $output; do
+        [ "$suite" = "tests/e2e/test_reversibility.bats" ] \
+            || { echo "suite étrangère au badge: $suite"; false; }
+    done
+}
+
+@test "uninstall-verified runs on push to master, on PRs and nightly" {
+    f="$WF/uninstall-verified.yml"
+    grep -q "push:" "$f"
+    grep -q "master" "$f"
+    grep -q "pull_request:" "$f"
+    grep -q "schedule:" "$f"
+}
+
+@test "uninstall-verified covers ubuntu, macOS and alpine" {
+    f="$WF/uninstall-verified.yml"
+    grep -q "ubuntu-latest" "$f"
+    grep -q "macos-latest" "$f"
+    grep -q "alpine" "$f"
+}
+
+@test "no badge-backing workflow can swallow a failure" {
+    for f in "$WF/uninstall-verified.yml" "$WF/tests.yml" "$WF/matrix.yml"; do
+        nc="$(noncomment "$f")"
+        run grep -n "continue-on-error" "$nc"
+        [ "$status" -ne 0 ] || { echo "$f absorbe un échec (continue-on-error)"; false; }
+        # `|| true` sur une ligne qui lance des tests : le vert deviendrait gratuit.
+        run grep -nE "bats.*\|\| true|bats-run.sh.*\|\| true" "$nc"
+        [ "$status" -ne 0 ] || { echo "$f absorbe un échec de test"; false; }
+    done
 }
 
