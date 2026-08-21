@@ -193,6 +193,68 @@ _nivuus_sha256_of() {
     fi
 }
 
+# Empreinte d'un fichier de clé publique PEM, telle qu'inscrite dans
+# keys/revoked. Format : « sha256:<hex> ».
+_nivuus_key_fingerprint() {
+    local pem=$1 digest
+    digest=$(_nivuus_sha256_of "$pem") || return 1
+    printf 'sha256:%s\n' "$digest"
+}
+
+_nivuus_key_is_revoked() {
+    local pem=$1 keys_dir=$2 fp
+    [[ -r "$keys_dir/revoked" ]] || return 1
+    fp=$(_nivuus_key_fingerprint "$pem") || return 1
+    grep -qxF "$fp" "$keys_dir/revoked" 2>/dev/null
+}
+
+# Vérifie la signature de SHA256SUMS contre le trousseau de confiance.
+#
+# Fonction PURE : ne télécharge rien, n'écrit rien, ne lit aucun état
+# global autre que le défaut de keys_dir. C'est ce qui la rend testable
+# sans réseau — la raison pour laquelle il n'existait aucun test de cette
+# logique jusqu'ici.
+#
+# keys_dir est un PARAMÈTRE et non une variable d'environnement : les
+# tests injectent un jeu éphémère sans qu'aucune porte de contournement
+# n'existe en production.
+#
+#   $1  chemin du fichier SHA256SUMS à authentifier
+#   $2  répertoire contenant SHA256SUMS.sig et/ou SHA256SUMS.sshsig
+#   $3  répertoire du trousseau (défaut : $NIVUUS_SHELL_DIR/keys)
+#
+# Retour : 0 = signature valide contre une clé de confiance
+#          1 = signature invalide, absente ou illisible
+#          2 = aucun outil de vérification disponible sur cette machine
+_nivuus_verify_signature() {
+    local sums=$1 sig_dir=$2 keys_dir=${3:-$NIVUUS_SHELL_DIR/keys}
+    local have_tool=0 key
+
+    [[ -r "$sums" ]] || return 1
+
+    # --- Chemin primaire : openssl / ECDSA P-256 -----------------------
+    if command -v openssl >/dev/null 2>&1; then
+        have_tool=1
+        local sig="$sig_dir/SHA256SUMS.sig"
+        if [[ -s "$sig" ]]; then
+            for key in "$keys_dir"/*.pem(N); do
+                _nivuus_key_is_revoked "$key" "$keys_dir" && continue
+                if openssl dgst -sha256 -verify "$key" \
+                        -signature "$sig" "$sums" >/dev/null 2>&1; then
+                    return 0
+                fi
+            done
+        fi
+    fi
+
+    # --- Chemin de repli : ssh-keygen / SSHSIG (Task 5) ----------------
+    # (ajouté dans la tâche suivante ; le compteur have_tool y est
+    #  incrémenté de la même façon)
+
+    (( have_tool )) || return 2
+    return 1
+}
+
 # Download and verify release archive
 _nivuus_download_release() {
     local version=$1
