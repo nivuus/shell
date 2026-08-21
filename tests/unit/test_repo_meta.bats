@@ -49,3 +49,43 @@ setup() {
     # chantier doit être écrite là où on la cherchera.
     grep -qiE 'social' "$META"
 }
+
+# L'image sociale DÉRIVE de la démo (une frame du .cast). Tant qu'aucun
+# enregistrement n'existe, elle ne peut pas exister non plus : c'est la
+# conséquence directe de « dérivée, jamais dessinée ». La règle ci-dessous
+# est donc conditionnelle -- mais la cohérence, elle, ne l'est pas.
+demo_recorded() { [ -f "$ROOT/docs/assets/demo.cast" ]; }
+
+@test "social.sh existe, est exécutable et dérive de la démo" {
+    [ -x "$ROOT/tools/demo/social.sh" ]
+    run sh -n "$ROOT/tools/demo/social.sh"
+    [ "$status" -eq 0 ]
+    # Dérivée, jamais dessinée : une image dessinée à la main peut montrer
+    # ce que le produit ne fait pas.
+    grep -qF 'demo.cast' "$ROOT/tools/demo/social.sh"
+}
+
+@test "l'image sociale ne peut pas exister sans la démo dont elle dérive" {
+    # L'état interdit : une carte sociale qui montre autre chose que le
+    # produit, parce qu'elle aurait survécu à la démo qui l'a produite.
+    if [ -f "$ROOT/docs/assets/social.png" ]; then
+        demo_recorded || { echo "social.png sans demo.cast : elle ne dérive de rien"; false; }
+    fi
+}
+
+@test "l'image sociale existe et respecte le format attendu par GitHub" {
+    demo_recorded || skip "aucun enregistrement : tools/demo/record.sh"
+    img="$ROOT/docs/assets/social.png"
+    [ -f "$img" ]
+    # GitHub recommande 1280x640 et refuse au-delà de 1 Mo.
+    n="$(wc -c < "$img")"
+    [ "$n" -le 1048576 ] || { echo "social.png pèse $n octets (max: 1 Mo)"; false; }
+    if command -v file >/dev/null 2>&1; then
+        run file "$img"
+        [[ "$output" == *"1280 x 640"* ]] || [[ "$output" == *"PNG"* ]]
+    fi
+}
+
+@test "le script rappelle que le téléversement est manuel" {
+    grep -qiE 'settings|manuel|manually' "$ROOT/tools/demo/social.sh"
+}
