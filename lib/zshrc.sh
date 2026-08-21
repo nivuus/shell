@@ -26,7 +26,17 @@ nivuus_zshrc_block() {
     printf '%s\n' "# Pour tes personnalisations, crée ~/.zsh_local (il n'existe pas par défaut)"
     printf 'export NIVUUS_SHELL_DIR="%s"\n' "$install_dir"
     [ -n "$minimal" ] && printf '%s\n' 'export NIVUUS_MINIMAL=1'
-    printf '%s\n' 'source "$NIVUUS_SHELL_DIR/.zshrc"'
+    # La garde est émise dans TOUS les modes, pas seulement en mode paquet.
+    # Trois raisons : elle couvre aussi le « rm -rf ~/.nivuus-shell » à la
+    # main ; un bloc identique dans les quatre canaux est un bloc dont le
+    # comportement est prouvé une fois (une variante par canal serait une
+    # variante non testée) ; et son coût est un [ -r ] par ouverture de
+    # shell, sous le seuil de mesure.
+    #
+    # Elle MASQUE une installation cassée au lieu de la signaler : c'est
+    # « nivuus doctor » qui détecte « bloc présent, arbre absent » et donne
+    # la commande de réparation. Silence au démarrage, diagnostic à la demande.
+    printf '%s\n' '[ -r "$NIVUUS_SHELL_DIR/.zshrc" ] && source "$NIVUUS_SHELL_DIR/.zshrc"'
     printf '%s\n' "$NIVUUS_BLOCK_END"
     return 0
 }
