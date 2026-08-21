@@ -292,3 +292,86 @@ supprimer le fichier et reste donc auditable.
 **Ce que la révocation ne peut pas faire :** annuler une release
 malveillante déjà installée. Le code malveillant contrôle alors la mise à
 jour. La récupération d'une machine compromise est une réinstallation.
+
+## Rotation annuelle — procédure RÉPÉTÉE EN BLANC le 2026-08-21
+
+Une procédure de rotation jamais exécutée est une hypothèse. Celle-ci a été
+répétée intégralement en local, avec des jeux de clés **éphémères** (jamais
+de clé de production dans une répétition), en exécutant à chaque étape la
+vraie fonction cliente `_nivuus_verify_signature`. Résultats ci-dessous,
+tels qu'obtenus.
+
+### Le scénario, et ce qu'il a donné
+
+| Étape | Situation | Résultat mesuré |
+|---|---|---|
+| 1 | `keys/ = {2026, 2027}`, secret = 2026. Release signée par **2026**, vue par un client `{2026, 2027}` | `rc=0` accepté |
+| 2 | Rotation : `keys/ = {2027, 2028}`, secret = **2027**. Release signée par 2027, vue par le **client figé avant la rotation** (`{2026, 2027}`) | `rc=0` accepté ← **le point que la répétition doit prouver** |
+| 2b | Même release vue par un client neuf `{2027, 2028}` | `rc=0` accepté |
+| 3 | Révocation de 2026 : ses empreintes ajoutées à `revoked` chez un client qui a encore la clé. Release signée par 2026 | `rc=1` refusé |
+| 3b | Chez le même client, release signée par 2027 (non révoquée) | `rc=0` accepté |
+| 4 | Secret tourné vers 2028 **sans committer** `nivuus-release-2028.pem`. Étape « Verify before publishing » du job de release | **échoue — publication bloquée**, comme voulu |
+
+L'étape 2 est celle qui compte : **un client installé avant la rotation
+accepte la release d'après la rotation**, sans aucune action de
+l'utilisateur. C'est toute la raison d'être du successeur pré-distribué.
+
+L'étape 4 est la panne opérationnelle la plus probable du chantier
+(« rotation du secret sans commit de la clé publique ») : elle est bloquée
+avant publication, pas découverte par les utilisateurs.
+
+### La procédure, telle qu'elle a marché
+
+```bash
+# 1. Générer le NOUVEAU successeur (N+2), hors CI, comme à l'étape 1 de la
+#    mise en service.
+umask 077 && cd ~/nivuus-signing
+openssl ecparam -name prime256v1 -genkey -noout -out priv-2028.pem
+openssl pkcs8 -topk8 -nocrypt -in priv-2028.pem -out priv-2028.pk8.pem
+openssl ec -in priv-2028.pem -pubout -out nivuus-release-2028.pem
+ssh-keygen -q -t ed25519 -N '' -f id-2028 -C nivuus-release-2028
+# Sauvegarder hors ligne ET tester la sauvegarde (étape 2 de la mise en service).
+
+# 2. Mettre à jour le trousseau PUBLIC : ajouter N+2, retirer N-1.
+cd /chemin/du/dépôt
+cp ~/nivuus-signing/nivuus-release-2028.pem keys/
+rm keys/nivuus-release-2026.pem
+{ printf 'nivuus-release %s\n' "$(cat ~/nivuus-signing/id-2027.pub)"
+  printf 'nivuus-release %s\n' "$(cat ~/nivuus-signing/id-2028.pub)"; } > keys/allowed_signers
+
+# 3. SEULEMENT ENSUITE, basculer les secrets sur le jeu N (2027) — celui
+#    que les clients ont déjà, pré-distribué depuis un an.
+gh secret set NIVUUS_SIGNING_KEY_ECDSA --env release < ~/nivuus-signing/priv-2027.pk8.pem
+gh secret set NIVUUS_SIGNING_KEY_SSH   --env release < ~/nivuus-signing/id-2027
+
+# 4. Publier. L'étape « Verify before publishing » valide la cohérence
+#    secret / clé publique committée AVANT que quoi que ce soit ne sorte.
+# 5. Mettre à jour l'empreinte publiée dans SECURITY.md (elle a changé :
+#    le jeu a changé) et vérifier le canari le lendemain.
+```
+
+**L'ordre 2 puis 3 n'est pas cosmétique.** Committer la clé publique avant
+de basculer le secret garantit qu'à aucun instant une release ne peut être
+signée par une clé absente du dépôt. L'ordre inverse ouvre une fenêtre où
+toute release publiée est rejetée par tous les clients.
+
+### Écart constaté entre la procédure imaginée et celle qui marche
+
+Un seul, et il est important : **`keys/revoked` porte DEUX empreintes par
+porteur de clé**, pas une.
+
+```
+sha256:<sha256 du fichier .pem>                       # chemin openssl
+SHA256:<empreinte ssh-keygen -lf de la clé publique>  # chemin SSHSIG
+```
+
+Ce sont deux clés cryptographiques **différentes** (ECDSA et Ed25519) pour
+un même « jeu ». **N'en révoquer qu'une ne révoque rien** : mesuré, une
+release signée par une clé dont seule l'empreinte PEM est révoquée reste
+`rc=0`, acceptée par le repli SSHSIG, sans le moindre signal. Une révocation
+partielle est donc silencieusement inefficace — exactement le genre de piège
+qu'on ne veut pas découvrir un jour d'incident.
+
+Le test
+`revoking a key takes BOTH fingerprint formats, one alone is not enough`
+(`tests/unit/test_release_signature.bats`) verrouille ce comportement.

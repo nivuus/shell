@@ -173,3 +173,27 @@ verify() {
     run verify "$TMP/rel/SHA256SUMS" "$TMP/rel" "$TMP/legit/keys"
     [[ "$output" == *"rc=0"* ]]
 }
+
+@test "revoking a key takes BOTH fingerprint formats, one alone is not enough" {
+    # Constaté pendant la répétition en blanc de la rotation (Task 17) :
+    # `revoked` porte deux formats — « sha256:<hex du .pem> » pour le
+    # chemin openssl, « SHA256:<empreinte ssh-keygen -lf> » pour le chemin
+    # SSHSIG. Ce sont deux clés DIFFÉRENTES, du même porteur. N'en révoquer
+    # qu'une laisse l'autre chemin accepter la release, sans le moindre
+    # signal. Ce test existe pour que ce piège ne soit jamais une surprise :
+    # s'il devient rouge, c'est que quelqu'un a changé la sémantique de
+    # `revoked`, et doc/SIGNING.md doit suivre.
+    pem_fp="sha256:$( { sha256sum "$TMP/legit/keys/nivuus-test.pem" 2>/dev/null \
+        || shasum -a 256 "$TMP/legit/keys/nivuus-test.pem"; } | awk '{print $1}' )"
+    ssh_fp="$(ssh-keygen -lf "$TMP/legit/id.pub" | awk '{print $2}')"
+
+    # Révocation partielle : le repli SSHSIG accepte toujours.
+    printf '%s\n' "$pem_fp" > "$TMP/legit/keys/revoked"
+    run verify "$TMP/rel/SHA256SUMS" "$TMP/rel" "$TMP/legit/keys"
+    [[ "$output" == *"rc=0"* ]]
+
+    # Révocation complète : plus aucun chemin n'accepte.
+    printf '%s\n%s\n' "$pem_fp" "$ssh_fp" > "$TMP/legit/keys/revoked"
+    run verify "$TMP/rel/SHA256SUMS" "$TMP/rel" "$TMP/legit/keys"
+    [[ "$output" == *"rc=1"* ]]
+}
