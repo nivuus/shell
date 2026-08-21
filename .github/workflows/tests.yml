@@ -131,6 +131,26 @@ jobs:
                tests/e2e/test_doctor_package.bats \
                tests/e2e/test_nivuus_update_package.bats
 
+      - name: System-mode suites (unprivileged layer)
+        run: |
+          rm -f config/*.zwc .zshrc.zwc
+          ./tests/ci/bats-run.sh tests/unit/test_lib_system.bats \
+               tests/unit/test_system_privileges.bats \
+               tests/unit/test_manifest_modes.bats \
+               tests/unit/test_manifest_symlink.bats \
+               tests/unit/test_zshrc_reentrancy.bats \
+               tests/unit/test_system_package_notice.bats \
+               tests/unit/test_install_sh_system.bats \
+               tests/unit/test_autoupdate_system_mode.bats \
+               tests/unit/test_ci_system_matrix.bats \
+               tests/unit/test_helper_fingerprint.bats \
+               tests/integration/test_install_system.bats \
+               tests/integration/test_uninstall_system.bats \
+               tests/integration/test_system_dry_run.bats \
+               tests/integration/test_system_probe.bats \
+               tests/integration/test_update_system_message.bats
+          sh -n tests/ci/run-system-target.sh
+
       - name: The two packaging invariants must be present and green
         run: |
           # Garde-fou contre une suppression discrète : les tests qui portent
@@ -159,6 +179,18 @@ jobs:
           grep -q "INVARIANT: no verification tool at all is REFUSED" \
             tests/unit/test_release_signature.bats
           grep -c "INVARIANT" tests/e2e/test_update_signature.bats
+
+          # Mode système : les invariants du chantier --system. Ils vivent
+          # dans un script de conteneur et dans deux suites ; le grep est ce
+          # qui empêche qu'on les retire pour faire passer la CI.
+          grep -q "INVARIANT n° 1" tests/ci/run-system-target.sh
+          grep -q "INVARIANT n° 2" tests/ci/run-system-target.sh
+          grep -q "INVARIANT n° 4" tests/ci/run-system-target.sh
+          grep -q "INVARIANT: la garde n'est PAS exportée" tests/unit/test_zshrc_reentrancy.bats
+          grep -q "INVARIANT: une installation pour la machine ne touche AUCUN" \
+            tests/integration/test_install_system.bats
+          grep -q "INVARIANT: aucune ligne CHSH" tests/integration/test_install_system.bats
+          grep -q "INVARIANT: retrait bit-exact" tests/integration/test_uninstall_system.bats
 
   # Niveau 2 sur macOS : étroit, car facturé x10. Première exécution réelle.
   e2e-macos:
