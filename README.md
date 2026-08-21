@@ -14,7 +14,7 @@
 
 - ⚡ **Fast, and held to it** - A CI test fails the build if an interactive shell takes more than 300ms to start
 - 🎨 **Configurable Theme & Prompt** - Nord by default, swap themes or the prompt layout via `~/.zsh_local`
-- 🤖 **Optional AI, your key, your provider** - `AI_BACKEND=gemini|openai|anthropic`. Nivuus works fully without it
+- 🤖 **Optional AI, your key, your provider** - `AI_BACKEND=gemini|openai|anthropic`, plus a command-not-found that names the package to install. Nivuus works fully without it
 - 📝 **Modern Vim** - Ctrl+C/V/X/A shortcuts
 - 🔍 **Smart Navigation** - History prefix search with ↑/↓
 - 📦 **Auto Node.js** - Version switching with .nvmrc

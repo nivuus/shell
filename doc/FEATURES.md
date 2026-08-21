@@ -6,6 +6,7 @@ Complete guide of what you can do with Nivuus Shell.
 
 1. [AI-Powered Commands](#ai-powered-commands)
    - [Backends](#backends)
+   - [Command not found](#command-not-found)
 2. [Modern Text Editing](#modern-text-editing)
 3. [Smart Navigation](#smart-navigation)
 4. [Git Commands](#git-commands)
@@ -44,6 +45,40 @@ startup on every call.
 
 **No key, no breakage.** Every AI feature degrades to a message that names the
 variable to set. Nothing else in the shell depends on it.
+
+### Command not found
+
+When you type a command that does not exist, Nivuus does not stop at
+`command not found`. It looks up which package provides it -- first from the
+system's own package database, then, if that fails, by asking the AI -- and
+offers the exact install command for your distribution.
+
+```bash
+$ rg TODO src/
+zsh: command not found: rg
+  ripgrep provides `rg`
+  -> sudo apt-get install -y ripgrep       [Enter to run, Ctrl-C to skip]
+```
+
+| Variable | Default | Effect |
+|---|---|---|
+| `ENABLE_AI_COMMAND_NOT_FOUND` | `true` | Turn the whole handler off |
+| `AI_CNF_AUTO_PROMPT` | `true` | Offer to run the install command |
+| `AI_CNF_RE_EXECUTE` | `true` | Re-run your original command after a successful install |
+| `AI_CNF_TIMEOUT` | `8` | Give up rather than hang the prompt |
+| `AI_COMMAND_NOT_FOUND_CACHE_TTL` | `86400` | Cache lifetime for a resolved lookup |
+
+Answers are cached in `AI_COMMAND_NOT_FOUND_CACHE_DIR`, so the second miss on
+the same command costs nothing.
+
+```bash
+ai-cnf-lookup rg        # ask without mistyping anything
+ai-cnf-stats            # cache hit rate
+ai-cnf-clear-cache      # forget everything it learned
+ai-cnf-help             # the short version of this section
+```
+
+The native lookup needs no key. Only the AI fallback does.
 
 ### Quick Help
 ```bash

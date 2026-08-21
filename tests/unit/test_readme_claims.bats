@@ -141,3 +141,24 @@ readme_env_vars() {
     run grep -niE 'require[sd]? a (google )?gemini api key|requires a google api key' "$README"
     [ "$status" -ne 0 ] || { echo "contrainte périmée : $output"; false; }
 }
+
+@test "le command-not-found assisté est documenté dans doc/FEATURES.md" {
+    # Livré dans config/24-ai-command-not-found.zsh, absent de toute la
+    # documentation utilisateur. C'est aussi le plan central de la démo :
+    # montrer un flux non documenté serait deux fois fautif.
+    grep -qi 'command.not.found' "$ROOT/doc/FEATURES.md"
+    grep -q 'ENABLE_AI_COMMAND_NOT_FOUND' "$ROOT/doc/FEATURES.md"
+}
+
+@test "les commandes publiques du module command-not-found sont documentées" {
+    rm -f "$ROOT"/config/*.zwc
+    for cmd in ai-cnf-lookup ai-cnf-clear-cache ai-cnf-stats ai-cnf-help; do
+        grep -qF "$cmd" "$ROOT/config/24-ai-command-not-found.zsh"   # elle existe
+        grep -qF "$cmd" "$ROOT/doc/FEATURES.md"                      # elle est documentée
+    done
+}
+
+@test "le README mentionne le command-not-found au moins une fois" {
+    run grep -niE 'command.not.found|command that does not exist' "$README"
+    [ "$status" -eq 0 ]
+}
