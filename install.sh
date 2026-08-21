@@ -75,6 +75,63 @@ nivuus_bootstrap() {
     return 1
 }
 
+nivuus_die() {
+    printf '%s\n' "$*" >&2
+    exit 1
+}
+
+# Récupère $1 vers le fichier $2.
+#
+# Ordre : file:// par copie, puis curl, puis wget. Aucun repli silencieux :
+# si aucun client n'est disponible, on dit quoi faire à la main plutôt que
+# de sortir en 0 avec un fichier vide.
+nivuus_fetch() {
+    _url="$1"; _dest="$2"
+    case "$_url" in
+        file://*)
+            # curl sait lire file://, wget pas toujours. Une copie est
+            # portable et rend la couverture des tests hors réseau
+            # indépendante du client HTTP présent sur la machine.
+            _src="${_url#file://}"
+            [ -f "$_src" ] || return 1
+            cp "$_src" "$_dest" || return 1
+            return 0
+            ;;
+    esac
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsSL -o "$_dest" "$_url" || { rm -f "$_dest"; return 1; }
+    elif command -v wget >/dev/null 2>&1; then
+        wget -q -O "$_dest" "$_url" || { rm -f "$_dest"; return 1; }
+    else
+        printf '%s\n' "Ni curl ni wget n'est disponible : impossible de télécharger" >&2
+        printf '%s\n' "  $_url" >&2
+        printf '%s\n' "Installe curl ou wget, ou télécharge l'archive de release à la main" >&2
+        printf '%s\n' "puis lance ./install.sh depuis son répertoire (voir doc/INSTALL.md)." >&2
+        return 127
+    fi
+    return 0
+}
+
+nivuus_sha256() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$1" | cut -d' ' -f1
+    elif command -v shasum >/dev/null 2>&1; then
+        shasum -a 256 "$1" | cut -d' ' -f1
+    else
+        printf '%s\n' "Aucun outil sha256 (sha256sum ou shasum) : l'archive ne peut pas être vérifiée." >&2
+        printf '%s\n' "Nivuus n'installe pas ce qu'il ne peut pas vérifier." >&2
+        return 1
+    fi
+}
+
+# Crochet de test : sourcé avec NIVUUS_SOURCE_ONLY, ce fichier ne définit
+# que ses fonctions. C'est la seule façon de tester nivuus_fetch et
+# nivuus_sha256 sans réseau ni installation -- et c'est aussi ce qui rend
+# possible de constater le rouge sur chacune d'elles séparément.
+# « return » hors fonction est valide dans un fichier SOURCÉ et une erreur
+# dans un fichier exécuté ; le « || : » protège du second cas.
+[ -n "${NIVUUS_SOURCE_ONLY:-}" ] && return 0 2>/dev/null || :
+
 # --- Traduction des anciens flags --------------------------------------
 #
 # Pas de tableau en POSIX sh : on fait tourner les paramètres positionnels
