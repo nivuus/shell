@@ -148,6 +148,36 @@ jobs:
         run: |
           bats tests/e2e/test_platform.bats tests/e2e/test_with_deps.bats tests/e2e/test_minimal_mode.bats
 
+      - name: Signature verification suite
+        run: |
+          rm -f config/*.zwc     # un .zwc périmé masquerait le module
+          bats tests/unit/test_keys_repo.bats \
+               tests/unit/test_autoupdate_sha256.bats \
+               tests/unit/test_release_signature.bats \
+               tests/unit/test_autoupdate_download.bats \
+               tests/unit/test_autoupdate_hard_refusal.bats \
+               tests/unit/test_lib_keys.bats \
+               tests/unit/test_lib_steps_keys.bats \
+               tests/unit/test_lib_steps_verify_tools.bats
+
+      - name: Signature E2E (forged release must be refused)
+        run: |
+          rm -f config/*.zwc
+          bats tests/e2e/test_update_signature.bats \
+               tests/e2e/test_install_keys.bats \
+               tests/e2e/test_verify_key.bats
+
+      - name: The two invariants must be present and green
+        run: |
+          # Garde-fou contre une suppression discrète : les tests qui
+          # portent la propriété de sécurité ne doivent pas pouvoir
+          # disparaître sans que la CI le dise.
+          grep -q "INVARIANT: a forged archive with SHA256SUMS re-signed by an attacker key is REFUSED" \
+            tests/unit/test_release_signature.bats
+          grep -q "INVARIANT: no verification tool at all is REFUSED" \
+            tests/unit/test_release_signature.bats
+          grep -c "INVARIANT" tests/e2e/test_update_signature.bats
+
       - name: Reversibility (HOME must be bit-identical)
         run: |
           bats tests/e2e/test_reversibility.bats
@@ -171,6 +201,16 @@ jobs:
 
       - name: Install / uninstall E2E
         run: bats tests/e2e/test_nivuus_cli.bats tests/e2e/test_install_sh_compat.bats tests/e2e/test_minimal_mode.bats
+
+      - name: Signature suites (macOS = le cas « shasum, pas sha256sum »)
+        run: |
+          rm -f config/*.zwc
+          bats tests/unit/test_autoupdate_sha256.bats \
+               tests/unit/test_release_signature.bats \
+               tests/unit/test_autoupdate_download.bats \
+               tests/unit/test_autoupdate_hard_refusal.bats \
+               tests/unit/test_lib_keys.bats
+          bats tests/e2e/test_update_signature.bats tests/e2e/test_install_keys.bats
 
       - name: Reversibility (HOME must be bit-identical)
         run: bats tests/e2e/test_reversibility.bats
@@ -201,6 +241,27 @@ jobs:
 
       - name: Install / uninstall E2E
         run: bats tests/e2e/test_nivuus_cli.bats tests/e2e/test_minimal_mode.bats
+
+      - name: No verification tool at all is refused (Alpine's real state)
+        run: |
+          # Mesuré (doc/SIGNING.md) : alpine:3.20 + zsh/git/curl n'a NI
+          # openssl NI ssh-keygen. C'est donc ici, et nulle part ailleurs,
+          # que le code de retour 2 (« aucun outil ») se joue en vrai.
+          rm -f config/*.zwc
+          bats tests/unit/test_lib_steps_verify_tools.bats
+
+      - name: Signature suites (needs the tools it verifies)
+        run: |
+          # Les suites GÉNÈRENT leurs clés éphémères : sans openssl ni
+          # ssh-keygen, elles n'ont rien à signer. On les installe donc
+          # ici -- l'étape ci-dessus a déjà couvert l'Alpine nue.
+          apk add --no-cache openssl openssh-keygen
+          rm -f config/*.zwc
+          bats tests/unit/test_release_signature.bats \
+               tests/unit/test_autoupdate_sha256.bats \
+               tests/unit/test_autoupdate_download.bats \
+               tests/unit/test_lib_keys.bats \
+               tests/e2e/test_update_signature.bats
 
       - name: Reversibility (HOME must be bit-identical)
         run: bats tests/e2e/test_reversibility.bats
