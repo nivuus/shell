@@ -164,3 +164,30 @@ teardown() { rm -rf "$TMP"; }
     run diff "$TMP/before" "$TMP/after"
     [ "$status" -eq 0 ]
 }
+
+@test "install then uninstall restores the login shell too" {
+    mkdir -p "$TMP/bin"
+    printf '#!/bin/sh\nprintf "%%s\\n" "$2" > "%s/loginshell"\n' "$TMP" > "$TMP/bin/chsh"
+    chmod +x "$TMP/bin/chsh"
+    printf '/bin/bash\n' > "$TMP/loginshell"
+    printf '/bin/bash\n%s\n' "$(command -v zsh || echo /usr/bin/zsh)" > "$TMP/shells"
+
+    export PATH="$TMP/bin:$PATH"
+    export NIVUUS_LOGIN_SHELL_FILE="$TMP/loginshell"
+    export NIVUUS_ETC_SHELLS="$TMP/shells"
+    # --no-minimal : sous bats il n'y a pas de TTY, donc pas de chsh par défaut.
+    printf 'export MINE=1\n' > "$HOME/.zshrc"
+
+    before_shell="$(fs_login_shell)"
+    fs_fingerprint "$HOME" > "$TMP/before"
+
+    "$NIVUUS" install --yes --no-minimal --prefix "$HOME/.nivuus-shell"
+    [ "$(fs_login_shell)" != "$before_shell" ]      # le chsh a bien eu lieu
+
+    "$NIVUUS" uninstall --yes --purge
+    fs_fingerprint "$HOME" > "$TMP/after"
+
+    run diff "$TMP/before" "$TMP/after"
+    [ "$status" -eq 0 ]
+    [ "$(fs_login_shell)" = "$before_shell" ]
+}

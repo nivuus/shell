@@ -463,11 +463,28 @@ nivuus_restore_entry() {
             fi
             ;;
         CHSH)
+            # Dépendance douce (command -v) : lib/manifest.sh reste
+            # sourçable seule, comme pour nivuus_zshrc_state.
+            if command -v nivuus_current_login_shell >/dev/null 2>&1; then
+                current="$(nivuus_current_login_shell)"
+            else
+                current="${SHELL:-}"
+            fi
+            if [ "$current" = "$ref" ]; then
+                return 0        # déjà restauré (ou jamais changé)
+            fi
             if [ -n "${NIVUUS_DRY_RUN:-}" ]; then
                 log_dry "restaurerait le shell de connexion : $ref"
+                return 0
+            fi
+            if command -v chsh >/dev/null 2>&1 && chsh -s "$ref" >/dev/null 2>&1; then
+                log_ok "Shell de connexion restauré : $ref"
             else
-                log_info "Shell de connexion d'origine : $ref"
-                log_info "Restaure-le avec : chsh -s $ref"
+                # Jamais de sudo, jamais d'édition de /etc/passwd : on
+                # explique. Une entrée CHSH non appliquée n'est pas un
+                # survivant au sens du manifeste (aucun fichier en jeu).
+                log_warn "Shell de connexion non restauré automatiquement."
+                log_warn "Restaure-le avec : chsh -s $ref"
             fi
             ;;
         PKG)

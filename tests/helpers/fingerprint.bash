@@ -29,3 +29,15 @@ fs_fingerprint() {
       done
     } | LC_ALL=C sort
 }
+
+# Shell de connexion. Le spec exige qu'il fasse partie de l'empreinte de
+# réversibilité : un chsh non restauré est une trace laissée derrière.
+# $NIVUUS_LOGIN_SHELL_FILE fait autorité quand il est défini -- c'est le
+# crochet que les tests utilisent pour ne jamais toucher au vrai système.
+fs_login_shell() {
+    if [ -n "${NIVUUS_LOGIN_SHELL_FILE:-}" ] && [ -f "$NIVUUS_LOGIN_SHELL_FILE" ]; then
+        head -n1 "$NIVUUS_LOGIN_SHELL_FILE"
+    else
+        printf '%s\n' "${SHELL:-}"
+    fi
+}
