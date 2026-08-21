@@ -220,6 +220,13 @@ nivuus_mkdir_p() {
         log_dry "mkdir -p $dir"
     else
         mkdir -p "$dir"
+        # Uniquement les niveaux que NOUS venons de créer : $missing les
+        # contient exactement. Toucher aux modes de /usr/local ou de /etc,
+        # qui préexistent, serait une mutation non journalisée d'un chemin
+        # qui ne nous appartient pas.
+        printf '%s\n' "$missing" | while IFS= read -r level; do
+            [ -n "$level" ] && _nivuus_enforce_modes "$level" dir
+        done
     fi
     # Enregistrés du plus superficiel au plus profond (ordre de création),
     # afin que le rollback -- qui rejoue le journal à l'envers -- supprime
@@ -271,6 +278,48 @@ _nivuus_prior_entry_exists() {
     awk -F"$NIVUUS_TAB" -v p="$path" \
         '($1 == "CREATE" || $1 == "MODIFY") && $2 == p { found=1 } END { exit !found }' \
         "$NIVUUS_MANIFEST_TMP" 2>/dev/null
+}
+
+# Modes et propriétaire IMPOSÉS, jamais hérités de l'umask ni de la source.
+#
+# Deux modes d'échec réels, tous deux invisibles en test non-root :
+#   1. « cp -p » préserve le propriétaire quand on est root : un sudo lancé
+#      depuis un checkout appartenant à quelqu'un poserait /usr/local/share
+#      appartenant à cette personne -- donc inscriptible par elle, donc
+#      contournant le garde-fou d'inscriptibilité de l'auto-update.
+#   2. Un sudo avec umask 077 produirait un arbre 0700 que PERSONNE ne peut
+#      lire : une installation « réussie » qui casse tous les shells.
+#
+# Les trois variables sont VIDES par défaut : le mode utilisateur ne change
+# pas d'un octet.
+_nivuus_enforce_modes() {
+    local path="$1" kind="${2:-file}"
+    [ -n "${NIVUUS_DRY_RUN:-}" ] && return 0
+    [ -e "$path" ] || return 0
+    if [ "$kind" = "dir" ]; then
+        if [ -n "${NIVUUS_INSTALL_DIR_MODE:-}" ]; then
+            chmod "$NIVUUS_INSTALL_DIR_MODE" "$path" 2>/dev/null || :
+        fi
+    elif [ -x "$path" ]; then
+        # Un exécutable reste exécutable : le mode fichier imposé ne doit
+        # pas transformer bin/nivuus en fichier de données. Il prend donc le
+        # mode des répertoires (0755), qui est exactement « lisible par
+        # tous, exécutable par tous, écrivable par root seul ».
+        if [ -n "${NIVUUS_INSTALL_DIR_MODE:-}" ]; then
+            chmod "$NIVUUS_INSTALL_DIR_MODE" "$path" 2>/dev/null || :
+        fi
+    else
+        if [ -n "${NIVUUS_INSTALL_FILE_MODE:-}" ]; then
+            chmod "$NIVUUS_INSTALL_FILE_MODE" "$path" 2>/dev/null || :
+        fi
+    fi
+    # chown échoue sans privilège : NON FATAL, sinon toute la couche de
+    # tests unitaires (qui tourne sans root) deviendrait inexécutable. Le
+    # vrai chown est prouvé en conteneur, en root, par run-system-target.sh.
+    if [ -n "${NIVUUS_INSTALL_OWNER:-}" ]; then
+        chown "$NIVUUS_INSTALL_OWNER" "$path" 2>/dev/null || :
+    fi
+    return 0
 }
 
 # Coeur partagé : $1 = source, $2 = destination.
@@ -345,6 +394,7 @@ _nivuus_place() {
         else
             cp -p "$src" "$dst" || return 1
         fi
+        _nivuus_enforce_modes "$dst" file
         new_hash="$(nivuus_hash_file "$dst")"
     fi
 

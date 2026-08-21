@@ -79,6 +79,22 @@ nivuus_system_legacy_tree() {
 # purge transactionnelle). On le dit avant d'écrire. Ailleurs -- Fedora,
 # RHEL, openSUSE, Alpine, conteneurs -- il n'y a rien à recommander : c'est
 # exactement la raison d'être de ce mode.
+# SELinux : rétablit l'étiquette que la politique prescrit DÉJÀ pour ces
+# chemins. Ne crée ni ne supprime rien, donc rien à journaliser -- le
+# retrait du fichier emporte son étiquette. Son absence est signalée, jamais
+# fatale : la majorité des cibles n'a pas SELinux du tout.
+nivuus_system_restorecon() {
+    if ! command -v restorecon >/dev/null 2>&1; then
+        [ -d /sys/fs/selinux ] && log_warn "SELinux est actif mais restorecon est absent : étiquettes non rétablies."
+        return 0
+    fi
+    for _p in "$@"; do
+        [ -e "$_p" ] || continue
+        restorecon -F -R "$_p" >/dev/null 2>&1 || log_warn "restorecon a échoué sur $_p (non fatal)."
+    done
+    return 0
+}
+
 nivuus_system_package_channel() {
     _id="$(nivuus_detect_distro)"
     _like="$(nivuus_detect_distro_like)"
