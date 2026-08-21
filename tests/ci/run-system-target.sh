@@ -150,6 +150,15 @@ fi
 # ne prétend pas le contraire.
 fp "$BOB" bob.10; same bob.0 bob.10
 
+echo "== Étape 11 : activation machine -- bob est activé sans avoir rien fait =="
+"$SRC/bin/nivuus" install --system --activate-all --yes
+as_user bob "zsh -i -c 'print -r -- \$NIVUUS_SHELL_DIR'" | grep -qx "$TREE"
+# La sonde qui a servi est bien celle-là : le marqueur le prouve.
+as_user bob "zsh -i -c 'print -r -- \$NIVUUS_ACTIVATED_BY'" | grep -qx system
+# L'activation machine reste EN PLACE : c'est « uninstall --system » qui doit
+# la défaire à l'étape 13, conffile de la distribution compris. La retirer
+# ici affaiblirait l'invariant n° 4 en lui épargnant le cas le plus dur.
+
 echo "== Étape 13 : INVARIANT n° 4 -- retrait bit-exact de /etc, /usr/local et /var/lib =="
 as_user alice "nivuus enable --yes"      # une activation SURVIT au retrait : c'est voulu
 fp "$ALICE" alice.pre13

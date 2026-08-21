@@ -122,11 +122,12 @@ nivuus_system_package_notice() {
 # garde-fou « lib/ reste POSIX » puisse l'exclure sans être affaibli --
 # lib/system.sh, lui, reste bien du sh (« sh -n » le vérifie).
 nivuus_system_dropin_content() {
+    _tree="${1:-$(nivuus_system_tree)}"
     cat <<ZSH_DROPIN_EOF
 # Activation machine de Nivuus Shell (posée par « nivuus enable --all »).
 # Ne fait rien pour un utilisateur qui a sa propre activation : la sienne gagne.
 if [[ -o interactive ]] && ! grep -qs '>>> nivuus shell >>>' "\${ZDOTDIR:-\$HOME}/.zshrc"; then
-    export NIVUUS_SHELL_DIR="$(nivuus_system_tree)"
+    export NIVUUS_SHELL_DIR="$_tree"
     export NIVUUS_ACTIVATED_BY=system
     [ -r "\$NIVUUS_SHELL_DIR/.zshrc" ] && source "\$NIVUUS_SHELL_DIR/.zshrc"
 fi
@@ -225,6 +226,25 @@ nivuus_system_probe_tree() {
     log_error "Causes usuelles : umask restrictif sous sudo, SELinux sans restorecon,"
     log_error "ou $NIVUUS_SYSTEM_PREFIX monté noexec. Vérifie :  ls -ld $_tree"
     return 1
+}
+
+# La preuve, pas la promesse : un zsh INTERACTIF, dans un environnement
+# vierge, doit voir le marqueur. Sans elle, l'écriture dans /etc est
+# défaite -- un /etc modifié sans effet est pire qu'un refus, il fait
+# croire que c'est fait.
+#
+# $NIVUUS_SYSTEM_PROBE_RC : crochet de test. En production, le zsh lancé
+# lit le rc global de la machine, ce qui EST la chose à vérifier.
+nivuus_system_probe_activation() {
+    command -v zsh >/dev/null 2>&1 || { log_warn "zsh absent : activation non vérifiable."; return 1; }
+    _probe_home="$(mktemp -d)" || return 1
+    if [ -n "${NIVUUS_SYSTEM_PROBE_RC:-}" ]; then
+        printf 'source %s\n' "$NIVUUS_SYSTEM_PROBE_RC" > "$_probe_home/.zshrc"
+    fi
+    _out="$(env -i HOME="$_probe_home" PATH="$PATH" TERM=dumb ZDOTDIR="$_probe_home" \
+            zsh -ic 'print -r -- "${NIVUUS_ACTIVATED_BY:-none}"' 2>/dev/null | tail -n1)"
+    rm -rf "$_probe_home"
+    [ "$_out" = "system" ]
 }
 
 # SELinux : rétablit l'étiquette que la politique prescrit DÉJÀ pour ces
