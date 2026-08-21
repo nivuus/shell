@@ -5,6 +5,7 @@ Complete guide of what you can do with Nivuus Shell.
 ## Table of Contents
 
 1. [AI-Powered Commands](#ai-powered-commands)
+   - [Backends](#backends)
 2. [Modern Text Editing](#modern-text-editing)
 3. [Smart Navigation](#smart-navigation)
 4. [Git Commands](#git-commands)
@@ -18,7 +19,31 @@ Complete guide of what you can do with Nivuus Shell.
 
 ## AI-Powered Commands
 
-Get instant help and command suggestions powered by Google Gemini AI.
+Get instant help and command suggestions from the AI provider of your choice.
+
+### Backends
+
+Nivuus talks to one of three providers. The active one is `AI_BACKEND`:
+
+| `AI_BACKEND` | Credential | Model override | Default model |
+|---|---|---|---|
+| `gemini` (default) | `GOOGLE_API_KEY`, or `GEMINI_AUTH_MODE=cli` + the `agy` CLI | `GEMINI_MODEL` / `GEMINI_CLI_MODEL` | `gemini-3.5-flash-lite` |
+| `openai` | `OPENAI_API_KEY` | `OPENAI_MODEL` | `gpt-5.6-luna` |
+| `anthropic` | `ANTHROPIC_API_KEY` | `ANTHROPIC_MODEL` | `claude-haiku-4-5` |
+
+```bash
+# In ~/.zsh_local
+export AI_BACKEND=anthropic
+export ANTHROPIC_API_KEY=sk-ant-...
+```
+
+`GEMINI_AUTH_MODE=cli` spends a Google AI subscription's quota through the
+Antigravity CLI (`agy`) instead of a metered API key. A persistent `agy`
+daemon (`AGY_DAEMON_ENABLED`, on by default) avoids paying 3-6 s of process
+startup on every call.
+
+**No key, no breakage.** Every AI feature degrades to a message that names the
+variable to set. Nothing else in the shell depends on it.
 
 ### Quick Help
 ```bash

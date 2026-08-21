@@ -14,7 +14,7 @@
 
 - ⚡ **Fast, and held to it** - A CI test fails the build if an interactive shell takes more than 300ms to start
 - 🎨 **Configurable Theme & Prompt** - Nord by default, swap themes or the prompt layout via `~/.zsh_local`
-- 🤖 **AI-Powered** - Command suggestions via the Gemini API
+- 🤖 **Optional AI, your key, your provider** - `AI_BACKEND=gemini|openai|anthropic`. Nivuus works fully without it
 - 📝 **Modern Vim** - Ctrl+C/V/X/A shortcuts
 - 🔍 **Smart Navigation** - History prefix search with ↑/↓
 - 📦 **Auto Node.js** - Version switching with .nvmrc
@@ -128,9 +128,9 @@ aihelp                  # Show all AI commands
 ```
 
 **Setup AI:**
-- AI commands require a Google Gemini API key
-- Get a key: https://aistudio.google.com/apikey
-- Configure: `export GOOGLE_API_KEY='your-api-key'`
+- `AI_BACKEND` selects the provider: `gemini` (default), `openai`, `anthropic`
+- Configure the matching key: `GOOGLE_API_KEY`, `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`
+- Without a key, every AI command tells you so and everything else works
 
 ### Modern Vim Editing
 
@@ -522,7 +522,10 @@ nivuus-shell/
 - **Curl** 7.0+
 
 ### Optional
-- **Gemini API key** - For AI commands (get one at https://aistudio.google.com/apikey)
+- **An AI API key** - Optional. `AI_BACKEND` selects the provider: `gemini`
+  (`GOOGLE_API_KEY`, or `GEMINI_AUTH_MODE=cli` with the Antigravity CLI),
+  `openai` (`OPENAI_API_KEY`), `anthropic` (`ANTHROPIC_API_KEY`).
+  Without a key, every AI command tells you so and everything else works.
 - **jq** - Robust JSON parsing for AI responses (falls back to grep/sed if absent)
 - **NVM** - For Node.js version management
 - **fd** - Fast file search (`cargo install fd-find`)

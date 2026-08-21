@@ -95,3 +95,49 @@ enforced_budget() {
     run grep -qiF blazing "$tmp"
     [ "$status" -eq 0 ]
 }
+
+# Toutes les variables d'environnement citées par le README, quelle que soit
+# la forme : $VAR, ${VAR}, `VAR=…`, ou nue dans un bloc de code.
+readme_env_vars() {
+    grep -ohE '\b(NIVUUS_[A-Z0-9_]+|ENABLE_[A-Z0-9_]+|AI_[A-Z0-9_]+|GEMINI_[A-Z0-9_]+|OPENAI_[A-Z0-9_]+|ANTHROPIC_[A-Z0-9_]+|GOOGLE_[A-Z0-9_]+|AGY_[A-Z0-9_]+|AUTOUPDATE_[A-Z0-9_]+|GIT_PROMPT_[A-Z0-9_]+)\b' \
+        "$README" | LC_ALL=C sort -u
+}
+
+@test "REGLE 5.10: toute variable citée par le README est lue par un module" {
+    # Le mode de défaillance : documenter une variable qu'un refactor a
+    # supprimée. Le lecteur l'exporte, rien ne se passe, et il conclut que
+    # le produit est cassé.
+    rm -f "$ROOT"/config/*.zwc   # un .zwc périmé masquerait la source
+    inconnues=""
+    for v in $(readme_env_vars); do
+        grep -qrF "$v" "$ROOT/config" "$ROOT/lib" "$ROOT/.zshrc" "$ROOT/bin" \
+            || inconnues="$inconnues $v"
+    done
+    [ -z "$inconnues" ] || {
+        echo "variables documentées mais lues par aucun module :$inconnues"; false; }
+}
+
+@test "REGLE 5.10: la règle voit au moins une variable (elle n'est pas inerte)" {
+    n="$(readme_env_vars | wc -l)"
+    [ "$n" -ge 5 ] || { echo "seulement $n variables vues : l'extraction est cassée"; false; }
+}
+
+@test "AI_BACKEND est documenté là où l'utilisateur le cherche" {
+    # Livré dans config/09-ai-core.zsh et invisible des deux documents que
+    # lit quelqu'un qui veut brancher son propre fournisseur.
+    grep -q 'AI_BACKEND' "$README"
+    grep -q 'AI_BACKEND' "$ROOT/doc/FEATURES.md"
+}
+
+@test "les trois backends réellement routés sont les trois backends documentés" {
+    # Source de vérité : le case de _ai_api_call. Si un quatrième backend
+    # arrive, ce test le réclame dans la doc le jour même.
+    for b in gemini openai anthropic; do
+        grep -qi "$b" "$ROOT/doc/FEATURES.md" || { echo "backend non documenté: $b"; false; }
+    done
+}
+
+@test "le README ne présente plus la clé Google comme une obligation" {
+    run grep -niE 'require[sd]? a (google )?gemini api key|requires a google api key' "$README"
+    [ "$status" -ne 0 ] || { echo "contrainte périmée : $output"; false; }
+}
