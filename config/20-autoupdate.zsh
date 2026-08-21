@@ -549,6 +549,26 @@ _nivuus_perform_update() {
     # automatique qui rend l'échappatoire inatteignable en arrière-plan.
     local interactive=${2:-}
 
+    # Garde-fou SECONDAIRE (spec § 1.2, règle 3), indépendant du marqueur.
+    # Il couvre le cas « un tiers a empaqueté Nivuus sans poser
+    # .nivuus-origin » -- qui arrivera, parce que l'AUR et les taps sont
+    # ouverts à tous. Placé AVANT le téléchargement : un refus doit être
+    # gratuit et ne rien laisser derrière lui.
+    #
+    # Limite assumée : inopérant pour un shell root sur machine paquetée,
+    # c'est-à-dire faux exactement dans le cas dangereux. C'est le marqueur
+    # qui couvre celui-là. Le marqueur porte le MESSAGE, ce garde-fou porte
+    # la SÛRETÉ ; aucun des deux ne suffit seul.
+    if [[ ! -w "$NIVUUS_SHELL_DIR" ]]; then
+        echo "❌ Mise à jour refusée : $NIVUUS_SHELL_DIR n'est pas inscriptible par $(whoami)."
+        echo "   Nivuus ne réécrit jamais un arbre qu'il ne possède pas — il appartient"
+        echo "   probablement à un gestionnaire de paquets ou à un montage en lecture seule."
+        if _nivuus_is_package_install; then
+            echo "   Mets-le à jour avec ton gestionnaire : $(_nivuus_origin_channel)"
+        fi
+        return 1
+    fi
+
     if [[ -z "$target_version" ]]; then
         echo "❌ Could not determine target version"
         return 1
