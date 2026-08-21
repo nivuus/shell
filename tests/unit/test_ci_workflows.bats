@@ -110,3 +110,35 @@ test_workflow_files() {
     run grep -n "Test count below minimum" "$WF/tests.yml"
     [ "$status" -ne 0 ]
 }
+
+@test "the full matrix never runs on pull_request" {
+    # Six pulls d'image par PR : le budget CI du spec l'interdit explicitement.
+    run grep -n "pull_request" "$WF/matrix.yml"
+    [ "$status" -ne 0 ]
+}
+
+@test "the full matrix runs nightly, on demand, and can be called by a release" {
+    grep -q "schedule:" "$WF/matrix.yml"
+    grep -q "workflow_dispatch:" "$WF/matrix.yml"
+    grep -q "workflow_call:" "$WF/matrix.yml"
+}
+
+@test "the matrix reads its targets from matrix.json, not from an inline list" {
+    grep -q "matrix.json" "$WF/matrix.yml"
+    grep -q "fromJSON" "$WF/matrix.yml"
+    # Aucune image de conteneur écrite en dur dans le workflow.
+    run grep -nE "image: (ubuntu|debian|fedora|archlinux|alpine):" "$WF/matrix.yml"
+    [ "$status" -ne 0 ]
+}
+
+@test "the matrix does not fail-fast — one broken distro must not hide the others" {
+    grep -q "fail-fast: false" "$WF/matrix.yml"
+}
+
+@test "run-target.sh proves levels 2, 3 and 4 on one target" {
+    rt="$ROOT/tests/ci/run-target.sh"
+    [ -x "$rt" ]
+    grep -q "test_reversibility.bats" "$rt"
+    grep -q "zsh -i" "$rt"
+}
+

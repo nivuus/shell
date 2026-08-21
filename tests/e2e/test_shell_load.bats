@@ -93,3 +93,32 @@ setup() {
     run zsh -c "source '$NIVUUS_SHELL_DIR/.zshrc' 2>&1 && typeset -f _nivuus_lazy_compinit"
     [ "$status" -eq 0 ]
 }
+
+@test "sourcing .zshrc non-interactively prints nothing on stdout" {
+    # Découvert en rejouant la cible debian:12 de la matrice : la suggestion
+    # « Optional modern tools » s'imprimait sur la sortie standard de TOUT
+    # shell, y compris `zsh -c`. Un script qui source .zshrc recevait donc du
+    # texte décoratif dans son flux de données, une fois par jour — donc une
+    # fois par machine neuve, donc à chaque job de CI.
+    #
+    # Le test doit être hermétique : sur une machine de développement les
+    # outils modernes sont installés, donc rien ne s'imprime et le test
+    # passerait à vide. On reconstruit un PATH qui n'en contient aucun.
+    tmp="$(mktemp -d)"
+    mkdir -p "$tmp/bin" "$tmp/home"
+    for d in ${PATH//:/ }; do
+        [ -d "$d" ] || continue
+        for f in "$d"/*; do
+            [ -x "$f" ] || continue
+            n="${f##*/}"
+            case "$n" in eza|bat|batcat|fd|fdfind|rg|timg) continue ;; esac
+            [ -e "$tmp/bin/$n" ] || ln -s "$f" "$tmp/bin/$n"
+        done
+    done
+
+    run env HOME="$tmp/home" PATH="$tmp/bin" \
+        zsh -c "source '$NIVUUS_SHELL_DIR/.zshrc'"
+    rm -rf "$tmp"
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+}

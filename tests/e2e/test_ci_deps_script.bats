@@ -55,3 +55,27 @@ run_in() {
     '
     [ "$status" -eq 0 ]
 }
+
+# bats test_tags=docker
+@test "run-target.sh installs, runs a real interactive shell and reverts, on debian:12" {
+    run docker run --rm -v "$ROOT:/src:ro" debian:12 sh -c '
+        set -e
+        cp -r /src /work && cd /work
+        ./tests/ci/install-deps.sh >/dev/null
+        ./tests/ci/run-target.sh
+    '
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"REAL_SHELL_OK"* ]]
+}
+
+# bats test_tags=docker
+@test "run-target.sh works on alpine:3.20 too" {
+    run docker run --rm -v "$ROOT:/src:ro" alpine:3.20 sh -c '
+        set -e
+        cp -r /src /work && cd /work
+        ./tests/ci/install-deps.sh >/dev/null
+        ./tests/ci/run-target.sh
+    '
+    [ "$status" -eq 0 ]
+}
+
