@@ -10,6 +10,16 @@ set -eu
 NIVUUS_SHELL_DIR="${NIVUUS_SHELL_DIR:-$(pwd)}"
 export NIVUUS_SHELL_DIR
 
+# openssl / ssh-keygen d'abord. Raison mesurée sur alpine:3.20 : sans eux,
+# `nivuus install` émet l'avertissement « installe l'un des deux : sudo
+# apt-get install openssl » du chantier signature, et cette ligne fait
+# échouer l'assertion large de tests/e2e/test_with_deps.bats
+# (« --minimal skips the extras », qui interdit toute occurrence de
+# "apt-get install" dans la sortie). Une cible de la matrice doit refléter
+# une machine ordinaire, qui a l'un des deux outils. Le cas « aucun outil »
+# reste prouvé, et seulement là où il est réel : le job Alpine nu de tests.yml.
+./tests/ci/install-verify-tools.sh
+
 echo "== Niveau 2 : installation réelle puis shell interactif réel =="
 ./tests/ci/bats-run.sh \
     tests/e2e/test_nivuus_cli.bats \
