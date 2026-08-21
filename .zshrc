@@ -7,6 +7,33 @@
 # Last updated: January 2025
 # =============================================================================
 
+# =============================================================================
+# Garde de réentrance
+# =============================================================================
+# Une seule fois par PROCESSUS. Nivuus enregistre des hooks, des widgets ZLE
+# et des precmd : les charger deux fois les double (deux prompts, deux
+# suggestions, deux titres de terminal).
+#
+# Variable NON exportée, délibérément. NIVUUS_SHELL_LOADED (posée par
+# config/99-cleanup.zsh) est export'ée : s'en servir comme garde
+# désactiverait Nivuus dans tout zsh IMBRIQUÉ dans une session Nivuus --
+# un mode d'échec silencieux et permanent. La garde doit rester locale au
+# processus.
+#
+# Les deux compteurs rendent « jamais de double source » OBSERVABLE plutôt
+# que déduit d'une absence de symptôme : le script de preuve système les lit
+# (INVARIANT n° 3). L'incrément passe par la commande arithmétique zsh
+# « (( ... )) » : aucune substitution de commande, donc aucun fork sur le
+# chemin de démarrage de chaque shell.
+typeset -g _nivuus_source_attempts
+(( _nivuus_source_attempts = ${_nivuus_source_attempts:-0} + 1 ))
+if [[ -n "${_nivuus_sourced:-}" ]]; then
+    return 0
+fi
+typeset -g _nivuus_sourced=1
+typeset -g _nivuus_load_count
+(( _nivuus_load_count = ${_nivuus_load_count:-0} + 1 ))
+
 # $EPOCHREALTIME/$EPOCHSECONDS come from zsh/datetime, which zsh does NOT load
 # by default. Without this, every timing and cache-TTL check in the framework
 # (startup report, git prompt cache, AI suggestion cache, AI error timestamps)
