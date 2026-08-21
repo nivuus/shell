@@ -21,10 +21,16 @@ teardown() { rm -rf "$TMP"; }
     [ -f "$TMP/target/config/00-core.zsh" ]
 }
 
-@test "install.sh --system fails with an explicit message" {
+@test "install.sh --system refuse sans root, en nommant la commande exacte" {
+    # Ce test exerçait le refus « fonctionnalité indisponible ». Il exerce
+    # maintenant le refus qui reste légitime -- l'absence de privilège --
+    # et vérifie qu'il donne une issue au lieu d'une impasse.
+    [ "$(id -u)" -ne 0 ] || skip "ce test décrit le cas NON privilégié"
     run "$ROOT/install.sh" --system --non-interactive
     [ "$status" -ne 0 ]
     [[ "$output" == *"--system"* ]]
+    [[ "$output" == *"sudo nivuus install --system"* ]]
+    [[ "$output" != *"pas encore disponible"* ]]
 }
 
 @test "install.sh --no-backup is accepted" {
