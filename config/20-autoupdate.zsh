@@ -654,6 +654,42 @@ fi
 # ============================================================================
 
 nivuus-update() {
+    # Mode paquet : le gestionnaire est autoritatif, on lui rend la main
+    # avec la commande exacte -- et on sort en 0. L'utilisateur a posé une
+    # question légitime et a reçu la réponse exacte ; ce n'est pas un échec.
+    # Un code non nul ferait crier les scripts et les tâches planifiées qui
+    # appellent nivuus update, sans rien apprendre à personne.
+    if _nivuus_is_package_install; then
+        local channel pkg version
+        channel="$(_nivuus_origin_channel)"
+        pkg="$(_nivuus_origin_package_name)"
+        version="$(_nivuus_origin_package_version 2>/dev/null || _nivuus_current_version)"
+        case "$channel" in
+            homebrew) print -r -- "Nivuus a été installé par Homebrew ; c'est lui qui gère les mises à jour." ;;
+            aur)      print -r -- "Nivuus a été installé depuis l'AUR ; c'est ton gestionnaire qui gère les mises à jour." ;;
+            deb)      print -r -- "Nivuus a été installé par un paquet Debian ; c'est apt qui gère les mises à jour." ;;
+            *)        print -r -- "Nivuus a été installé par un gestionnaire de paquets ; c'est lui qui gère les mises à jour." ;;
+        esac
+        print -r -- ""
+        case "$channel" in
+            homebrew) print -r -- "    brew upgrade $pkg" ;;
+            aur)      print -r -- "    yay -Syu $pkg      (ou paru -Syu $pkg, selon ton assistant AUR)" ;;
+            deb)      print -r -- "    apt upgrade $pkg   (ou, pour un .deb téléchargé à la main, la page de release du projet)" ;;
+            *)        print -r -- "    la commande de mise à jour de ton gestionnaire de paquets" ;;
+        esac
+        print -r -- ""
+        print -r -- "Version installée : $version"
+        print -r -- "Pour repasser aux mises à jour automatiques de Nivuus :"
+        case "$channel" in
+            homebrew) print -r -- "    brew uninstall $pkg" ;;
+            aur)      print -r -- "    sudo pacman -Rns $pkg" ;;
+            deb)      print -r -- "    sudo apt remove $pkg" ;;
+            *)        print -r -- "    retire le paquet avec ton gestionnaire" ;;
+        esac
+        print -r -- "    curl -fsSL https://raw.githubusercontent.com/${NIVUUS_GITHUB_REPO}/master/install.sh | sh"
+        return 0
+    fi
+
     # Never run the destructive release updater on a git checkout.
     if _nivuus_is_dev_checkout; then
         # Deux situations très différentes derrière un même .git, et le

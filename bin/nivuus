@@ -408,8 +408,26 @@ cmd_migrate() {
 # Garde AVANT de déléguer à zsh : sans elle, nivuus-update affiche
 # « Development checkout detected » et envoie l'utilisateur dans une impasse.
 cmd_update() {
-    local dir state
+    local dir state channel pkg version
     dir="${NIVUUS_SHELL_DIR:-$HOME/.nivuus-shell}"
+
+    # Mode paquet : on répond ici, sans déléguer à « zsh -ic ». En conteneur,
+    # en CI et en cron, un zsh interactif n'est pas garanti -- et le message
+    # doit sortir quand même. Code 0 : ce n'est pas un échec (spec § 1.3).
+    if nivuus_origin_is_package "$dir"; then
+        channel="$(nivuus_origin_channel "$dir")"
+        pkg="$(nivuus_origin_field "$dir" package 2>/dev/null || printf 'nivuus-shell')"
+        version="$(nivuus_origin_field "$dir" version 2>/dev/null || printf 'inconnue')"
+        log_info "Nivuus a été installé par un gestionnaire de paquets ($channel) ;"
+        log_info "c'est lui qui gère les mises à jour."
+        printf '\n    %s\n\n' "$(nivuus_origin_update_command "$dir")"
+        log_info "Version installée : $version"
+        log_info "Pour repasser aux mises à jour automatiques de Nivuus, retire le paquet"
+        log_info "puis relance l'installeur :"
+        log_info "  curl -fsSL https://raw.githubusercontent.com/maximeallanic/nivuus-shell/master/install.sh | sh"
+        return 0
+    fi
+
     state="$(nivuus_git_state "$dir")"
     if [ "$state" = "legacy" ]; then
         log_error "Les mises à jour sont bloquées par le dépôt git que l'ancien installeur a laissé dans $dir."
