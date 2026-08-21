@@ -281,3 +281,43 @@ command_exists_in_nivuus() {
     grep -q 'nivuus doctor' "$README"
     grep -q 'nivuus update' "$README"
 }
+
+# Les lignes de puce de la section « Features » / « What you get ».
+feature_bullets() {
+    awk '
+        /^#{2}[[:space:]].*([Ff]eatures|What you get)/ { inside = 1; next }
+        /^#{2}[[:space:]]/ { inside = 0 }
+        inside && /^[[:space:]]*-[[:space:]]/ { print }
+    ' "$README"
+}
+
+@test "la section des puces existe et n'est pas vide" {
+    n="$(feature_bullets | wc -l)"
+    [ "$n" -ge 4 ] || { echo "seulement $n puces trouvées"; false; }
+}
+
+@test "REGLE 5.9: chaque puce pointe une documentation qui existe" {
+    fautes=""
+    while IFS= read -r bullet; do
+        cible="$(printf '%s' "$bullet" | sed -n 's/.*](\([^)#]*\)[^)]*).*/\1/p' | head -n1)"
+        if [ -z "$cible" ]; then
+            fautes="$fautes
+  sans lien: $bullet"
+            continue
+        fi
+        case "$cible" in
+            http*) continue ;;   # un lien de badge ou de release, toléré
+        esac
+        [ -e "$ROOT/$cible" ] || fautes="$fautes
+  lien mort ($cible): $bullet"
+    done <<EOF
+$(feature_bullets)
+EOF
+    [ -z "$fautes" ] || { echo "puces non ancrées :$fautes"; false; }
+}
+
+@test "REGLE 5.9: la section des puces en compte au plus six" {
+    # Onze puces, c'est une liste de courses. Six, c'est un argumentaire.
+    n="$(feature_bullets | wc -l)"
+    [ "$n" -le 6 ] || { echo "$n puces : au-delà de six, personne ne les lit"; false; }
+}

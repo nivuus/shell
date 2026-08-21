@@ -9,19 +9,14 @@
 <!-- badge-proof: tests/performance/test_startup.bats -->
 [![startup <300ms](https://img.shields.io/badge/startup-<300ms-brightgreen.svg)](https://github.com/maximeallanic/nivuus-shell/actions/workflows/matrix.yml)
 
-## ✨ Features
+## ✨ What you get
 
-- ⚡ **Fast, and held to it** - A CI test fails the build if an interactive shell takes more than 300ms to start
-- 🎨 **Configurable Theme & Prompt** - Nord by default, swap themes or the prompt layout via `~/.zsh_local`
-- 🤖 **Optional AI, your key, your provider** - `AI_BACKEND=gemini|openai|anthropic`, plus a command-not-found that names the package to install. Nivuus works fully without it
-- 📝 **Modern Vim** - Ctrl+C/V/X/A shortcuts
-- 🔍 **Smart Navigation** - History prefix search with ↑/↓
-- 📦 **Auto Node.js** - Version switching with .nvmrc
-- 🐍 **Python Venv** - Auto-detection in prompt (venv/conda/poetry)
-- ☁️ **Cloud Context** - AWS/GCP/Azure in prompt
-- 🛡️ **Safety Checks** - Warns before dangerous commands
-- 🌿 **Git Integration** - Fast shortcuts, plus branch and dirty state in the prompt
-- 🛠️ **Works unconfigured** - Sensible defaults; `~/.zsh_local` when you want otherwise
+- **Removable.** `nivuus uninstall` restores every file it touched from a content-addressed backup. Verified nightly on 9 targets — see the badge. → [doc/INSTALL.md](doc/INSTALL.md)
+- **Fast, and held to it.** A CI test fails the build if an interactive shell takes more than 300ms to start. → [doc/FEATURES.md](doc/FEATURES.md)
+- **No plugin manager.** Pure ZSH modules, no oh-my-zsh, no framework underneath. → [doc/CLAUDE.md](doc/CLAUDE.md)
+- **Optional AI, your key, your provider.** Gemini, OpenAI or Anthropic — `??`, `why`, `explain`, and a command-not-found that names the package to install. Nivuus works fully without it. → [doc/FEATURES.md](doc/FEATURES.md)
+- **A prompt you can re-lay-out.** Themes and a token-based prompt format, no code change. → [doc/PROMPT.md](doc/PROMPT.md)
+- **Signed releases.** An update whose signature does not verify is refused outright, with no fallback. → [SECURITY.md](SECURITY.md)
 
 ## 🚀 Quick Start
 
