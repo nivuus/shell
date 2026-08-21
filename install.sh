@@ -19,6 +19,10 @@ set -eu
 # Sert uniquement quand l'API GitHub est injoignable ou a rendu son quota.
 NIVUUS_PINNED_VERSION="3.0.0"
 
+: "${NIVUUS_GITHUB_REPO:=maximeallanic/nivuus-shell}"
+: "${NIVUUS_GITHUB_API:=https://api.github.com}"
+: "${NIVUUS_RELEASE_BASE_URL:=https://github.com/$NIVUUS_GITHUB_REPO/releases/download}"
+
 usage() {
     cat <<'USAGE'
 install.sh — installe Nivuus Shell
@@ -68,11 +72,129 @@ nivuus_local_root() {
     ( cd "$_d" && pwd )
 }
 
-# Remplacé par le vrai amorçage en Task 4 de ce chantier.
+# Version à installer : ce que l'utilisateur demande, sinon la dernière
+# release publiée, sinon le plancher épinglé dans ce fichier.
+#
+# Le plancher n'est pas de la redondance : l'API GitHub non authentifiée
+# est limitée à 60 requêtes/h et par IP, ce qui est atteint tous les jours
+# derrière un NAT d'entreprise ou sur un runner partagé. Sans plancher, le
+# one-liner y devient un tirage au sort.
+nivuus_resolve_version() {
+    if [ -n "${NIVUUS_VERSION:-}" ]; then
+        printf '%s\n' "$NIVUUS_VERSION"
+        return 0
+    fi
+    _api_tmp="$(mktemp "${TMPDIR:-/tmp}/nivuus-api.XXXXXX")" || return 1
+    if nivuus_fetch "$NIVUUS_GITHUB_API/repos/$NIVUUS_GITHUB_REPO/releases/latest" "$_api_tmp"; then
+        # tr avant sed : le motif reste sans double crochet, que le test
+        # « aucun bashisme » interdit dans ce fichier.
+        _tag="$(tr '\t' ' ' < "$_api_tmp" \
+                | sed -n 's/.*"tag_name" *: *"v\{0,1\}\([^"]*\)".*/\1/p' | head -n1)"
+    else
+        _tag=''
+    fi
+    rm -f "$_api_tmp"
+    if [ -n "$_tag" ]; then
+        printf '%s\n' "$_tag"
+    else
+        printf '%s\n' "Dernière version indisponible (réseau ou quota d'API) ; repli sur la version épinglée $NIVUUS_PINNED_VERSION." >&2
+        printf '%s\n' "$NIVUUS_PINNED_VERSION"
+    fi
+}
+
+# Télécharge, vérifie, extrait, délègue, nettoie. Aucun git, aucun dépôt
+# laissé derrière, aucun temporaire qui survit -- y compris sur un refus.
 nivuus_bootstrap() {
-    printf '%s\n' "Aucun noyau Nivuus à côté de ce script, et l'amorçage n'est pas encore disponible." >&2
-    printf '%s\n' "Extrais l'archive de release et relance ./install.sh depuis son répertoire." >&2
-    return 1
+    _version="$(nivuus_resolve_version)" || nivuus_die "Impossible de déterminer la version à installer."
+    [ -n "$_version" ] || nivuus_die "Impossible de déterminer la version à installer."
+    _archive="nivuus-shell-v${_version}.tar.gz"
+    _base="$NIVUUS_RELEASE_BASE_URL/v${_version}"
+
+    NIVUUS_BOOT_TMP="$(mktemp -d "${TMPDIR:-/tmp}/nivuus-boot.XXXXXX")" \
+        || nivuus_die "Impossible de créer un répertoire temporaire."
+    # Le nettoyage est posé AVANT le premier téléchargement : un refus, un
+    # Ctrl-C ou une coupure réseau ne doivent pas laisser 50 Mo derrière.
+    trap 'rm -rf "$NIVUUS_BOOT_TMP"' EXIT
+    trap 'rm -rf "$NIVUUS_BOOT_TMP"; exit 130' INT
+    trap 'rm -rf "$NIVUUS_BOOT_TMP"; exit 143' TERM HUP
+
+    printf '%s\n' "Téléchargement de Nivuus Shell v${_version}…"
+    nivuus_fetch "$_base/$_archive" "$NIVUUS_BOOT_TMP/$_archive" \
+        || nivuus_die "Téléchargement impossible : $_base/$_archive"
+    nivuus_fetch "$_base/SHA256SUMS" "$NIVUUS_BOOT_TMP/SHA256SUMS" \
+        || nivuus_die "Sommes de contrôle indisponibles pour la v${_version}. Installation refusée."
+
+    # Vérification fail-closed : pas d'option pour la désactiver. Ce qui
+    # n'est pas vérifiable n'est pas installé.
+    _expected="$(awk -v a="$_archive" '$2 == a || $2 == "./" a { print $1; exit }' "$NIVUUS_BOOT_TMP/SHA256SUMS")"
+    [ -n "$_expected" ] || nivuus_die "Aucune somme de contrôle pour $_archive. Installation refusée."
+    _actual="$(nivuus_sha256 "$NIVUUS_BOOT_TMP/$_archive")" \
+        || nivuus_die "Installation refusée : l'archive n'a pas pu être vérifiée."
+    if [ "$_expected" != "$_actual" ]; then
+        printf '%s\n' "Empreinte de l'archive incorrecte. Installation refusée." >&2
+        printf '%s\n' "  attendue : $_expected" >&2
+        printf '%s\n' "  obtenue  : $_actual" >&2
+        exit 1
+    fi
+    printf '%s\n' "Empreinte vérifiée."
+
+    mkdir -p "$NIVUUS_BOOT_TMP/src"
+    tar -xzf "$NIVUUS_BOOT_TMP/$_archive" -C "$NIVUUS_BOOT_TMP/src" \
+        || nivuus_die "Archive illisible. Installation refusée."
+
+    # Les archives de release n'ont pas de répertoire racine ; celles que
+    # GitHub génère automatiquement en ont un. On accepte les deux formes,
+    # sans deviner : on cherche le noyau.
+    _src="$NIVUUS_BOOT_TMP/src"
+    if [ ! -f "$_src/bin/nivuus" ]; then
+        _inner="$(find "$NIVUUS_BOOT_TMP/src" -mindepth 1 -maxdepth 1 -type d | head -n1)"
+        if [ -n "$_inner" ] && [ -f "$_inner/bin/nivuus" ]; then
+            _src="$_inner"
+        fi
+    fi
+    if [ ! -f "$_src/bin/nivuus" ]; then
+        printf '%s\n' "La release v${_version} ne contient pas bin/nivuus : elle est antérieure au nouvel installeur." >&2
+        printf '%s\n' "Installe une version plus récente (n'épingle pas NIVUUS_VERSION), ou consulte doc/INSTALL.md." >&2
+        exit 1
+    fi
+    chmod +x "$_src/bin/"* 2>/dev/null || :
+
+    # bin/nivuus est en bash (décision du spec) ; l'amorçage, lui, est POSIX.
+    # Si bash manque, on donne la commande exacte -- calculée par lib/deps.sh
+    # de l'archive, qui est exécutable sous ash depuis la phase 3 -- et on ne
+    # l'exécute jamais.
+    if ! command -v bash >/dev/null 2>&1; then
+        printf '%s\n' "bash est requis pour l'installeur Nivuus et n'est pas présent." >&2
+        if [ -f "$_src/lib/log.sh" ] && [ -f "$_src/lib/deps.sh" ]; then
+            # shellcheck source=/dev/null
+            . "$_src/lib/log.sh"; . "$_src/lib/deps.sh"
+            printf '%s\n' "Installe-le puis relance :" >&2
+            printf '  %s\n' "$(nivuus_pkg_install_cmd bash)" >&2
+        fi
+        exit 1
+    fi
+
+    # « exec » est interdit ici : il annulerait le trap et laisserait le
+    # temporaire derrière. On appelle, on garde le code de retour, on laisse
+    # le trap faire son travail.
+    #
+    # Sous « curl … | sh », l'entrée standard est le script lui-même :
+    # l'installeur ne doit surtout pas y lire. S'il existe un terminal, on
+    # lui donne ; sinon on répond oui d'avance, explicitement.
+    # Le test d'ouverture se fait dans un SOUS-SHELL : une erreur de
+    # redirection sur un utilitaire spécial fait sortir le shell entier
+    # (POSIX), ce qui tuerait l'amorçage au lieu de le faire basculer.
+    if [ -t 0 ]; then
+        if "$_src/bin/nivuus" install "$@"; then _rc=0; else _rc=$?; fi
+    elif ( : < /dev/tty ) 2>/dev/null; then
+        if "$_src/bin/nivuus" install "$@" < /dev/tty; then _rc=0; else _rc=$?; fi
+    else
+        if "$_src/bin/nivuus" install --yes "$@"; then _rc=0; else _rc=$?; fi
+    fi
+    if [ -n "$RUN_DOCTOR" ] && [ "$_rc" -eq 0 ]; then
+        "$_src/bin/nivuus" doctor || :
+    fi
+    return "$_rc"
 }
 
 nivuus_die() {
