@@ -248,3 +248,47 @@ pas valide. Tant qu'aucune release signée n'existe :
 
 Voir « Répétition en blanc de la rotation » plus bas — la procédure y est
 consignée telle qu'elle a été réellement exécutée.
+
+## Secrets, environnement et sauvegardes
+
+| Élément | Emplacement | Qui peut le lire |
+|---|---|---|
+| `NIVUUS_SIGNING_KEY_ECDSA` | secret de l'**environnement** GitHub `release` | le seul job `release` de `.github/workflows/release.yml` |
+| `NIVUUS_SIGNING_KEY_SSH` | idem | idem |
+| Clés privées ECDSA/Ed25519 (`priv-*.pk8.pem`, `id-*`) | gestionnaire de mots de passe du mainteneur **et** support froid hors ligne | le mainteneur seul |
+| Clés publiques (`keys/*.pem`, `keys/allowed_signers`) | dans le dépôt, versionnées | tout le monde, par construction |
+| Liste de révocation (`keys/revoked`) | dans le dépôt | tout le monde |
+
+Un secret d'**environnement** (et non de dépôt) est le point qui porte tout
+le modèle : un attaquant qui obtient `contents: write`, ou qui injecte une
+Action tierce dans un autre job du même dépôt, **ne peut pas** le lire.
+
+**L'emplacement exact des sauvegardes hors ligne n'est pas consigné ici** —
+seulement le fait qu'il y en a deux, et l'obligation de les tester
+(doc/SIGNING.md, étape 2). Écrire « la clé froide est dans le tiroir du
+bureau » dans un dépôt public annulerait l'intérêt du support froid.
+
+## Révocation
+
+Une clé se révoque en ajoutant son empreinte à `keys/revoked`, une par
+ligne, puis en publiant une release. Deux formats, selon le chemin :
+
+```
+sha256:<sha256 hexadécimal du fichier .pem>          # chemin openssl
+SHA256:<empreinte ssh-keygen -lf de la clé publique>  # chemin SSHSIG
+```
+
+Obtenir l'une et l'autre :
+
+```bash
+printf 'sha256:%s\n' "$(sha256sum keys/nivuus-release-2026.pem | awk '{print $1}')"
+ssh-keygen -lf keys/allowed_signers | awk '{print $2}'
+```
+
+Une clé listée dans `revoked` est refusée **même si elle est encore
+présente** dans `keys/` : c'est délibéré, la révocation ne demande pas de
+supprimer le fichier et reste donc auditable.
+
+**Ce que la révocation ne peut pas faire :** annuler une release
+malveillante déjà installée. Le code malveillant contrôle alors la mise à
+jour. La récupération d'une machine compromise est une réinstallation.

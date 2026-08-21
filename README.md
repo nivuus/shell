@@ -55,6 +55,27 @@ sudo ./install.sh --system
 ```
 > **Note:** `--system` is temporarily unavailable (it now exits with an error). Per-user installation above is unaffected.
 
+### Vérifier le trousseau de signature à l'installation (optionnel)
+
+Les mises à jour sont authentifiées par des clés publiques livrées avec
+l'installation. Tu peux épingler ce trousseau au moment de l'installer :
+
+```bash
+./install.sh --verify-key <empreinte>
+```
+
+L'empreinte est publiée dans [SECURITY.md](SECURITY.md). Si le trousseau
+embarqué ne correspond pas, l'installation est refusée **avant** la moindre
+écriture.
+
+**Limite honnête** : cela ne résout pas la **première installation**. Le
+dépôt et la clé publique viennent de la même origine — qui contrôle cette
+origine à cet instant sert son installeur *et* sa clé. Aucune signature ne
+peut résoudre ça (first install / première installation : voir
+[SECURITY.md](SECURITY.md)). Ce que la signature protège, c'est le canal de
+**mise à jour** : récurrent, automatique, invisible, sur toutes les
+machines, pour toujours.
+
 ### Restart Your Terminal
 
 ```bash
@@ -326,7 +347,7 @@ Automatic backups are created at:
 
 ## 🔄 Updating
 
-Nivuus Shell includes an automatic update system that checks for new releases weekly and installs them automatically with checksum verification.
+Nivuus Shell includes an automatic update system that checks for new releases weekly and installs them automatically. Each release is **signed**; an update whose signature does not verify against a key shipped with your installation is refused outright.
 
 ### Check Current Version
 
@@ -339,7 +360,10 @@ nivuus-version --check      # Check for available updates
 
 - **Weekly checks** - Checks for new releases every 7 days
 - **Release-based** - Updates from official GitHub Releases (stable versions only)
-- **Checksum verification** - SHA256 verification for security
+- **Signature verification** — chaque release est signée ; une mise à jour
+  dont la signature n'est pas valide est refusée, sans repli sur la simple
+  empreinte. Voir [SECURITY.md](SECURITY.md) pour ce que cela garantit —
+  et ce que cela ne garantit pas, notamment pour la première installation.
 - **Automatic installation** - Updates installed automatically with backup
 - **Safe rollback** - Previous versions backed up to `~/.config/nivuus-shell-backup/`
 
@@ -351,11 +375,17 @@ nivuus-update               # Check for and install updates manually
 
 The update system will:
 1. Check the latest release on GitHub
-2. Download the release archive
-3. Verify SHA256 checksum
-4. Create a backup of your current installation
-5. Install the new version
-6. Recompile ZSH files
+2. Download the release archive, its `SHA256SUMS` and its signatures
+3. **Verify the signature of `SHA256SUMS`** against the keys in `keys/`
+   (signature first — comparing a digest against an unauthenticated
+   `SHA256SUMS` proves nothing)
+4. Verify the SHA256 digest of the archive
+5. Create a backup of your current installation
+6. Install the new version
+7. Recompile ZSH files
+
+If either verification fails, the update is refused **before** anything is
+written, and your installation is left untouched. There is no fallback.
 
 ### Configuration
 
@@ -368,7 +398,9 @@ export ENABLE_AUTOUPDATE=false
 # Change check frequency (days)
 export AUTOUPDATE_CHECK_FREQUENCY_DAYS=14
 
-# Disable checksum verification (not recommended)
+# Désactive UNIQUEMENT la comparaison d'empreinte SHA256 (déconseillé).
+# Sans effet sur la vérification de signature, qui n'est jamais
+# désactivable sur le chemin automatique.
 export NIVUUS_VERIFY_CHECKSUMS=false
 
 # Use different GitHub repository

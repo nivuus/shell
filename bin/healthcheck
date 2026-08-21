@@ -237,6 +237,46 @@ fi
 echo ""
 
 # =============================================================================
+# Update signing
+# =============================================================================
+echo ""
+echo -e "${BLUE}Update signing${NC}"
+echo "─────────────────────────────────────────────"
+
+KEYS_DIR="${NIVUUS_SHELL_DIR:-$HOME/.nivuus-shell}/keys"
+
+# Quel outil cette machine utiliserait-elle ?
+if command -v openssl >/dev/null 2>&1; then
+    echo -e "$CHECK Verification tool: openssl ($(openssl version 2>/dev/null | head -1))"
+elif command -v ssh-keygen >/dev/null 2>&1; then
+    echo -e "$CHECK Verification tool: ssh-keygen (fallback path)"
+else
+    echo -e "$CROSS Aucun outil de vérification (openssl ou ssh-keygen)"
+    echo -e "  ${YELLOW}La mise à jour automatique restera inactive sur cette machine.${NC}"
+fi
+
+# Le trousseau est-il là, et lequel ?
+if [ -d "$KEYS_DIR" ]; then
+    # shellcheck source=/dev/null
+    . "${NIVUUS_SHELL_DIR}/lib/log.sh" 2>/dev/null || true
+    . "${NIVUUS_SHELL_DIR}/lib/manifest.sh" 2>/dev/null || true
+    . "${NIVUUS_SHELL_DIR}/lib/keys.sh" 2>/dev/null || true
+    if command -v nivuus_keyset_fingerprint >/dev/null 2>&1 \
+       && fp="$(nivuus_keyset_fingerprint "$KEYS_DIR" 2>/dev/null)" && [ -n "$fp" ]; then
+        echo -e "$CHECK Trust store fingerprint (empreinte) : $fp"
+        nivuus_keyset_list "$KEYS_DIR" | sed 's/^/    /'
+        echo -e "  ${BLUE}Compare-la à celle publiée dans SECURITY.md.${NC}"
+    else
+        echo -e "$CROSS Trousseau illisible : aucune clé de confiance (no trusted key)"
+        echo -e "  ${YELLOW}Aucune mise à jour ne sera acceptée tant qu'il est vide.${NC}"
+    fi
+else
+    echo -e "$CROSS Trousseau absent : aucune clé de confiance (no trusted key)"
+    echo -e "  $KEYS_DIR n'existe pas."
+    echo -e "  ${YELLOW}Aucune mise à jour ne sera acceptée. Réinstalle Nivuus.${NC}"
+fi
+
+# =============================================================================
 # Summary
 # =============================================================================
 
