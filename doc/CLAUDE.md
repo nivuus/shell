@@ -39,12 +39,16 @@ NIVUUS_SHELL_DIR="$(pwd)" zsh   # Run from current directory without installing
 # User installation (in test environment)
 ./install.sh --non-interactive
 
-# System installation (temporarily unavailable: exits with an error)
-sudo ./install.sh --system --non-interactive
+# Amorçage hors réseau (ce que fait le one-liner, sans réseau)
+NIVUUS_VERSION=9.9.9 NIVUUS_RELEASE_BASE_URL="file:///chemin/vers/releases" \
+  sh install.sh --non-interactive --prefix /tmp/essai
 
 # With health check
 ./install.sh --health-check
 ```
+
+`--system` reste indisponible et sort en erreur ; ne pas le documenter comme une option
+utilisable. Voir `doc/INSTALL.md` pour la procédure destinée aux utilisateurs.
 
 ## Architecture
 
@@ -231,6 +235,10 @@ When adding new config modules:
 - **User mode** (default): Installs to `~/.nivuus-shell`, modifies `~/.zshrc`
 - **System mode** (`--system`): Installs to `/etc/nivuus-shell`, creates `/etc/skel/.zshrc`.
   Temporarily unavailable -- `--system` now exits with an error; this is a later phase.
+
+Since phase 5, `install.sh` is POSIX `sh` and **bimodal**: it delegates to a neighbouring
+`bin/nivuus` when there is one, and otherwise bootstraps (resolve version, download the release
+archive, verify its SHA-256 fail-closed, extract, delegate, clean up). See `doc/INSTALL.md`.
 
 **Backup system**: Always backs up to `~/.config/nivuus-shell-backup/` before modifying configs.
 

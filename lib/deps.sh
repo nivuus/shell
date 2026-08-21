@@ -4,8 +4,13 @@
 # vérifiable en test (voir tests/unit/test_lib_deps.bats).
 # Sourcé, jamais exécuté : ne fixe pas set -euo pipefail.
 
-NIVUUS_DEPS_REQUIRED='zsh git curl'
-NIVUUS_DEPS_RECOMMENDED='fzf'
+# git a quitté les dépendances requises : depuis la phase 5, rien dans le
+# chemin d'installation ni de mise à jour ne l'utilise (téléchargement par
+# curl/wget, extraction par tar, mise à jour par release). Il reste
+# recommandé, parce que le prompt git est l'une des fonctions les plus
+# visibles -- mais son absence dégrade, elle ne bloque pas.
+NIVUUS_DEPS_REQUIRED='zsh curl'
+NIVUUS_DEPS_RECOMMENDED='git fzf'
 NIVUUS_DEPS_OPTIONAL='bat eza grc'
 
 # brew en dernier : sur une machine Linux avec Linuxbrew, le gestionnaire

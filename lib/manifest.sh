@@ -186,6 +186,31 @@ nivuus_store_backup() {
     printf '%s\n' "$hash"
 }
 
+# Déplace $1 vers $2 sans jamais écraser. Utilisé par la migration du
+# dépôt git parasite : on ne supprime pas, on met de côté, et on dit où.
+# Volontairement absent du manifeste : ce déplacement n'est pas une
+# mutation d'installation, et un uninstall ne doit surtout pas
+# « restaurer » le .git qui était précisément le problème.
+nivuus_move_aside() {
+    local src="$1" dst="$2"
+    [ -e "$src" ] || { log_error "Rien à déplacer : $src"; return 1; }
+    [ -e "$dst" ] && { log_error "Destination déjà existante : $dst"; return 1; }
+    if [ -n "${NIVUUS_DRY_RUN:-}" ]; then
+        log_dry "déplacerait $src vers $dst"
+        printf '%s\n' "$dst"
+        return 0
+    fi
+    # mkdir -p direct, et non nivuus_mkdir_p : ce dernier JOURNALISE, et
+    # « nivuus migrate » s'exécute hors de toute transaction de manifeste
+    # (il n'y a pas de manifeste ouvert à ce moment-là). Journaliser ici
+    # reviendrait de toute façon à faire recréer par un futur uninstall le
+    # répertoire d'archivage -- ou pire, à faire remettre en place le .git
+    # qui était le problème.
+    mkdir -p "$(dirname "$dst")" || return 1
+    mv "$src" "$dst" || return 1
+    printf '%s\n' "$dst"
+}
+
 nivuus_mkdir_p() {
     local dir="$1" missing
     missing="$(_nivuus_missing_levels "$dir")"
