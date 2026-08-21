@@ -1,0 +1,7 @@
+# Ceinture et bretelles : aucune clé privée ne doit pouvoir arriver ici,
+# même par un `git add -A` distrait. Le test de la suite unitaire est la
+# vérification ; ceci est la prévention.
+*.key
+*_priv*
+id_*
+!id_*.pub

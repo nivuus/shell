@@ -164,57 +164,263 @@ _nivuus_create_update_backup() {
     echo "$backup_dir"
 }
 
-# Download and verify release archive
-_nivuus_download_release() {
-    local version=$1
-    local temp_dir=$(mktemp -d)
-    local archive_url="https://github.com/$NIVUUS_GITHUB_REPO/releases/download/v${version}/nivuus-shell-v${version}.tar.gz"
-    local checksums_url="https://github.com/$NIVUUS_GITHUB_REPO/releases/download/v${version}/SHA256SUMS"
+# Empreinte SHA-256 portable. Fonction pure : ne télécharge rien, ne
+# dépend d'aucun état global.
+#
+# Historique : cette fonction existe parce que _nivuus_download_release
+# appelait `sha256sum` sans repli. `sha256sum` n'existe pas par défaut sur
+# macOS (`shasum` y est l'outil livré) : `actual_sum` y était vide, la
+# comparaison échouait toujours, et TOUTE mise à jour était cassée sur
+# macOS. lib/manifest.sh gérait déjà les deux cas ; l'updater non.
+#
+# Retourne 1 sans rien imprimer si aucun outil n'est disponible. Le
+# « sans rien imprimer » est la partie importante : une chaîne vide
+# comparée à une empreinte attendue est un faux négatif silencieux.
+_nivuus_sha256_of() {
+    local file=$1
+    [[ -r "$file" ]] || return 1
 
-    # Download archive
-    echo "📥 Downloading release v${version}..."
-    if ! curl -fsSL -o "$temp_dir/nivuus-shell.tar.gz" "$archive_url"; then
-        echo "❌ Failed to download release archive"
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$file" | awk '{print $1}'
+    elif command -v shasum >/dev/null 2>&1; then
+        shasum -a 256 "$file" | awk '{print $1}'
+    elif command -v openssl >/dev/null 2>&1; then
+        # Dernier recours : openssl est de toute façon requis par le
+        # chemin de signature sur la plupart des machines.
+        openssl dgst -sha256 "$file" | awk '{print $NF}'
+    else
+        return 1
+    fi
+}
+
+# Empreinte d'un fichier de clé publique PEM, telle qu'inscrite dans
+# keys/revoked. Format : « sha256:<hex> ».
+_nivuus_key_fingerprint() {
+    local pem=$1 digest
+    digest=$(_nivuus_sha256_of "$pem") || return 1
+    printf 'sha256:%s\n' "$digest"
+}
+
+_nivuus_key_is_revoked() {
+    local pem=$1 keys_dir=$2 fp
+    [[ -r "$keys_dir/revoked" ]] || return 1
+    fp=$(_nivuus_key_fingerprint "$pem") || return 1
+    grep -qxF "$fp" "$keys_dir/revoked" 2>/dev/null
+}
+
+# Recopie allowed_signers en retirant les lignes dont la clé publique est
+# listée dans keys/revoked. ssh-keygen n'ayant pas de notion de
+# révocation utilisable ici, on la matérialise en amont.
+# Empreinte utilisée : celle de `ssh-keygen -lf` (« SHA256:… »).
+#
+# Écart assumé au plan : le plan écrivait les fichiers intermédiaires avec
+# `mktemp`. Impossible ici — le cas « openssl absent » du spec (case 8) est
+# testé avec un PATH réduit qui ne contient PAS mktemp, et la vérification
+# doit fonctionner sur une machine minimale. On utilise donc la
+# substitution de processus zsh `=(...)`, qui crée un fichier temporaire
+# par les moyens internes de zsh, sans aucun binaire externe, et le nettoie
+# elle-même.
+_nivuus_filter_revoked_signers() {
+    local allowed=$1 keys_dir=$2 line fp
+    while IFS= read -r line; do
+        [[ -n "$line" ]] || continue
+        # Format : « <principal> <type> <base64> [commentaire] »
+        fp=$(ssh-keygen -lf =(printf '%s\n' "${line#* }") 2>/dev/null | awk '{print $2}')
+        if [[ -n "$fp" ]] && [[ -r "$keys_dir/revoked" ]] && \
+           grep -qxF "$fp" "$keys_dir/revoked" 2>/dev/null; then
+            continue
+        fi
+        printf '%s\n' "$line"
+    done < "$allowed"
+}
+
+# Vérifie la signature de SHA256SUMS contre le trousseau de confiance.
+#
+# Fonction PURE : ne télécharge rien, n'écrit rien, ne lit aucun état
+# global autre que le défaut de keys_dir. C'est ce qui la rend testable
+# sans réseau — la raison pour laquelle il n'existait aucun test de cette
+# logique jusqu'ici.
+#
+# keys_dir est un PARAMÈTRE et non une variable d'environnement : les
+# tests injectent un jeu éphémère sans qu'aucune porte de contournement
+# n'existe en production.
+#
+#   $1  chemin du fichier SHA256SUMS à authentifier
+#   $2  répertoire contenant SHA256SUMS.sig et/ou SHA256SUMS.sshsig
+#   $3  répertoire du trousseau (défaut : $NIVUUS_SHELL_DIR/keys)
+#
+# Retour : 0 = signature valide contre une clé de confiance
+#          1 = signature invalide, absente ou illisible
+#          2 = aucun outil de vérification disponible sur cette machine
+_nivuus_verify_signature() {
+    local sums=$1 sig_dir=$2 keys_dir=${3:-$NIVUUS_SHELL_DIR/keys}
+    local have_tool=0 key
+
+    [[ -r "$sums" ]] || return 1
+
+    # --- Chemin primaire : openssl / ECDSA P-256 -----------------------
+    if command -v openssl >/dev/null 2>&1; then
+        have_tool=1
+        local sig="$sig_dir/SHA256SUMS.sig"
+        if [[ -s "$sig" ]]; then
+            for key in "$keys_dir"/*.pem(N); do
+                _nivuus_key_is_revoked "$key" "$keys_dir" && continue
+                if openssl dgst -sha256 -verify "$key" \
+                        -signature "$sig" "$sums" >/dev/null 2>&1; then
+                    return 0
+                fi
+            done
+        fi
+    fi
+
+    # --- Chemin de repli : ssh-keygen / SSHSIG -------------------------
+    # Sur les machines sans openssl (fréquent sur les serveurs et
+    # certaines images minimales), OpenSSH est presque toujours là.
+    # Mesuré : sur Fedora 40 + zsh/git/curl, openssl est ABSENT et
+    # ssh-keygen présent — ce repli y porte 100 % du trafic de
+    # vérification (voir doc/SIGNING.md). Sans lui, le refus dur du § 4
+    # supprimerait définitivement l'auto-update sur toute une classe de
+    # machines.
+    if command -v ssh-keygen >/dev/null 2>&1; then
+        have_tool=1
+        local sshsig="$sig_dir/SHA256SUMS.sshsig"
+        local allowed="$keys_dir/allowed_signers"
+        if [[ -s "$sshsig" && -s "$allowed" ]]; then
+            local filtered
+            filtered=$(_nivuus_filter_revoked_signers "$allowed" "$keys_dir")
+            if [[ -n "$filtered" ]] && \
+               ssh-keygen -Y verify -f =(printf '%s\n' "$filtered") \
+                   -I nivuus-release -n nivuus-release -s "$sshsig" \
+                   < "$sums" >/dev/null 2>&1; then
+                return 0
+            fi
+        fi
+    fi
+
+    (( have_tool )) || return 2
+    return 1
+}
+
+# Base des URL d'assets. Surchargeable UNIQUEMENT pour les tests e2e,
+# qui servent une fausse release via file:// (curl sait le faire, ce qui
+# évite un serveur HTTP dans la suite). Jamais documentée pour les
+# utilisateurs.
+: ${NIVUUS_RELEASE_BASE_URL:=https://github.com/$NIVUUS_GITHUB_REPO/releases/download}
+
+# Décide si une release téléchargée est acceptable. Fonction pure : aucun
+# réseau, aucune écriture. Toute la politique de sécurité tient ici.
+#
+# Ordre non négociable : SIGNATURE d'abord, EMPREINTE ensuite. Vérifier
+# une empreinte contre un SHA256SUMS non authentifié ne démontre rien.
+#
+# Retour : 0 acceptable / 1 refus / 2 aucun outil de vérification
+_nivuus_verify_release() {
+    local temp_dir=$1 version=$2 keys_dir=${3:-$NIVUUS_SHELL_DIR/keys}
+    local archive="$temp_dir/nivuus-shell.tar.gz"
+    local sums="$temp_dir/SHA256SUMS"
+
+    _nivuus_verify_signature "$sums" "$temp_dir" "$keys_dir"
+    local rc=$?
+    if (( rc != 0 )); then
+        return $rc
+    fi
+
+    # NIVUUS_VERIFY_CHECKSUMS ne porte QUE sur l'étape ci-dessous. Elle ne
+    # peut pas, et ne doit jamais pouvoir, désactiver la signature.
+    [[ "$NIVUUS_VERIFY_CHECKSUMS" == "true" ]] || return 0
+
+    # Le nom versionné fait partie du contenu signé : c'est ce qui bloque
+    # le rejeu inter-versions. Ne JAMAIS remplacer ce grep par head -n1.
+    local expected_sum
+    expected_sum=$(grep "nivuus-shell-v${version}.tar.gz" "$sums" | awk '{print $1}')
+    [[ -n "$expected_sum" ]] || return 1
+
+    local actual_sum
+    actual_sum=$(_nivuus_sha256_of "$archive") || return 2
+    [[ "$expected_sum" == "$actual_sum" ]] || return 1
+    return 0
+}
+
+# Télécharge une release et décide si elle est installable.
+#
+#   $1  version cible
+#   $2  « interactive » si l'appel vient de nivuus-update tapé par un
+#       humain. Vide sur le chemin automatique — et c'est structurel :
+#       l'échappatoire NIVUUS_ALLOW_UNVERIFIED_UPDATE ne peut pas exister
+#       pour un processus d'arrière-plan.
+#
+# Imprime le chemin du répertoire temporaire sur stdout en cas de succès,
+# et RIEN en cas de refus (l'appelant teste ce chemin).
+#
+# ATTENTION : les messages d'information partent sur STDERR, parce que la
+# sortie standard porte le chemin du répertoire temporaire. L'ancien code
+# mélangeait les deux.
+_nivuus_download_release() {
+    local version=$1 interactive=${2:-}
+    local temp_dir=$(mktemp -d)
+    local base="$NIVUUS_RELEASE_BASE_URL/v${version}"
+
+    echo "📥 Downloading release v${version}..." >&2
+    if ! curl -fsSL -o "$temp_dir/nivuus-shell.tar.gz" \
+            "$base/nivuus-shell-v${version}.tar.gz"; then
+        echo "❌ Failed to download release archive" >&2
         rm -rf "$temp_dir"
         return 1
     fi
 
-    # Download and verify checksums if enabled.
-    # When verification is requested we fail CLOSED: any inability to fetch or
-    # match a checksum aborts the install, so a network/MITM failure cannot be
-    # used to silently skip verification.
-    if [[ "$NIVUUS_VERIFY_CHECKSUMS" == "true" ]]; then
-        echo "🔐 Verifying checksums..."
-
-        if ! curl -fsSL -o "$temp_dir/SHA256SUMS" "$checksums_url"; then
-            echo "❌ Could not download checksums (verification required, aborting)"
-            echo "   Set NIVUUS_VERIFY_CHECKSUMS=false to bypass at your own risk."
-            rm -rf "$temp_dir"
-            return 1
-        fi
-
-        # Extract the checksum for our archive
-        local expected_sum=$(grep "nivuus-shell-v${version}.tar.gz" "$temp_dir/SHA256SUMS" | awk '{print $1}')
-
-        if [[ -z "$expected_sum" ]]; then
-            echo "❌ No checksum found for nivuus-shell-v${version}.tar.gz (aborting)"
-            rm -rf "$temp_dir"
-            return 1
-        fi
-
-        local actual_sum=$(sha256sum "$temp_dir/nivuus-shell.tar.gz" | awk '{print $1}')
-
-        if [[ "$expected_sum" != "$actual_sum" ]]; then
-            echo "❌ Checksum verification failed!"
-            echo "   Expected: $expected_sum"
-            echo "   Got:      $actual_sum"
-            rm -rf "$temp_dir"
-            return 1
-        fi
-
-        echo "✅ Checksum verified"
+    if ! curl -fsSL -o "$temp_dir/SHA256SUMS" "$base/SHA256SUMS"; then
+        echo "❌ Could not download SHA256SUMS (verification required, aborting)" >&2
+        rm -rf "$temp_dir"
+        return 1
     fi
 
+    # Les deux formats de signature sont téléchargés sans condition :
+    # on ne sait pas encore lequel cette machine peut vérifier. Un 404
+    # sur l'un des deux n'est pas fatal ; l'absence des DEUX le sera au
+    # moment de la vérification.
+    curl -fsSL -o "$temp_dir/SHA256SUMS.sig"    "$base/SHA256SUMS.sig"    2>/dev/null
+    curl -fsSL -o "$temp_dir/SHA256SUMS.sshsig" "$base/SHA256SUMS.sshsig" 2>/dev/null
+
+    echo "🔐 Verifying release signature..." >&2
+    _nivuus_verify_release "$temp_dir" "$version"
+    local rc=$?
+
+    if (( rc == 2 )); then
+        echo "❌ Aucun outil de vérification disponible sur cette machine." >&2
+        echo "   Nivuus a besoin de « openssl » ou de « ssh-keygen » pour" >&2
+        echo "   authentifier une mise à jour. Sans l'un des deux, la mise à" >&2
+        echo "   jour automatique reste inactive." >&2
+        echo "   Diagnostic : nivuus doctor" >&2
+    elif (( rc != 0 )); then
+        echo "❌ Signature ou empreinte invalide pour la release v${version}." >&2
+        echo "   L'archive est potentiellement altérée. NE PAS contourner." >&2
+        echo "   Vérifie la page de release :" >&2
+        echo "   https://github.com/$NIVUUS_GITHUB_REPO/releases/tag/v${version}" >&2
+    fi
+
+    if (( rc != 0 )); then
+        # Unique échappatoire (§ 4 du spec) : une décision consciente
+        # d'un humain devant son terminal. Trois gardes conjointes, et
+        # une confirmation explicite. Le chemin automatique ne passe
+        # jamais ici, faute du drapeau « interactive ».
+        if [[ "$interactive" == "interactive" ]] \
+            && [[ "$NIVUUS_ALLOW_UNVERIFIED_UPDATE" == "1" ]] && [[ -t 0 ]]; then
+            echo "" >&2
+            echo "⚠️  NIVUUS_ALLOW_UNVERIFIED_UPDATE=1 est défini." >&2
+            echo "   Installer une release non vérifiée exécute du code" >&2
+            echo "   arbitraire à chaque ouverture de shell." >&2
+            local reply
+            read -r "reply?Installer quand même cette release NON VÉRIFIÉE ? (tape OUI) "
+            if [[ "$reply" == "OUI" ]]; then
+                echo "$temp_dir"
+                return 0
+            fi
+        fi
+        rm -rf "$temp_dir"
+        return 1
+    fi
+
+    echo "✅ Signature verified" >&2
     echo "$temp_dir"
 }
 
@@ -292,23 +498,31 @@ _nivuus_install_release() {
 # Perform the actual update
 _nivuus_perform_update() {
     local target_version=${1:-$(_nivuus_latest_version)}
+    # Drapeau propagé tel quel : c'est son ABSENCE sur le chemin
+    # automatique qui rend l'échappatoire inatteignable en arrière-plan.
+    local interactive=${2:-}
 
     if [[ -z "$target_version" ]]; then
         echo "❌ Could not determine target version"
         return 1
     fi
 
-    # Create backup
-    local backup_dir=$(_nivuus_create_update_backup)
-    echo "📦 Backup created: $backup_dir"
-
-    # Download release
-    local temp_dir=$(_nivuus_download_release "$target_version")
+    # Vérifier d'abord : une release refusée ne doit rien coûter et ne
+    # rien laisser derrière elle. La sauvegarde ne protège que de
+    # l'INSTALLATION, pas du téléchargement — la créer avant de savoir si
+    # la release est seulement acceptable, c'était recopier toute
+    # l'installation (~50 Mo) à chaque tentative refusée, sur toutes les
+    # machines, une fois par semaine.
+    local temp_dir=$(_nivuus_download_release "$target_version" "$interactive")
 
     if [[ -z "$temp_dir" ]] || [[ ! -d "$temp_dir" ]]; then
         echo "❌ Download failed"
         return 1
     fi
+
+    # Create backup
+    local backup_dir=$(_nivuus_create_update_backup)
+    echo "📦 Backup created: $backup_dir"
 
     # Install release
     if _nivuus_install_release "$target_version" "$temp_dir"; then
@@ -396,7 +610,7 @@ nivuus-update() {
         echo ""
         echo "🆕 Update available!"
         echo ""
-        _nivuus_perform_update "$latest"
+        _nivuus_perform_update "$latest" interactive
     else
         echo ""
         echo "✅ Already up to date!"

@@ -1,0 +1,92 @@
+name: Verify tools availability probe
+
+on:
+  workflow_dispatch:
+
+jobs:
+  linux:
+    name: Probe ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    container: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Alignée sur les cibles réelles du projet (voir .github/workflows/tests.yml :
+        # ubuntu-latest, macos-latest, alpine:3.20), élargie aux images de base
+        # que les utilisateurs rencontrent le plus souvent.
+        image: [ubuntu:22.04, ubuntu:24.04, debian:12-slim, alpine:3.20, archlinux:latest, fedora:40]
+    steps:
+      - name: Probe
+        shell: sh
+        run: |
+          # Aucune installation : on mesure l'image telle qu'elle est livrée.
+          probe() {
+            if command -v "$1" >/dev/null 2>&1; then
+              printf '%s\tPRESENT\t%s\n' "$1" "$($2 2>&1 | head -1)"
+            else
+              printf '%s\tABSENT\t-\n' "$1"
+            fi
+          }
+          echo "=== ${{ matrix.image }}"
+          probe openssl    "openssl version"
+          probe ssh-keygen "ssh -V"
+          probe sha256sum  "sha256sum --version"
+          probe shasum     "shasum --version"
+
+      - name: Functional check (not just presence)
+        shell: sh
+        continue-on-error: true
+        run: |
+          # Trouver le binaire ne suffit pas : on vérifie qu'il sait
+          # réellement faire l'opération dont dépend le client.
+          # PIÈGE MESURÉ, PAS THÉORIQUE : `openssl dgst -out X.sig` et
+          # `ssh-keygen -Y sign X` visent tous deux « X.sig ». Une première
+          # version de cette sonde écrivait les deux dans /tmp/p.sig et
+          # rapportait « ssh-keygen -Y verify: KO » sur toutes les images où
+          # openssl était présent -- un faux négatif pur. Les deux chemins
+          # signent donc des fichiers distincts. Même piège en Task 12.
+          echo payload > /tmp/p
+          if command -v openssl >/dev/null 2>&1; then
+            openssl ecparam -name prime256v1 -genkey -noout -out /tmp/k.pem
+            openssl ec -in /tmp/k.pem -pubout -out /tmp/k.pub 2>/dev/null
+            openssl dgst -sha256 -sign /tmp/k.pem -out /tmp/p.ecdsa.sig /tmp/p
+            openssl dgst -sha256 -verify /tmp/k.pub -signature /tmp/p.ecdsa.sig /tmp/p \
+              && echo "openssl dgst -verify: OK" || echo "openssl dgst -verify: KO"
+          fi
+          if command -v ssh-keygen >/dev/null 2>&1; then
+            cp /tmp/p /tmp/sums
+            ssh-keygen -q -t ed25519 -N '' -f /tmp/id -C probe
+            printf 'probe %s\n' "$(cat /tmp/id.pub)" > /tmp/allowed
+            ssh-keygen -Y sign -f /tmp/id -n nivuus-release /tmp/sums 2>/dev/null
+            ssh-keygen -Y verify -f /tmp/allowed -I probe -n nivuus-release \
+              -s /tmp/sums.sig < /tmp/sums \
+              && echo "ssh-keygen -Y verify: OK" || echo "ssh-keygen -Y verify: KO"
+          fi
+
+      - name: Probe again with Nivuus's required deps installed (zsh git curl)
+        shell: sh
+        continue-on-error: true
+        run: |
+          # L'image nue n'est pas l'état dans lequel Nivuus tourne : une
+          # installation Nivuus a toujours zsh, git et curl. La question
+          # utile est « ces trois-là amènent-ils openssl ou ssh-keygen ? ».
+          case "${{ matrix.image }}" in
+            ubuntu*|debian*) apt-get update >/dev/null && apt-get install -y zsh git curl >/dev/null ;;
+            alpine*)         apk add --no-cache bash zsh git curl ncurses >/dev/null ;;
+            fedora*)         dnf install -y zsh git curl >/dev/null ;;
+            archlinux*)      pacman -Sy --noconfirm zsh git curl >/dev/null ;;
+          esac
+          echo "=== ${{ matrix.image }} + zsh git curl"
+          command -v openssl    >/dev/null 2>&1 && echo "openssl PRESENT"    || echo "openssl ABSENT"
+          command -v ssh-keygen >/dev/null 2>&1 && echo "ssh-keygen PRESENT" || echo "ssh-keygen ABSENT"
+
+  macos:
+    name: Probe macOS
+    runs-on: macos-latest
+    steps:
+      - name: Probe
+        run: |
+          command -v openssl && openssl version || echo "openssl ABSENT"
+          command -v ssh-keygen && ssh -V || echo "ssh-keygen ABSENT"
+          command -v sha256sum || echo "sha256sum ABSENT (attendu sur macOS)"
+          command -v shasum && shasum --version || echo "shasum ABSENT"

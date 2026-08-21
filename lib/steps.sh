@@ -8,7 +8,11 @@ nivuus_step_copy_tree() {
     # Répertoires copiés récursivement, en excluant .zwc et .git.
     local d f list
     list="$(mktemp)"
-    for d in config themes bin plugins lib; do
+    # « keys » n'est pas optionnel : sans le trousseau, l'installation
+    # neuve n'a aucune clé de confiance et REFUSE toutes les mises à jour
+    # (refus dur, cf. config/20-autoupdate.zsh). L'échec serait total,
+    # silencieux, et différé d'une semaine.
+    for d in config themes bin plugins lib keys; do
         [ -d "$src/$d" ] || continue
         # Fichier temporaire plutôt qu'une substitution de processus
         # (bash-only, et interdite par tests/unit/test_lib_posix.bats) ou
@@ -61,6 +65,9 @@ nivuus_step_write_version() {
 
 # Conservé comme façade : lib/deps.sh porte désormais la politique.
 nivuus_step_check_required_deps() { nivuus_deps_check_required "$@"; }
+
+# Conservé comme façade : lib/deps.sh porte désormais la politique.
+nivuus_step_check_verify_tools() { nivuus_deps_check_verify_tools "$@"; }
 
 # Change le shell de connexion -- une mutation système comme une autre,
 # donc journalisée AVANT d'agir. Ne retourne jamais autre chose que 0 :
