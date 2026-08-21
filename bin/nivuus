@@ -189,10 +189,14 @@ cmd_install() {
         # L'umask de l'administrateur ne décide de rien : un sudo en 077
         # produirait un arbre que personne ne peut lire.
         umask 022
-        NIVUUS_INSTALL_DIR_MODE=755;  export NIVUUS_INSTALL_DIR_MODE
-        NIVUUS_INSTALL_FILE_MODE=644; export NIVUUS_INSTALL_FILE_MODE
-        NIVUUS_BACKUP_DIR_MODE=700;   export NIVUUS_BACKUP_DIR_MODE
-        NIVUUS_MANIFEST_MODE=644;     export NIVUUS_MANIFEST_MODE
+        # Défauts imposés, pas hérités de l'umask. Ils restent surchargeables
+        # par l'environnement : c'est le crochet qui rend la sonde de fin
+        # d'installation prouvable (tests/integration/test_system_probe.bats
+        # pose un mode impossible pour vérifier que l'installation s'annule).
+        NIVUUS_INSTALL_DIR_MODE="${NIVUUS_INSTALL_DIR_MODE:-755}";  export NIVUUS_INSTALL_DIR_MODE
+        NIVUUS_INSTALL_FILE_MODE="${NIVUUS_INSTALL_FILE_MODE:-644}"; export NIVUUS_INSTALL_FILE_MODE
+        NIVUUS_BACKUP_DIR_MODE="${NIVUUS_BACKUP_DIR_MODE:-700}";   export NIVUUS_BACKUP_DIR_MODE
+        NIVUUS_MANIFEST_MODE="${NIVUUS_MANIFEST_MODE:-644}";     export NIVUUS_MANIFEST_MODE
         if nivuus_system_is_root; then
             NIVUUS_INSTALL_OWNER=root:root; export NIVUUS_INSTALL_OWNER
         fi
@@ -289,6 +293,12 @@ cmd_install() {
             return 1
         fi
         nivuus_system_restorecon "$prefix" "$(nivuus_system_bin)"
+        # « Une installation qui ne peut pas être prouvée est annulée. »
+        if [ -z "${NIVUUS_DRY_RUN:-}" ] && ! nivuus_system_probe_tree "$prefix"; then
+            log_error "Installation annulée : ce qui ne peut pas être prouvé n'est pas laissé en place."
+            nivuus_manifest_abort
+            return 1
+        fi
     elif ! nivuus_step_copy_tree "$NIVUUS_SRC_ROOT" "$prefix" \
         || ! nivuus_step_write_version "$NIVUUS_SRC_ROOT" "$prefix" \
         || ! nivuus_step_write_zshrc "$HOME/.zshrc" "$prefix" "$MINIMAL"; then

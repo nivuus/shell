@@ -85,8 +85,15 @@ teardown() { rm -rf "$TMP"; }
 }
 
 @test "lib/system.sh n'écrit rien : aucune mutation hors lib/manifest.sh" {
-    run grep -nE '^[[:space:]]*(mv|rm|cp|mkdir|chmod|chown|ln|touch|tee)[[:space:]]' "$ROOT/lib/system.sh"
+    # La SEULE exception tolérée est le répertoire jetable que la sonde
+    # crée elle-même par mktemp et détruit dans la foulée : ce n'est pas
+    # une mutation du système, c'est un bac à sable. Toute autre ligne qui
+    # muterait un chemin est interdite -- et le grep négatif ci-dessous est
+    # ce qui empêche d'élargir l'exception en douce.
+    run bash -c "grep -nE '^[[:space:]]*(mv|rm|cp|mkdir|chmod|chown|ln|touch|tee)[[:space:]]' '$ROOT/lib/system.sh' | grep -v '_probe_home'"
     [ "$status" -ne 0 ]
+    # Et le bac à sable est bien un mktemp, pas un chemin du système.
+    grep -q '_probe_home="\$(mktemp -d)"' "$ROOT/lib/system.sh"
 }
 
 @test "lib/system.sh reste POSIX (bashismes interdits)" {

@@ -108,6 +108,44 @@ nivuus_system_package_notice() {
     return 1
 }
 
+# Charge RÉELLEMENT l'arbre, depuis un environnement vierge et non
+# privilégié. Trois façons d'obtenir un arbre en place que les shells ne
+# peuvent pas charger -- umask restrictif sous sudo, SELinux sans
+# restorecon, /usr/local monté noexec -- et toutes les trois passent
+# inaperçues d'un installeur qui ne lit que des codes de retour.
+#
+# Root peut lire un arbre 0700 : sonder en root prouverait exactement ce
+# qu'on ne cherche pas. On sonde donc en tant que « nobody » quand il
+# existe (toutes les cibles de la matrice l'ont), et on le dit sinon.
+nivuus_system_probe_tree() {
+    _tree="$1"
+    command -v zsh >/dev/null 2>&1 || { log_warn "zsh absent : arbre non sondé."; return 0; }
+    _probe_home="$(mktemp -d)" || return 1
+    _as="${NIVUUS_SYSTEM_PROBE_USER-nobody}"
+    if [ -n "$_as" ] && ! id "$_as" >/dev/null 2>&1; then _as=''; fi
+    if [ -z "$_as" ] && nivuus_system_is_root; then
+        log_warn "Aucun compte non privilégié pour la sonde : elle est moins probante en root."
+    fi
+
+    _cmd="env -i HOME=$_probe_home PATH=$PATH TERM=dumb ZDOTDIR=$_probe_home \
+          zsh -ic 'source $_tree/.zshrc >/dev/null 2>&1; print -r -- \${NIVUUS_SHELL_LOADED:-none}'"
+    if [ -n "$_as" ] && nivuus_system_is_root; then
+        chmod 0755 "$_probe_home" 2>/dev/null || :
+        _out="$(su -s /bin/sh "$_as" -c "$_cmd" 2>/dev/null | tail -n1)"
+    else
+        _out="$(sh -c "$_cmd" 2>/dev/null | tail -n1)"
+    fi
+    rm -rf "$_probe_home"
+
+    if [ "$_out" = "1" ] || [ "$_out" = "true" ]; then
+        return 0
+    fi
+    log_error "L'arbre $_tree est en place mais AUCUN shell ne peut le charger."
+    log_error "Causes usuelles : umask restrictif sous sudo, SELinux sans restorecon,"
+    log_error "ou $NIVUUS_SYSTEM_PREFIX monté noexec. Vérifie :  ls -ld $_tree"
+    return 1
+}
+
 # SELinux : rétablit l'étiquette que la politique prescrit DÉJÀ pour ces
 # chemins. Ne crée ni ne supprime rien, donc rien à journaliser -- le
 # retrait du fichier emporte son étiquette. Son absence est signalée, jamais

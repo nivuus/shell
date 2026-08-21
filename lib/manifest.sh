@@ -405,8 +405,11 @@ _nivuus_place() {
         else
             cp -p "$src" "$dst" || return 1
         fi
-        _nivuus_enforce_modes "$dst" file
+        # L'empreinte AVANT l'imposition des modes : un mode restrictif
+        # rendrait le fichier illisible pour sha256sum, et le manifeste
+        # enregistrerait une empreinte vide -- donc impossible à rejouer.
         new_hash="$(nivuus_hash_file "$dst")"
+        _nivuus_enforce_modes "$dst" file
     fi
 
     if [ "$existed" -eq 1 ]; then
