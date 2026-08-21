@@ -86,7 +86,7 @@ chmod +x "$runner"
 echo "== Rejeu non interactif du scénario =="
 out="$(mktemp)"
 set +e
-docker run --rm \
+docker run --rm --hostname demo \
     -v "$ROOT:/opt/nivuus-src:ro" \
     -v "$work:/demo-replay:ro" \
     "$IMAGE" sh /demo-replay/run.sh > "$out" 2>&1

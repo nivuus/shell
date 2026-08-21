@@ -157,3 +157,112 @@ EOF
     run env NIVUUS_DEMO_SCENARIO="$tmp" "$DEMO/replay-check.sh"
     [ "$status" -ne 0 ]
 }
+
+sha() {
+    if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1
+    else shasum -a 256 "$1" | cut -d' ' -f1; fi
+}
+
+stamp_field() { sed -n "s/^$1=//p" "$ASSETS/demo.stamp" | head -n1; }
+
+# La démo est un artefact MANUEL : elle exige un vrai terminal et une
+# relecture humaine (spec § 3.3). Tant qu'aucun enregistrement n'a été
+# produit, les gardes 3 et 4 n'ont rien à comparer -- mais elles ne doivent
+# pas devenir muettes pour autant : le test « tout ou rien » ci-dessous
+# interdit l'état intermédiaire, et « le README n'affiche pas d'artefact
+# absent » interdit de promettre une image qui n'existe pas.
+demo_recorded() { [ -f "$ASSETS/demo.stamp" ]; }
+
+@test "la démo est enregistrée en entier, ou pas du tout" {
+    n=0
+    for f in "$ASSETS/demo.stamp" "$ASSETS/demo.cast"; do
+        [ -f "$f" ] && n=$((n + 1))
+    done
+    [ "$n" -eq 0 ] || [ "$n" -eq 2 ] \
+        || { echo "enregistrement à moitié présent : $n/2 fichiers"; false; }
+}
+
+@test "le README n'affiche jamais un artefact de démo absent" {
+    # Le pire état possible : une image cassée en tête de page d'accueil.
+    for a in demo.svg demo.gif; do
+        if grep -qF "docs/assets/$a" "$ROOT/README.md"; then
+            [ -f "$ASSETS/$a" ] || { echo "le README affiche $a, qui n'existe pas"; false; }
+        fi
+    done
+}
+
+@test "les trois outils de la démo existent et sont exécutables" {
+    for f in record.sh render.sh; do
+        [ -x "$DEMO/$f" ] || { echo "$f manquant ou non exécutable"; false; }
+        run sh -n "$DEMO/$f"
+        [ "$status" -eq 0 ]
+    done
+    [ -f "$DEMO/play.exp" ]
+}
+
+@test "GARDE 3: le tampon existe et porte ses champs" {
+    demo_recorded || skip "aucun enregistrement : tools/demo/record.sh"
+    [ -f "$ASSETS/demo.stamp" ]
+    for k in scenario_sha256 cast_sha256 artefact artefact_sha256 version format; do
+        [ -n "$(stamp_field "$k")" ] || { echo "champ absent du tampon : $k"; false; }
+    done
+}
+
+@test "GARDE 3: le tampon correspond au scénario présent" {
+    demo_recorded || skip "aucun enregistrement : tools/demo/record.sh"
+    # Modifier scenario.txt sans réenregistrer : le mode de défaillance
+    # n° 1 d'une démo versionnée.
+    [ "$(stamp_field scenario_sha256)" = "$(sha "$SCENARIO")" ] \
+        || { echo "scenario.txt a changé sans réenregistrement (tools/demo/record.sh)"; false; }
+}
+
+@test "GARDE 3: le tampon correspond au .cast présent" {
+    demo_recorded || skip "aucun enregistrement : tools/demo/record.sh"
+    [ -f "$ASSETS/demo.cast" ]
+    [ "$(stamp_field cast_sha256)" = "$(sha "$ASSETS/demo.cast")" ] \
+        || { echo "demo.cast ne correspond pas au tampon"; false; }
+}
+
+@test "GARDE 3: l'artefact affiché dérive bien du .cast présent" {
+    demo_recorded || skip "aucun enregistrement : tools/demo/record.sh"
+    a="$(stamp_field artefact)"
+    [ -f "$ROOT/$a" ]
+    [ "$(stamp_field artefact_sha256)" = "$(sha "$ROOT/$a")" ] \
+        || { echo "$a ne dérive pas du demo.cast présent (tools/demo/render.sh)"; false; }
+}
+
+@test "l'artefact respecte le budget de poids de son format" {
+    demo_recorded || skip "aucun enregistrement : tools/demo/record.sh"
+    # 250 Ko pour un SVG ; 2 Mo pour le repli GIF (spec § 3.1). Le budget
+    # suit le format déclaré, pas l'inverse : c'est ce qui rend le repli
+    # exécutable sans replanifier.
+    a="$(stamp_field artefact)"
+    n="$(wc -c < "$ROOT/$a")"
+    case "$(stamp_field format)" in
+        svg) max=256000 ;;
+        gif) max=2097152 ;;
+        *)   echo "format inconnu dans le tampon"; false ;;
+    esac
+    [ "$n" -le "$max" ] || { echo "$a pèse $n octets (budget: $max)"; false; }
+}
+
+@test "le .cast est du TEXTE, donc auditable en revue" {
+    demo_recorded || skip "aucun enregistrement : tools/demo/record.sh"
+    # C'est l'argument décisif contre le GIF comme source (spec § 3.1) : une
+    # PR qui modifie la démo doit être LISIBLE. Si le .cast devient binaire,
+    # cette propriété est perdue en silence.
+    run file "$ASSETS/demo.cast"
+    [[ "$output" == *"text"* ]] || [[ "$output" == *"JSON"* ]]
+    head -n1 "$ASSETS/demo.cast" | grep -q '"version"'
+}
+
+@test "aucune clé ni chemin personnel ne s'est glissé dans le .cast" {
+    demo_recorded || skip "aucun enregistrement : tools/demo/record.sh"
+    # Le .cast est du texte : on peut le fouiller, et donc on le fouille.
+    run grep -nE 'sk-[A-Za-z0-9]{16}|AIza[A-Za-z0-9_-]{16}|/home/[a-z]+' "$ASSETS/demo.cast"
+    if [ "$status" -eq 0 ]; then
+        # Seul /home/demo est permis : c'est le HOME du conteneur de tournage.
+        illegitimes="$(printf '%s\n' "$output" | grep -vE '/home/demo(/|[^a-z]|$)' || true)"
+        [ -z "$illegitimes" ] || { echo "donnée suspecte dans le cast : $illegitimes"; false; }
+    fi
+}

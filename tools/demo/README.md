@@ -69,3 +69,39 @@ Corriger cela demande de toucher `config/`, ce que ce chantier s'interdit
 (spec § 6). En attendant, `replay-check.sh` rejoue avec `TERM=dumb`, ce qui
 désactive le module de titre par son propre mécanisme. **Conséquence assumée :
 ce garde ne verra pas une régression de ce défaut-là.**
+
+## Pourquoi `docs/assets/demo.cast` n'est pas encore là
+
+L'outillage est complet et exercé (`record.sh` produit bien un `.cast` dans le
+conteneur), mais **aucun enregistrement publiable n'a été committé**. Trois
+obstacles, tous constatés, aucun deviné :
+
+1. **Pas de vrai terminal.** L'enregistrement a été tenté sans TTY sur l'hôte :
+   asciinema écrit alors tous les événements avec le même horodatage. Le `.cast`
+   est syntaxiquement valide et sémantiquement inutile — rendu en SVG, il
+   n'anime rien. Une démo doit être tournée depuis un terminal.
+2. **Le one-liner du scénario installe la MASTER PUBLIÉE, pas cet arbre.**
+   Celle-ci commence encore par `set -euo pipefail` et échoue donc sous `sh`
+   (`sh: 5: set: Illegal option -o pipefail`) : le `install.sh` POSIX vit dans
+   ce dépôt, pas encore dans la release. Tourner la démo aujourd'hui filmerait
+   cet échec. Elle est donc à tourner **après** la publication d'une master qui
+   contient l'installeur POSIX.
+3. **La relecture humaine est obligatoire** (spec § 3.3) : rythme, lisibilité,
+   absence de bruit à l'écran ne sont pas testables. Committer un artefact de
+   vitrine qu'aucun humain n'a regardé serait exactement la faute que ce
+   chantier ferme.
+
+En attendant, l'état du dépôt est **cohérent et non menteur** :
+
+- `tests/e2e/test_demo_scenario.bats` impose « tout ou rien » : `demo.stamp` et
+  `demo.cast` sont présents tous les deux, ou aucun des deux ;
+- un test interdit au README d'afficher un artefact absent, donc aucune image
+  cassée ne peut atteindre la page d'accueil ;
+- les gardes 3 et 4 se déclarent `skip` tant qu'il n'y a rien à comparer, et
+  redeviennent bloquantes à la seconde où un enregistrement est committé ;
+- la garde 2, elle, **tourne déjà** : le flux de la démo est vérifié en
+  conteneur, contre cet arbre, à chaque nightly.
+
+Pour finir le travail : publier une release contenant l'installeur POSIX, puis,
+depuis un terminal, `tools/demo/record.sh` && `tools/demo/render.sh`, relire, et
+insérer l'image en tête du README avec sa légende (tâche 4.5 du plan).

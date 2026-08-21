@@ -1,0 +1,33 @@
+#!/usr/bin/expect -f
+# Pilote de frappe de la démo : lit scenario.txt et le joue dans un zsh
+# interactif. La frappe caractère par caractère n'est pas de la coquetterie :
+# un .cast où tout apparaît d'un coup est illisible à la lecture.
+set scenario [lindex $argv 0]
+set timeout -1
+log_user 1
+
+spawn zsh -i
+# Le prompt est suivi de séquences de contrôle (zle, bracketed paste) : on ne
+# peut pas l'ancrer en fin de tampon. On attend le marqueur, puis on laisse le
+# shell finir de s'installer.
+expect -re {[%$#>] }
+sleep 1
+
+set f [open $scenario r]
+while {[gets $f line] >= 0} {
+    if {[string match "#*" $line] || [string trim $line] eq ""} { continue }
+    set parts [split $line "\t"]
+    set delay [lindex $parts 0]
+    set kind  [lindex $parts 1]
+    set cmd   [lindex $parts 2]
+
+    foreach ch [split $cmd ""] {
+        send -- $ch
+        sleep 0.035
+    }
+    if {$kind ne "type"} { send -- "\r" }
+    sleep [expr {double($delay) / 1000.0}]
+}
+close $f
+send -- "exit\r"
+expect eof

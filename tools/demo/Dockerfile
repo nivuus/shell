@@ -28,6 +28,9 @@ RUN useradd -m -s /bin/zsh demo && mkdir -p /home/demo/work \
 # prompt. Sans dépôt, le segment git ne s'affiche pas et le plan ne prouve
 # rien. Nom d'utilisateur git fixe, pour la même raison que le nom d'hôte.
 USER demo
+# Un ~/.zshrc vide : c'est l'état d'un poste AVANT Nivuus. Sans lui, zsh lance
+# zsh-newuser-install au premier démarrage et le tournage s'arrête sur un menu.
+RUN : > /home/demo/.zshrc
 RUN git config --global user.email demo@example.invalid \
     && git config --global user.name  demo \
     && git config --global init.defaultBranch main \
