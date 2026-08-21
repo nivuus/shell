@@ -88,7 +88,163 @@ doit se faire **depuis une copie**, puis être renommée en
 `SHA256SUMS.sshsig`. Ne jamais laisser les deux commandes viser le même
 répertoire de travail sans renommage explicite.
 
-## Rotation, révocation et secrets
+## Mise en service du trousseau réel — PROCÉDURE HUMAINE, À FAIRE À LA MAIN
 
-Voir la section « Procédure de mise en service du trousseau » ci-dessous
-(à compléter par le mainteneur lors de la génération du trousseau réel).
+> **Cette section n'a pas été exécutée, et ne doit pas l'être par un agent.**
+> Une clé privée générée par un agent est une clé qui a existé dans un
+> environnement qui n'est pas celui du mainteneur. Tout le reste du chantier
+> a été construit pour que cette étape se réduise à du copier-coller.
+>
+> **Rien n'est cassé tant qu'elle n'est pas faite** : `keys/` ne contient
+> aucun `.pem`, les tests qui l'exigent se marquent `skip` d'eux-mêmes, et
+> le job de release **refuse de publier** plutôt que de sortir une release
+> non signée. Le skip et le refus se lèvent seuls le jour où les `.pem`
+> sont committées — il n'y a aucun garde-fou à retirer à la main, donc
+> aucun garde-fou à oublier.
+
+### État actuel
+
+| Élément | État |
+|---|---|
+| `keys/revoked`, `keys/README.md`, `keys/.gitignore` | committés |
+| `keys/nivuus-release-2026.pem`, `keys/nivuus-release-2027.pem` | **manquants — étape 4 ci-dessous** |
+| `keys/allowed_signers` | **manquant — étape 4 ci-dessous** |
+| Environnement GitHub `release` et ses deux secrets | **manquants — étape 3 ci-dessous** |
+| Empreinte du jeu publiée dans `SECURITY.md` | **à coller — étape 5 ci-dessous** |
+
+### Étape 1 — Générer les deux jeux, hors CI
+
+```bash
+# Sur la machine du mainteneur, JAMAIS dans un runner : une clé générée
+# en CI est une clé qui a existé dans un journal.
+umask 077
+mkdir -p ~/nivuus-signing && cd ~/nivuus-signing
+
+for year in 2026 2027; do
+    openssl ecparam -name prime256v1 -genkey -noout -out "priv-$year.pem"
+    openssl pkcs8 -topk8 -nocrypt -in "priv-$year.pem" -out "priv-$year.pk8.pem"
+    openssl ec -in "priv-$year.pem" -pubout -out "nivuus-release-$year.pem"
+    ssh-keygen -q -t ed25519 -N '' -f "id-$year" -C "nivuus-release-$year"
+done
+```
+
+Pas de passphrase : un runner ne peut pas en saisir une. **La protection
+n'est pas la passphrase, c'est le périmètre de lecture de l'environnement
+`release`.**
+
+Le jeu de succession **2027** est généré **maintenant**, en même temps que
+2026, et embarqué dès la première release signée. Sans successeur
+pré-distribué, une perte de clé est un événement d'extinction pour le canal
+de mise à jour : les clients n'accepteraient plus jamais rien.
+
+### Étape 2 — Sauvegarder hors ligne, puis VÉRIFIER la sauvegarde
+
+Une sauvegarde jamais testée n'est pas une sauvegarde.
+
+```bash
+# 1. Déposer priv-2026.pk8.pem, priv-2027.pk8.pem, id-2026, id-2027 dans
+#    le gestionnaire de mots de passe ET sur un support froid.
+# 2. Restaurer depuis la sauvegarde dans un répertoire neuf.
+# 3. Signer un fichier témoin avec la copie RESTAURÉE.
+echo "témoin de sauvegarde $(date)" > /tmp/witness
+openssl dgst -sha256 -sign /chemin/restauré/priv-2026.pk8.pem -out /tmp/witness.sig /tmp/witness
+openssl dgst -sha256 -verify ~/nivuus-signing/nivuus-release-2026.pem \
+    -signature /tmp/witness.sig /tmp/witness
+# Doit imprimer « Verified OK ». Sinon : la sauvegarde n'existe pas.
+```
+
+### Étape 3 — Poser les secrets dans l'environnement protégé
+
+```bash
+# L'environnement, PAS les secrets de dépôt : c'est toute la différence.
+# Un attaquant qui obtient contents: write, ou qui injecte une Action
+# tierce dans un autre job, ne peut pas lire un secret d'environnement.
+gh api -X PUT repos/maximeallanic/nivuus-shell/environments/release
+
+gh secret set NIVUUS_SIGNING_KEY_ECDSA --env release < ~/nivuus-signing/priv-2026.pk8.pem
+gh secret set NIVUUS_SIGNING_KEY_SSH   --env release < ~/nivuus-signing/id-2026
+```
+
+Les **noms** des secrets sont ceux que `.github/workflows/release.yml`
+attend déjà : `NIVUUS_SIGNING_KEY_ECDSA` et `NIVUUS_SIGNING_KEY_SSH`. Ne
+pas activer de règle « réviseur requis » : décision actée n° 1, signature
+automatique. L'environnement sert au cloisonnement ; l'approbation manuelle
+pourra être activée plus tard dans les réglages GitHub, sans toucher au
+code.
+
+### Étape 4 — Committer le matériel PUBLIC (et lui seul)
+
+```bash
+cd /chemin/du/dépôt
+cp ~/nivuus-signing/nivuus-release-2026.pem keys/
+cp ~/nivuus-signing/nivuus-release-2027.pem keys/
+{
+  printf 'nivuus-release %s\n' "$(cat ~/nivuus-signing/id-2026.pub)"
+  printf 'nivuus-release %s\n' "$(cat ~/nivuus-signing/id-2027.pub)"
+} > keys/allowed_signers
+
+# Le garde-fou doit rester vert : il interdit toute clé PRIVÉE dans le dépôt.
+bats tests/unit/test_keys_repo.bats
+
+# Les suites qui étaient « skip » deviennent actives toutes seules :
+bats tests/e2e/test_verify_key.bats tests/e2e/test_install_keys.bats
+```
+
+**Ne jamais committer** : `priv-*.pem`, `priv-*.pk8.pem`, `id-2026`,
+`id-2027` (les fichiers SANS `.pub`). `keys/.gitignore` en attrape déjà la
+plupart ; le test `test_keys_repo.bats` est la vérification réelle.
+
+### Étape 5 — Publier l'empreinte du jeu
+
+```bash
+source lib/log.sh; source lib/manifest.sh; source lib/keys.sh
+nivuus_keyset_fingerprint keys
+```
+
+Coller cette empreinte dans `SECURITY.md`, sous « Empreinte du jeu de
+clés », à la place du gabarit. C'est elle que les utilisateurs comparent
+avec `./install.sh --verify-key <empreinte>`.
+
+### Étape 6 — Committer
+
+```bash
+git add keys SECURITY.md
+git commit -m "feat(keys): add the 2026 release keyset and its pre-distributed 2027 successor"
+```
+
+### Étape 7 — Première release signée, puis canari
+
+1. Lancer le workflow `Release`. L'étape « Verify before publishing »
+   utilise les clés **publiques committées**, jamais celles dérivées du
+   secret : si l'étape 3 et l'étape 4 ne portent pas sur le même jeu, la
+   release **ne sort pas**. C'est la panne opérationnelle la plus probable
+   du chantier, et elle est bloquée là.
+2. `gh workflow run verify-latest-release.yml && gh run watch`. Le canari
+   est **rouge tant qu'aucune release signée n'existe** — c'est correct.
+   Il doit passer au vert avec la première release signée.
+3. **Seulement ensuite**, publier une release contenant le refus dur côté
+   client. Voir « Contrainte de publication » ci-dessous.
+
+## Contrainte de publication (à ne pas contourner)
+
+Le client de cette branche **refuse** une release dont la signature n'est
+pas valide. Tant qu'aucune release signée n'existe :
+
+- **Les utilisateurs déjà installés ne risquent rien.** Leur client est
+  l'ancien : il ne connaît ni `.sig` ni `.sshsig`, il continue de vérifier
+  l'empreinte SHA256 comme avant. Rien de ce chantier ne peut leur refuser
+  une mise à jour, parce que rien de ce chantier ne tourne chez eux.
+- **Aucune release ne peut sortir non signée.** Le job de release échoue en
+  l'absence de `keys/*.pem` (garde explicite) et échoue à la vérification
+  avant publication si les clés ne correspondent pas. Fail-closed : on ne
+  publie pas, plutôt que de publier quelque chose que les clients
+  refuseraient.
+- **La règle qui reste à la charge d'un humain** est la dernière :
+  ne pas publier de release embarquant le refus dur (Task 7) tant que la
+  première release signée n'a pas été produite et que le canari n'est pas
+  vert. Le merge n'est pas contraint ; la *publication* l'est.
+
+## Rotation annuelle
+
+Voir « Répétition en blanc de la rotation » plus bas — la procédure y est
+consignée telle qu'elle a été réellement exécutée.
