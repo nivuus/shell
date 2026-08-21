@@ -15,6 +15,11 @@
 : "${NIVUUS_SYSTEM_STATE_DIR:=/var/lib/nivuus}"
 : "${NIVUUS_ETC_DIR:=/etc}"
 
+# Séparateur du scan de comptes. lib/system.sh peut être sourcé sans
+# lib/manifest.sh (bin/healthcheck le fait) : on ne dépend pas de son
+# NIVUUS_TAB.
+NIVUUS_TAB_SYS="$(printf '\t')"
+
 # Le préfixe porte la RACINE FHS, pas l'arbre : les trois chemins qui en
 # dérivent doivent bouger ensemble. Un test qui déplacerait l'arbre sans
 # déplacer le lien prouverait une configuration qui n'existe pas.
@@ -212,6 +217,22 @@ nivuus_system_manifest_has_home() {
         NR > 1 && h != "" && h != "/" && index($2, h "/") == 1 { found = 1 }
         END { exit !found }
     ' "$_m"
+}
+
+# La SEULE lecture d'autrui du mode système. Opt-in, en lecture seule,
+# jamais par défaut -- et pas seulement par principe : un stat sur un $HOME
+# NFS déclenche l'automonteur (montages en rafale, timeouts, entrées de
+# journal). Lire n'est pas neutre sur un serveur.
+nivuus_system_scan_users() {
+    log_warn "Lecture des \$HOME des comptes locaux. Sur un parc NFS, cela déclenche"
+    log_warn "l'automonteur : c'est pour cela que ce n'est jamais automatique."
+    awk -F: '$3 >= 1000 && $3 < 65534 && $7 !~ /(nologin|false)$/ { print $1 "\t" $6 }' \
+        "${NIVUUS_PASSWD_FILE:-/etc/passwd}" |
+    while IFS="$NIVUUS_TAB_SYS" read -r _u _h; do
+        [ -r "$_h/.zshrc" ] || continue
+        grep -qF '>>> nivuus shell >>>' "$_h/.zshrc" 2>/dev/null && printf '%s\n' "  $_u"
+    done
+    return 0
 }
 
 # Charge RÉELLEMENT l'arbre, depuis un environnement vierge et non

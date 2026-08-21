@@ -20,6 +20,18 @@ CROSS="${RED}✗${NC}"
 WARN="${YELLOW}⚠${NC}"
 INFO="${BLUE}ℹ${NC}"
 
+# Options. « doctor » DIAGNOSTIQUE : il ne convertit ni ne répare rien, et
+# --scan-users est la seule lecture d'autrui -- opt-in, en lecture seule.
+DOCTOR_SCAN_USERS=''
+DOCTOR_SYSTEM=''
+for arg in "$@"; do
+    case "$arg" in
+        --scan-users) DOCTOR_SCAN_USERS=1 ;;
+        --system)     DOCTOR_SYSTEM=1 ;;
+        *) : ;;   # doctor ne refuse rien : il diagnostique
+    esac
+done
+
 echo -e "${BLUE}═══════════════════════════════════════════${NC}"
 echo -e "${BLUE}  Nivuus Shell - Health Check${NC}"
 echo -e "${BLUE}═══════════════════════════════════════════${NC}"
@@ -105,6 +117,12 @@ if [[ -r "$NIVUUS_ORIGIN_LIB" ]]; then
     . "$NIVUUS_ORIGIN_LIB"
     origin="$(nivuus_origin "$NIVUUS_DIR")"
     echo "  Origine: $origin"
+    if [[ "$origin" == "system" ]]; then
+        echo "  Arbre partagé: $NIVUUS_DIR"
+        echo "  Version: $(nivuus_origin_field "$NIVUUS_DIR" version 2>/dev/null || echo inconnue)"
+        echo -e "  ${INFO} Installation pour la machine : les shells ne se mettent jamais à jour seuls."
+        echo "     Mise à jour, par l'administrateur :  sudo nivuus update"
+    fi
     if [[ "$origin" == "package" ]]; then
         echo "  Canal: $(nivuus_origin_channel "$NIVUUS_DIR")"
         echo "  Version du paquet: $(nivuus_origin_field "$NIVUUS_DIR" version 2>/dev/null || echo inconnue)"
@@ -154,6 +172,75 @@ if [[ -f "$NIVUUS_DIR/lib/migrate.sh" ]]; then
         echo "  Correction : nivuus migrate"
         echo ""
     fi
+fi
+
+# =============================================================================
+# Domaine root : arbre partagé, double installation, héritage, conffile
+# =============================================================================
+# Contrepartie des trois silences délibérés du mode système : le bloc gardé
+# masque un arbre absent, /home n'est jamais parcouru, et le rc global de la
+# distribution est un conffile. Chacun se paie ici, à la demande.
+NIVUUS_SYSTEM_LIB="$NIVUUS_DIR/lib/system.sh"
+[[ -r "$NIVUUS_SYSTEM_LIB" ]] || NIVUUS_SYSTEM_LIB="$(dirname "$0")/../lib/system.sh"
+NIVUUS_LOG_LIB="$(dirname "$0")/../lib/log.sh"
+if [[ -r "$NIVUUS_SYSTEM_LIB" ]]; then
+    # shellcheck source=/dev/null
+    [[ -r "$NIVUUS_LOG_LIB" ]] && . "$NIVUUS_LOG_LIB"
+    [[ -r "$(dirname "$0")/../lib/detect.sh" ]] && . "$(dirname "$0")/../lib/detect.sh"
+    # shellcheck source=/dev/null
+    . "$NIVUUS_SYSTEM_LIB"
+
+    system_tree="$(nivuus_system_tree)"
+    printed_system_header=''
+    _system_header() {
+        [[ -n "$printed_system_header" ]] && return 0
+        echo -e "${BLUE}Installation pour la machine${NC}"
+        echo "─────────────────────────────────────────────"
+        printed_system_header=1
+    }
+
+    # Double installation : on NOMME les deux et on dit lequel gagne. On ne
+    # convertit pas -- convertir voudrait dire supprimer un arbre pour en
+    # poser un autre, et le manifeste d'origine deviendrait faux à mi-chemin.
+    if [[ -r "$system_tree/.zshrc" ]]; then
+        _system_header
+        echo "  Arbre système : $system_tree"
+        if [[ "$(cd "$NIVUUS_DIR" 2>/dev/null && pwd)" != "$(cd "$system_tree" 2>/dev/null && pwd)" ]]; then
+            echo "  Aussi présent : $NIVUUS_DIR"
+            echo -e "  ${INFO} Actif pour toi : $NIVUUS_DIR  (c'est ton bloc ~/.zshrc qui décide)"
+            echo "     Pour utiliser l'arbre système à la place :  nivuus uninstall && nivuus enable"
+        else
+            echo -e "  ${INFO} Actif pour toi : $system_tree"
+        fi
+    fi
+
+    # Conffile de la distribution : pour que la question « conffile modifié »
+    # ne soit pas une surprise dans six mois.
+    system_rc="$(nivuus_system_global_rc)"
+    if [[ -r "$system_rc" ]] && grep -qF "$(nivuus_system_dropin)" "$system_rc" 2>/dev/null; then
+        _system_header
+        echo -e "  ${INFO} Activation machine active : une ligne a été ajoutée à $system_rc"
+        echo "     Sur Debian et Ubuntu, ce fichier est un conffile dpkg : une mise à jour de"
+        echo "     zsh-common posera peut-être la question « conffile modifié ». C'est normal."
+        echo "     Pour la retirer :  sudo nivuus disable --all"
+    fi
+
+    # Arbre hérité de l'ancien --system : nommé, JAMAIS supprimé. On ne
+    # restaure pas ce qu'on n'a pas sauvegardé.
+    if legacy_tree="$(nivuus_system_legacy_tree 2>/dev/null)"; then
+        _system_header
+        echo -e "  ${WARN} Installation héritée de l'ancien --system : $legacy_tree"
+        echo "     Elle n'a pas de manifeste : Nivuus ne peut pas la retirer sans risque."
+        echo "     Procédure manuelle et retour en arrière : voir doc/INSTALL.md."
+    fi
+
+    if [[ -n "$DOCTOR_SCAN_USERS" ]]; then
+        _system_header
+        echo "  Comptes dont le ~/.zshrc porte le bloc Nivuus :"
+        nivuus_system_scan_users
+    fi
+
+    [[ -n "$printed_system_header" ]] && echo ""
 fi
 
 # =============================================================================

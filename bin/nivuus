@@ -58,7 +58,7 @@ Usage :
   nivuus uninstall [--dry-run] [--yes] [--purge] [--system]
   nivuus migrate   [--dry-run] [--yes] [--prefix DIR]
   nivuus update
-  nivuus doctor
+  nivuus doctor    [--system] [--scan-users]
   nivuus help
 
 Options :
@@ -91,6 +91,9 @@ Options :
   migrate     Met de côté le dépôt git que l'installeur de la v3.0.0
               laissait dans ~/.nivuus-shell et qui bloque les mises à jour.
               Le dépôt est DÉPLACÉ, jamais supprimé, et le chemin est affiché.
+  --scan-users  (doctor) liste les comptes locaux dont le ~/.zshrc porte le
+                bloc Nivuus. En LECTURE SEULE, et jamais automatique : un
+                stat sur un $HOME NFS déclenche l'automonteur.
   --purge     (uninstall) supprime aussi l'état Nivuus (manifeste, sauvegardes).
               Ne supprime que ce que Nivuus a créé : ~/.zsh_local (si présent
               mais non créé par Nivuus) et ~/.zsh_history ne sont JAMAIS supprimés.
@@ -956,7 +959,7 @@ main() {
         uninstall) cmd_uninstall "$@" ;;
         migrate)   cmd_migrate "$@" ;;
         update)    cmd_update "$@" ;;
-        doctor)    exec "$NIVUUS_SRC_ROOT/bin/healthcheck" ;;
+        doctor)    exec "$NIVUUS_SRC_ROOT/bin/healthcheck" "$@" ;;
         help|--help|-h) usage ;;
         *) log_error "Sous-commande inconnue : $cmd"; usage >&2; return 2 ;;
     esac
