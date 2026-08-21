@@ -18,8 +18,9 @@ curl -fsSL https://raw.githubusercontent.com/maximeallanic/nivuus-shell/master/i
 
 It verifies a SHA-256 checksum, writes a delimited block into your `~/.zshrc`,
 needs no `sudo` and no `git`. Add `--dry-run` to see everything it would touch
-without touching it. What this **cannot** protect you from is documented, in
-plain terms, in [SECURITY.md](SECURITY.md#first-install).
+without touching it. What this **cannot** protect you from — the
+first install itself — is documented, in plain terms, in
+[SECURITY.md](SECURITY.md#first-install).
 
 ## Uninstall
 
