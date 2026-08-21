@@ -209,3 +209,39 @@ test_workflow_files() {
     grep -q "v3.0.0" "$ROOT/tests/helpers/legacy.bash"
 }
 
+@test "release.yml runs the full matrix, not a hand-rolled subset" {
+    grep -q "uses: ./.github/workflows/matrix.yml" "$WF/release.yml"
+}
+
+@test "release.yml no longer interprets performance output" {
+    run grep -n "Validate startup time requirement" "$WF/release.yml"
+    [ "$status" -ne 0 ]
+}
+
+@test "the release job still depends on the tests passing" {
+    grep -q "needs: test" "$WF/release.yml"
+}
+
+@test "a failed nightly matrix opens an issue" {
+    grep -q "github.event_name == 'schedule'" "$WF/matrix.yml"
+    grep -q "issues: write" "$WF/matrix.yml"
+}
+
+@test "the required checks list is declared and matches the job names" {
+    list="$ROOT/tests/ci/required-checks.sh"
+    [ -f "$list" ]
+    for job in "Unit + integration" "Installation E2E (Ubuntu)" "Installation E2E (macOS)" \
+               "Reversibility (Ubuntu)" "Reversibility (macOS)" "Reversibility (Alpine / musl)"; do
+        grep -qF "$job" "$list" || { echo "check requis manquant: $job"; false; }
+        grep -qF "$job" "$WF/tests.yml" "$WF/uninstall-verified.yml" \
+            || { echo "aucun job ne s'appelle: $job"; false; }
+    done
+}
+
+@test "every tests/ci script is POSIX sh — they run in Alpine before bash exists" {
+    for f in "$ROOT"/tests/ci/*.sh; do
+        run sh -n "$f"
+        [ "$status" -eq 0 ] || { echo "$f n'est pas du sh POSIX: $output"; false; }
+    done
+}
+

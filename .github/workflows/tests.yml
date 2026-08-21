@@ -217,9 +217,9 @@ jobs:
             zsh -n "$file"
           done
 
-      - name: POSIX sh syntax (lib/ and tests/ci/ run under dash and busybox)
+      - name: POSIX sh syntax (lib/, tests/ci/ and install.sh run under dash and busybox)
         run: |
-          for file in lib/*.sh tests/ci/*.sh; do
+          for file in lib/*.sh tests/ci/*.sh install.sh; do
             sh -n "$file"
           done
 
