@@ -532,6 +532,13 @@ cmd_enable() {
 
     nivuus_manifest_begin user "$prefix"
     nivuus_manifest_inherit
+    # Exactement la même journalisation qu'à l'installation, et pour la même
+    # raison : ~/.cache n'est créé par aucune étape, mais par le shell une
+    # fois la session démarrée. Sans cette ligne, une activation sur un arbre
+    # partagé (paquet ou --system) laisse un ~/.cache derrière elle qu'aucun
+    # « disable --purge » ne peut réclamer -- l'empreinte de réversibilité du
+    # domaine utilisateur le voit, et c'est ainsi qu'on l'a trouvé.
+    [ -d "$HOME/.cache" ] || nivuus_manifest_record MKDIR "$HOME/.cache" '-' '-'
     if ! nivuus_step_write_zshrc "$HOME/.zshrc" "$prefix" "$MINIMAL"; then
         log_error "Activation interrompue."
         nivuus_manifest_abort

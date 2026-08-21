@@ -142,6 +142,19 @@ nivuus_system_probe_tree() {
     _probe_home="$(mktemp -d)" || return 1
     _as="${NIVUUS_SYSTEM_PROBE_USER-nobody}"
     if [ -n "$_as" ] && ! id "$_as" >/dev/null 2>&1; then _as=''; fi
+    # « nobody » EXISTE partout, mais il n'est pas partout UTILISABLE : sur
+    # Arch Linux son compte est expiré et su refuse (« User account has
+    # expired »). Mesuré dans un conteneur archlinux:latest, pas supposé.
+    # Sans cette vérification, la sonde échouait et ANNULAIT une
+    # installation parfaitement saine -- le pire des faux négatifs, puisque
+    # le garde-fou censé protéger l'administrateur lui interdisait
+    # d'installer.
+    if [ -n "$_as" ] && nivuus_system_is_root \
+        && ! su -s /bin/sh "$_as" -c 'exit 0' >/dev/null 2>&1; then
+        log_warn "Le compte de sonde « $_as » est inutilisable ici (expiré ou verrouillé) :"
+        log_warn "la sonde tourne en root, elle est donc moins probante."
+        _as=''
+    fi
     if [ -z "$_as" ] && nivuus_system_is_root; then
         log_warn "Aucun compte non privilégié pour la sonde : elle est moins probante en root."
     fi
