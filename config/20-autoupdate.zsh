@@ -301,6 +301,46 @@ _nivuus_verify_signature() {
     return 1
 }
 
+# Base des URL d'assets. Surchargeable UNIQUEMENT pour les tests e2e,
+# qui servent une fausse release via file:// (curl sait le faire, ce qui
+# évite un serveur HTTP dans la suite). Jamais documentée pour les
+# utilisateurs.
+: ${NIVUUS_RELEASE_BASE_URL:=https://github.com/$NIVUUS_GITHUB_REPO/releases/download}
+
+# Décide si une release téléchargée est acceptable. Fonction pure : aucun
+# réseau, aucune écriture. Toute la politique de sécurité tient ici.
+#
+# Ordre non négociable : SIGNATURE d'abord, EMPREINTE ensuite. Vérifier
+# une empreinte contre un SHA256SUMS non authentifié ne démontre rien.
+#
+# Retour : 0 acceptable / 1 refus / 2 aucun outil de vérification
+_nivuus_verify_release() {
+    local temp_dir=$1 version=$2 keys_dir=${3:-$NIVUUS_SHELL_DIR/keys}
+    local archive="$temp_dir/nivuus-shell.tar.gz"
+    local sums="$temp_dir/SHA256SUMS"
+
+    _nivuus_verify_signature "$sums" "$temp_dir" "$keys_dir"
+    local rc=$?
+    if (( rc != 0 )); then
+        return $rc
+    fi
+
+    # NIVUUS_VERIFY_CHECKSUMS ne porte QUE sur l'étape ci-dessous. Elle ne
+    # peut pas, et ne doit jamais pouvoir, désactiver la signature.
+    [[ "$NIVUUS_VERIFY_CHECKSUMS" == "true" ]] || return 0
+
+    # Le nom versionné fait partie du contenu signé : c'est ce qui bloque
+    # le rejeu inter-versions. Ne JAMAIS remplacer ce grep par head -n1.
+    local expected_sum
+    expected_sum=$(grep "nivuus-shell-v${version}.tar.gz" "$sums" | awk '{print $1}')
+    [[ -n "$expected_sum" ]] || return 1
+
+    local actual_sum
+    actual_sum=$(_nivuus_sha256_of "$archive") || return 2
+    [[ "$expected_sum" == "$actual_sum" ]] || return 1
+    return 0
+}
+
 # Download and verify release archive
 _nivuus_download_release() {
     local version=$1
