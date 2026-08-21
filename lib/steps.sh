@@ -32,7 +32,7 @@ nivuus_step_copy_tree() {
 }
 
 nivuus_step_write_zshrc() {
-    local target="$1" install_dir="$2" merged
+    local target="$1" install_dir="$2" minimal="${3:-}" merged
 
     local fw
     fw="$(nivuus_zshrc_detect_framework "$target")"
@@ -41,7 +41,7 @@ nivuus_step_write_zshrc() {
         log_warn "Deux prompts risquent de se marcher dessus. Nivuus n'y touche pas."
     fi
 
-    merged="$(nivuus_zshrc_merge "$target" "$install_dir")" || return 1
+    merged="$(nivuus_zshrc_merge "$target" "$install_dir" "$minimal")" || return 1
     printf '%s\n' "$merged" | nivuus_write_file "$target"
 }
 

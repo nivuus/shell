@@ -176,3 +176,10 @@ teardown() { rm -rf "$TMP"; }
     run nivuus_zshrc_detect_framework "$TMP/.zshrc"
     [ "$output" = "" ]
 }
+
+@test "the block carries NIVUUS_MINIMAL only when asked" {
+    run bash -c "source '$LIB/zshrc.sh'; nivuus_zshrc_block /opt/nivuus"
+    [[ "$output" != *"NIVUUS_MINIMAL"* ]]
+    run bash -c "source '$LIB/zshrc.sh'; nivuus_zshrc_block /opt/nivuus 1"
+    [[ "$output" == *"export NIVUUS_MINIMAL=1"* ]]
+}

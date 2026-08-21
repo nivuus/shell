@@ -20,15 +20,15 @@ nivuus_zshrc_state() {
 }
 
 nivuus_zshrc_block() {
-    local install_dir="$1"
-    cat <<EOF
-$NIVUUS_BLOCK_BEGIN
-# Généré par Nivuus. Ne pas éditer : ce bloc est réécrit à chaque mise à jour.
-# Pour tes personnalisations, crée ~/.zsh_local (il n'existe pas par défaut)
-export NIVUUS_SHELL_DIR="$install_dir"
-source "\$NIVUUS_SHELL_DIR/.zshrc"
-$NIVUUS_BLOCK_END
-EOF
+    local install_dir="$1" minimal="${2:-}"
+    printf '%s\n' "$NIVUUS_BLOCK_BEGIN"
+    printf '%s\n' '# Généré par Nivuus. Ne pas éditer : ce bloc est réécrit à chaque mise à jour.'
+    printf '%s\n' "# Pour tes personnalisations, crée ~/.zsh_local (il n'existe pas par défaut)"
+    printf 'export NIVUUS_SHELL_DIR="%s"\n' "$install_dir"
+    [ -n "$minimal" ] && printf '%s\n' 'export NIVUUS_MINIMAL=1'
+    printf '%s\n' 'source "$NIVUUS_SHELL_DIR/.zshrc"'
+    printf '%s\n' "$NIVUUS_BLOCK_END"
+    return 0
 }
 
 nivuus_zshrc_strip() {
@@ -50,7 +50,7 @@ nivuus_zshrc_strip() {
 }
 
 nivuus_zshrc_merge() {
-    local file="$1" install_dir="$2" state
+    local file="$1" install_dir="$2" minimal="${3:-}" state
     state="$(nivuus_zshrc_state "$file")"
     case "$state" in
         corrupt)
@@ -59,15 +59,15 @@ nivuus_zshrc_merge() {
             return 1
             ;;
         missing)
-            nivuus_zshrc_block "$install_dir"
+            nivuus_zshrc_block "$install_dir" "$minimal"
             ;;
         present)
             # Remplace le bloc, conserve le reste tel quel.
-            nivuus_zshrc_block "$install_dir"
+            nivuus_zshrc_block "$install_dir" "$minimal"
             nivuus_zshrc_strip "$file"
             ;;
         absent)
-            nivuus_zshrc_block "$install_dir"
+            nivuus_zshrc_block "$install_dir" "$minimal"
             cat "$file"
             # Garantit une newline finale si le fichier n'en avait pas.
             [ -n "$(tail -c 1 "$file")" ] && printf '\n' || true

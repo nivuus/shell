@@ -12,6 +12,24 @@
 setopt PROMPT_SUBST
 
 # =============================================================================
+# Prompt glyphs
+# =============================================================================
+# Glyphes du prompt. Aucun n'est une nerd font ; en mode minimal (serveur,
+# container, console sans police riche) on retombe malgré tout sur de l'ASCII
+# pur. Surchargeables individuellement par l'utilisateur.
+if [[ -n "${NIVUUS_MINIMAL:-}" ]]; then
+    : ${NIVUUS_GLYPH_GIT_DIRTY:=o}
+    : ${NIVUUS_GLYPH_GIT_CLEAN:=+}
+    : ${NIVUUS_GLYPH_JOB_RUNNING:=>}
+    : ${NIVUUS_GLYPH_JOB_STOPPED:=_}
+else
+    : ${NIVUUS_GLYPH_GIT_DIRTY:=○}
+    : ${NIVUUS_GLYPH_GIT_CLEAN:=●}
+    : ${NIVUUS_GLYPH_JOB_RUNNING:=▶}
+    : ${NIVUUS_GLYPH_JOB_STOPPED:=⏸}
+fi
+
+# =============================================================================
 # Git Prompt Cache
 # =============================================================================
 
@@ -74,9 +92,9 @@ git_prompt_info() {
     # Check for modifications (using porcelain for reliability)
     local status_icon=""
     if [[ -n $(git status --porcelain 2>/dev/null) ]]; then
-        status_icon="%{${THEME_ERROR}%}○%{%f%}"  # empty circle when dirty
+        status_icon="%{${THEME_ERROR}%}${NIVUUS_GLYPH_GIT_DIRTY}%{%f%}"  # empty circle when dirty
     else
-        status_icon="%{${THEME_SUCCESS}%}●%{%f%}"  # filled circle when clean
+        status_icon="%{${THEME_SUCCESS}%}${NIVUUS_GLYPH_GIT_CLEAN}%{%f%}"  # filled circle when clean
     fi
 
     # Build git prompt with theme colors
@@ -364,24 +382,24 @@ background_jobs_info() {
                 local names="${(j: :)running_names}"
                 # Truncate if too long
                 [[ ${#names} -gt 20 ]] && names="${names:0:17}..."
-                output+="%{${THEME_SUCCESS}%}▶ %{%f%}%{${THEME_MUTED}%}${names}%{%f%}"
+                output+="%{${THEME_SUCCESS}%}${NIVUUS_GLYPH_JOB_RUNNING} %{%f%}%{${THEME_MUTED}%}${names}%{%f%}"
             fi
 
             if (( stopped > 0 )); then
                 [[ -n "$output" ]] && output+=" "
                 local names="${(j: :)stopped_names}"
                 [[ ${#names} -gt 20 ]] && names="${names:0:17}..."
-                output+="%{${THEME_ERROR}%}⏸ %{%f%}%{${THEME_MUTED}%}${names}%{%f%}"
+                output+="%{${THEME_ERROR}%}${NIVUUS_GLYPH_JOB_STOPPED} %{%f%}%{${THEME_MUTED}%}${names}%{%f%}"
             fi
         else
             # Show counts
             if (( running > 0 )); then
-                output+="%{${THEME_SUCCESS}%}▶ ${running}%{%f%}"
+                output+="%{${THEME_SUCCESS}%}${NIVUUS_GLYPH_JOB_RUNNING} ${running}%{%f%}"
             fi
 
             if (( stopped > 0 )); then
                 [[ -n "$output" ]] && output+=" "
-                output+="%{${THEME_ERROR}%}⏸ ${stopped}%{%f%}"
+                output+="%{${THEME_ERROR}%}${NIVUUS_GLYPH_JOB_STOPPED} ${stopped}%{%f%}"
             fi
         fi
     fi
