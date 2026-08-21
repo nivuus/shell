@@ -341,62 +341,86 @@ _nivuus_verify_release() {
     return 0
 }
 
-# Download and verify release archive
+# Télécharge une release et décide si elle est installable.
+#
+#   $1  version cible
+#   $2  « interactive » si l'appel vient de nivuus-update tapé par un
+#       humain. Vide sur le chemin automatique — et c'est structurel :
+#       l'échappatoire NIVUUS_ALLOW_UNVERIFIED_UPDATE ne peut pas exister
+#       pour un processus d'arrière-plan.
+#
+# Imprime le chemin du répertoire temporaire sur stdout en cas de succès,
+# et RIEN en cas de refus (l'appelant teste ce chemin).
+#
+# ATTENTION : les messages d'information partent sur STDERR, parce que la
+# sortie standard porte le chemin du répertoire temporaire. L'ancien code
+# mélangeait les deux.
 _nivuus_download_release() {
-    local version=$1
+    local version=$1 interactive=${2:-}
     local temp_dir=$(mktemp -d)
-    local archive_url="https://github.com/$NIVUUS_GITHUB_REPO/releases/download/v${version}/nivuus-shell-v${version}.tar.gz"
-    local checksums_url="https://github.com/$NIVUUS_GITHUB_REPO/releases/download/v${version}/SHA256SUMS"
+    local base="$NIVUUS_RELEASE_BASE_URL/v${version}"
 
-    # Download archive
-    echo "📥 Downloading release v${version}..."
-    if ! curl -fsSL -o "$temp_dir/nivuus-shell.tar.gz" "$archive_url"; then
-        echo "❌ Failed to download release archive"
+    echo "📥 Downloading release v${version}..." >&2
+    if ! curl -fsSL -o "$temp_dir/nivuus-shell.tar.gz" \
+            "$base/nivuus-shell-v${version}.tar.gz"; then
+        echo "❌ Failed to download release archive" >&2
         rm -rf "$temp_dir"
         return 1
     fi
 
-    # Download and verify checksums if enabled.
-    # When verification is requested we fail CLOSED: any inability to fetch or
-    # match a checksum aborts the install, so a network/MITM failure cannot be
-    # used to silently skip verification.
-    if [[ "$NIVUUS_VERIFY_CHECKSUMS" == "true" ]]; then
-        echo "🔐 Verifying checksums..."
-
-        if ! curl -fsSL -o "$temp_dir/SHA256SUMS" "$checksums_url"; then
-            echo "❌ Could not download checksums (verification required, aborting)"
-            echo "   Set NIVUUS_VERIFY_CHECKSUMS=false to bypass at your own risk."
-            rm -rf "$temp_dir"
-            return 1
-        fi
-
-        # Extract the checksum for our archive
-        local expected_sum=$(grep "nivuus-shell-v${version}.tar.gz" "$temp_dir/SHA256SUMS" | awk '{print $1}')
-
-        if [[ -z "$expected_sum" ]]; then
-            echo "❌ No checksum found for nivuus-shell-v${version}.tar.gz (aborting)"
-            rm -rf "$temp_dir"
-            return 1
-        fi
-
-        local actual_sum
-        if ! actual_sum=$(_nivuus_sha256_of "$temp_dir/nivuus-shell.tar.gz"); then
-            echo "❌ Aucun outil SHA-256 disponible (sha256sum, shasum ou openssl requis)"
-            rm -rf "$temp_dir"
-            return 1
-        fi
-
-        if [[ "$expected_sum" != "$actual_sum" ]]; then
-            echo "❌ Checksum verification failed!"
-            echo "   Expected: $expected_sum"
-            echo "   Got:      $actual_sum"
-            rm -rf "$temp_dir"
-            return 1
-        fi
-
-        echo "✅ Checksum verified"
+    if ! curl -fsSL -o "$temp_dir/SHA256SUMS" "$base/SHA256SUMS"; then
+        echo "❌ Could not download SHA256SUMS (verification required, aborting)" >&2
+        rm -rf "$temp_dir"
+        return 1
     fi
 
+    # Les deux formats de signature sont téléchargés sans condition :
+    # on ne sait pas encore lequel cette machine peut vérifier. Un 404
+    # sur l'un des deux n'est pas fatal ; l'absence des DEUX le sera au
+    # moment de la vérification.
+    curl -fsSL -o "$temp_dir/SHA256SUMS.sig"    "$base/SHA256SUMS.sig"    2>/dev/null
+    curl -fsSL -o "$temp_dir/SHA256SUMS.sshsig" "$base/SHA256SUMS.sshsig" 2>/dev/null
+
+    echo "🔐 Verifying release signature..." >&2
+    _nivuus_verify_release "$temp_dir" "$version"
+    local rc=$?
+
+    if (( rc == 2 )); then
+        echo "❌ Aucun outil de vérification disponible sur cette machine." >&2
+        echo "   Nivuus a besoin de « openssl » ou de « ssh-keygen » pour" >&2
+        echo "   authentifier une mise à jour. Sans l'un des deux, la mise à" >&2
+        echo "   jour automatique reste inactive." >&2
+        echo "   Diagnostic : nivuus doctor" >&2
+    elif (( rc != 0 )); then
+        echo "❌ Signature ou empreinte invalide pour la release v${version}." >&2
+        echo "   L'archive est potentiellement altérée. NE PAS contourner." >&2
+        echo "   Vérifie la page de release :" >&2
+        echo "   https://github.com/$NIVUUS_GITHUB_REPO/releases/tag/v${version}" >&2
+    fi
+
+    if (( rc != 0 )); then
+        # Unique échappatoire (§ 4 du spec) : une décision consciente
+        # d'un humain devant son terminal. Trois gardes conjointes, et
+        # une confirmation explicite. Le chemin automatique ne passe
+        # jamais ici, faute du drapeau « interactive ».
+        if [[ "$interactive" == "interactive" ]] \
+            && [[ "$NIVUUS_ALLOW_UNVERIFIED_UPDATE" == "1" ]] && [[ -t 0 ]]; then
+            echo "" >&2
+            echo "⚠️  NIVUUS_ALLOW_UNVERIFIED_UPDATE=1 est défini." >&2
+            echo "   Installer une release non vérifiée exécute du code" >&2
+            echo "   arbitraire à chaque ouverture de shell." >&2
+            local reply
+            read -r "reply?Installer quand même cette release NON VÉRIFIÉE ? (tape OUI) "
+            if [[ "$reply" == "OUI" ]]; then
+                echo "$temp_dir"
+                return 0
+            fi
+        fi
+        rm -rf "$temp_dir"
+        return 1
+    fi
+
+    echo "✅ Signature verified" >&2
     echo "$temp_dir"
 }
 
@@ -474,6 +498,9 @@ _nivuus_install_release() {
 # Perform the actual update
 _nivuus_perform_update() {
     local target_version=${1:-$(_nivuus_latest_version)}
+    # Drapeau propagé tel quel : c'est son ABSENCE sur le chemin
+    # automatique qui rend l'échappatoire inatteignable en arrière-plan.
+    local interactive=${2:-}
 
     if [[ -z "$target_version" ]]; then
         echo "❌ Could not determine target version"
@@ -485,7 +512,7 @@ _nivuus_perform_update() {
     echo "📦 Backup created: $backup_dir"
 
     # Download release
-    local temp_dir=$(_nivuus_download_release "$target_version")
+    local temp_dir=$(_nivuus_download_release "$target_version" "$interactive")
 
     if [[ -z "$temp_dir" ]] || [[ ! -d "$temp_dir" ]]; then
         echo "❌ Download failed"
@@ -578,7 +605,7 @@ nivuus-update() {
         echo ""
         echo "🆕 Update available!"
         echo ""
-        _nivuus_perform_update "$latest"
+        _nivuus_perform_update "$latest" interactive
     else
         echo ""
         echo "✅ Already up to date!"
