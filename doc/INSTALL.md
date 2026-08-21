@@ -40,6 +40,23 @@ Il n'existe aucune option pour désactiver la vérification d'empreinte de l'arc
 pas vérifiable n'est pas installé. Si la machine n'a ni `sha256sum` ni `shasum`, l'amorçage refuse
 d'installer plutôt que de faire semblant.
 
+### Vérifier le trousseau de signature à l'installation (optionnel)
+
+Les mises à jour sont authentifiées par des clés publiques livrées avec
+l'installation. Tu peux épingler ce trousseau au moment de l'installer, avec
+`--verify-key` (ci-dessus). L'empreinte de référence est publiée dans
+[SECURITY.md](../SECURITY.md#first-install), et **n'est recopiée nulle part
+ailleurs** : une empreinte dupliquée est une empreinte qui divergera.
+
+Si le trousseau embarqué ne correspond pas à l'empreinte fournie,
+l'installation est refusée **avant** la moindre écriture.
+
+**Limite honnête** : cela ne résout pas la **première installation**. Le dépôt
+et la clé publique viennent de la même origine — qui contrôle cette origine à
+cet instant sert son installeur *et* sa clé. Aucune signature ne peut résoudre
+ça. Ce que la signature protège, c'est le canal de **mise à jour** : récurrent,
+automatique, invisible, sur toutes les machines, pour toujours.
+
 ### Options
 
 ```bash

@@ -5,6 +5,8 @@ Complete guide of what you can do with Nivuus Shell.
 ## Table of Contents
 
 1. [AI-Powered Commands](#ai-powered-commands)
+   - [Backends](#backends)
+   - [Command not found](#command-not-found)
 2. [Modern Text Editing](#modern-text-editing)
 3. [Smart Navigation](#smart-navigation)
 4. [Git Commands](#git-commands)
@@ -18,7 +20,65 @@ Complete guide of what you can do with Nivuus Shell.
 
 ## AI-Powered Commands
 
-Get instant help and command suggestions powered by Google Gemini AI.
+Get instant help and command suggestions from the AI provider of your choice.
+
+### Backends
+
+Nivuus talks to one of three providers. The active one is `AI_BACKEND`:
+
+| `AI_BACKEND` | Credential | Model override | Default model |
+|---|---|---|---|
+| `gemini` (default) | `GOOGLE_API_KEY`, or `GEMINI_AUTH_MODE=cli` + the `agy` CLI | `GEMINI_MODEL` / `GEMINI_CLI_MODEL` | `gemini-3.5-flash-lite` |
+| `openai` | `OPENAI_API_KEY` | `OPENAI_MODEL` | `gpt-5.6-luna` |
+| `anthropic` | `ANTHROPIC_API_KEY` | `ANTHROPIC_MODEL` | `claude-haiku-4-5` |
+
+```bash
+# In ~/.zsh_local
+export AI_BACKEND=anthropic
+export ANTHROPIC_API_KEY=sk-ant-...
+```
+
+`GEMINI_AUTH_MODE=cli` spends a Google AI subscription's quota through the
+Antigravity CLI (`agy`) instead of a metered API key. A persistent `agy`
+daemon (`AGY_DAEMON_ENABLED`, on by default) avoids paying 3-6 s of process
+startup on every call.
+
+**No key, no breakage.** Every AI feature degrades to a message that names the
+variable to set. Nothing else in the shell depends on it.
+
+### Command not found
+
+When you type a command that does not exist, Nivuus does not stop at
+`command not found`. It looks up which package provides it -- first from the
+system's own package database, then, if that fails, by asking the AI -- and
+offers the exact install command for your distribution.
+
+```bash
+$ rg TODO src/
+zsh: command not found: rg
+  ripgrep provides `rg`
+  -> sudo apt-get install -y ripgrep       [Enter to run, Ctrl-C to skip]
+```
+
+| Variable | Default | Effect |
+|---|---|---|
+| `ENABLE_AI_COMMAND_NOT_FOUND` | `true` | Turn the whole handler off |
+| `AI_CNF_AUTO_PROMPT` | `true` | Offer to run the install command |
+| `AI_CNF_RE_EXECUTE` | `true` | Re-run your original command after a successful install |
+| `AI_CNF_TIMEOUT` | `8` | Give up rather than hang the prompt |
+| `AI_COMMAND_NOT_FOUND_CACHE_TTL` | `86400` | Cache lifetime for a resolved lookup |
+
+Answers are cached in `AI_COMMAND_NOT_FOUND_CACHE_DIR`, so the second miss on
+the same command costs nothing.
+
+```bash
+ai-cnf-lookup rg        # ask without mistyping anything
+ai-cnf-stats            # cache hit rate
+ai-cnf-clear-cache      # forget everything it learned
+ai-cnf-help             # the short version of this section
+```
+
+The native lookup needs no key. Only the AI fallback does.
 
 ### Quick Help
 ```bash
@@ -384,7 +444,10 @@ config_backup           # Create manual backup
 config_restore          # Restore from backup
 ```
 
-**Automatic backups** are created during installation to `~/.config/nivuus-shell-backup/`
+`config_backup` writes to `~/.config/nivuus-shell-backup/`. It is *not* the
+install-time backup: `nivuus install` records every file it was about to
+overwrite in `~/.local/state/nivuus/backups/`, and that is what
+`nivuus uninstall` restores from.
 
 ### Performance Tuning
 

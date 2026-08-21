@@ -82,3 +82,52 @@ badge_workflows() {   # imprime le nom de fichier de chaque workflow référenc�
     run grep -n "workflows/Tests/badge.svg" "$README"
     [ "$status" -ne 0 ]
 }
+
+@test "REGLE 5.4: tout badge statique est adossé à un test nommé en commentaire" {
+    # Un badge décoratif transforme une absence de preuve en apparence de
+    # preuve. Deux formes acceptables, et deux seulement :
+    #   - un badge de workflow (règles existantes de ce fichier) ;
+    #   - un shield statique PRÉCÉDÉ d'un commentaire HTML nommant le
+    #     fichier de test qui rend son affirmation fausse quand elle l'est.
+    prev=""
+    fautes=""
+    while IFS= read -r line; do
+        case "$line" in
+            *img.shields.io*)
+                case "$line" in
+                    # Badge de workflow : couvert par les règles ci-dessus.
+                    *actions/workflows/*) prev="$line"; continue ;;
+                    # Shield DYNAMIQUE (img.shields.io/github/...) : sa valeur
+                    # est lue chez GitHub à chaque affichage, il ne peut donc
+                    # pas figer un mensonge. Seul le shield /badge/, dont le
+                    # texte est écrit à la main, en est capable.
+                    *img.shields.io/badge/*) : ;;
+                    *) prev="$line"; continue ;;
+                esac
+                # Shield statique : le commentaire précédent doit nommer un
+                # fichier de test qui existe vraiment.
+                t="$(printf '%s' "$prev" | sed -n 's/.*<!-- *badge-proof: *\([^ ]*\) *-->.*/\1/p')"
+                if [ -z "$t" ] || [ ! -f "$ROOT/$t" ]; then
+                    fautes="$fautes
+  $line"
+                fi
+                ;;
+        esac
+        prev="$line"
+    done < "$README"
+    [ -z "$fautes" ] || { echo "badge sans preuve :$fautes"; false; }
+}
+
+@test "REGLE 5.4: les deux badges décoratifs historiques ont disparu" {
+    run grep -nE 'badge/(license|shell)-' "$README"
+    [ "$status" -ne 0 ] || { echo "badge décoratif : $output"; false; }
+}
+
+@test "le README porte au plus six badges, dont trois de workflow" {
+    # Quatre, pas six : au-delà, personne ne les lit, et le seul qui compte
+    # (uninstall verified) se noie.
+    n="$(grep -c '^\[!\[\|^!\[\|shields.io\|badge.svg' "$README" || true)"
+    [ "$n" -le 6 ]
+    m="$(grep -c 'badge.svg?branch=master' "$README" || true)"
+    [ "$m" -ge 3 ] || { echo "moins de trois badges de workflow : $m"; false; }
+}

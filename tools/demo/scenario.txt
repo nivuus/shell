@@ -1,0 +1,36 @@
+# Nivuus demo — source déclarative de docs/assets/demo.cast
+#
+# Ce fichier est la SOURCE. Le .cast en dérive (record.sh), le SVG dérive du
+# .cast (render.sh). Modifier ce fichier sans réenregistrer fait rougir la CI :
+# c'est la garde n° 3 (le tampon de fraîcheur).
+#
+# meta: cols=100 rows=28 hostname=demo theme=nord
+# meta: ai-stub=tools/demo/stub/agy  (faux Antigravity CLI, réponses figées,
+#       aucune clé réelle -- déclaré ici parce qu'un stub caché serait un
+#       mensonge, et que ce dépôt en ferme un par chantier)
+#
+# Format : <délai_ms><TAB><genre><TAB><commande>
+#   run      la commande DOIT exister dans le produit          (garde 1)
+#   unknown  la commande NE DOIT PAS exister -- c'est le plan  (garde 1)
+#   type     frappe affichée, jamais exécutée
+#
+# --- 0-2 s : l'empreinte de $HOME, avant toute chose -------------------------
+1500	run	home-fingerprint > /tmp/before
+# --- 2-9 s : une commande, pas de sudo, pas de question ----------------------
+6500	run	curl -fsSL https://raw.githubusercontent.com/maximeallanic/nivuus-shell/master/install.sh | sh
+# --- 9-13 s : le prompt apparaît, et le temps de démarrage est à l'écran -----
+2500	run	exec zsh
+1500	run	print -r -- "startup: ${NIVUUS_LOAD_TIME}ms"
+# --- 13-19 s : l'IA en contexte, sans qu'on l'ait invoquée -------------------
+# ncdu et non rg : Nivuus définit un alias « rg » (config/17-colorization.zsh),
+# donc rg ne peut PAS être la commande introuvable du plan. C'est la garde 1
+# qui l'a dit -- et c'est exactement son travail.
+5500	unknown	ncdu /var/log
+# --- 19-25 s : l'assistance à la demande ------------------------------------
+5500	run	?? "find files bigger than 100M"
+# --- 25-28 s : le prompt, sans en faire une démonstration séparée ------------
+2500	run	cd /home/demo/work/nivuus-shell
+# --- 28-35 s : LE PLAN. Personne d'autre ne peut le tourner. -----------------
+5000	run	nivuus uninstall --yes --purge
+1500	run	home-fingerprint > /tmp/after
+2000	run	diff /tmp/before /tmp/after && print -r -- "HOME is byte-identical."

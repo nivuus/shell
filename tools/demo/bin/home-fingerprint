@@ -1,0 +1,10 @@
+#!/bin/sh
+# tools/demo/bin/home-fingerprint
+# L'empreinte de $HOME telle que tests/e2e/test_reversibility.bats la calcule.
+# La démo ne doit pas mesurer autre chose que ce que la CI impose : sinon la
+# preuve à l'écran et la preuve en CI seraient deux preuves différentes.
+set -eu
+ROOT="${NIVUUS_DEMO_ROOT:-/opt/nivuus-src}"
+# shellcheck source=/dev/null
+. "$ROOT/tests/helpers/fingerprint.bash"
+fs_fingerprint "${1:-$HOME}"
