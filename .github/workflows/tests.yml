@@ -22,18 +22,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install ZSH
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y zsh
-
-      - name: Install bats
-        run: |
-          sudo apt-get install -y bats
-
       - name: Setup test environment
-        run: |
-          echo "NIVUUS_SHELL_DIR=$GITHUB_WORKSPACE" >> $GITHUB_ENV
+        uses: ./.github/actions/setup-tests
 
       - name: Run smoke tests
         run: |
@@ -123,18 +113,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install ZSH
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y zsh
-
-      - name: Install bats
-        run: |
-          sudo apt-get install -y bats
-
       - name: Setup test environment
-        run: |
-          echo "NIVUUS_SHELL_DIR=$GITHUB_WORKSPACE" >> $GITHUB_ENV
+        uses: ./.github/actions/setup-tests
 
       - name: Library unit tests
         run: |
@@ -190,11 +170,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install zsh and bats
-        run: brew install bats-core zsh
-
       - name: Setup test environment
-        run: echo "NIVUUS_SHELL_DIR=$GITHUB_WORKSPACE" >> $GITHUB_ENV
+        uses: ./.github/actions/setup-tests
 
       - name: Library unit tests
         run: bats tests/unit/test_lib_*.bats tests/unit/test_helpers_portable.bats
@@ -222,19 +199,20 @@ jobs:
       image: alpine:3.20
 
     steps:
-      - name: Install the minimum (deliberately no GNU coreutils)
-        run: apk add --no-cache bash zsh git curl ncurses
+      - name: BOOTSTRAP git before checkout (Alpine has none)
+        shell: sh
+        # BOOTSTRAP : seule installation de paquet tolérée hors install-deps.sh,
+        # et elle ne dure qu'une ligne. actions/checkout sait se rabattre sur
+        # l'API REST quand git manque, mais ce chemin n'a jamais été exercé ici,
+        # alors que l'ordre « paquets puis checkout » l'est depuis la phase 3.
+        # On garde l'ordre prouvé ; tout le reste passe par l'action composite.
+        run: apk add --no-cache git  # BOOTSTRAP
 
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install bats
-        run: |
-          git clone --depth 1 https://github.com/bats-core/bats-core.git /tmp/bats
-          /tmp/bats/install.sh /usr/local
-
       - name: Setup test environment
-        run: echo "NIVUUS_SHELL_DIR=$GITHUB_WORKSPACE" >> $GITHUB_ENV
+        uses: ./.github/actions/setup-tests
 
       - name: Library unit tests
         run: bats tests/unit/test_lib_*.bats tests/unit/test_helpers_portable.bats
@@ -255,7 +233,7 @@ jobs:
           # Les suites GÉNÈRENT leurs clés éphémères : sans openssl ni
           # ssh-keygen, elles n'ont rien à signer. On les installe donc
           # ici -- l'étape ci-dessus a déjà couvert l'Alpine nue.
-          apk add --no-cache openssl openssh-keygen
+          ./tests/ci/install-verify-tools.sh
           rm -f config/*.zwc
           bats tests/unit/test_release_signature.bats \
                tests/unit/test_autoupdate_sha256.bats \
@@ -274,10 +252,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install ZSH
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y zsh
+      - name: Setup test environment
+        uses: ./.github/actions/setup-tests
 
       - name: Validate ZSH syntax
         run: |
@@ -306,14 +282,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y zsh bats
-
-      - name: Setup environment
-        run: |
-          echo "NIVUUS_SHELL_DIR=$GITHUB_WORKSPACE" >> $GITHUB_ENV
+      - name: Setup test environment
+        uses: ./.github/actions/setup-tests
 
       - name: Generate coverage report
         run: |

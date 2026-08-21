@@ -1,0 +1,25 @@
+name: Setup Nivuus test environment
+description: >
+  Installe zsh, git, curl, jq, GNU parallel et bats (version épinglée) sur
+  n'importe quelle cible de la matrice, puis exporte NIVUUS_SHELL_DIR.
+  Toute la logique vit dans tests/ci/install-deps.sh, rejouable en local
+  sous Docker — cette action n'est qu'un point d'entrée pour Actions.
+
+inputs:
+  bats-version:
+    description: Tag bats-core à installer
+    required: false
+    default: v1.11.1
+
+runs:
+  using: composite
+  steps:
+    - name: Install test dependencies
+      shell: sh
+      env:
+        BATS_VERSION: ${{ inputs.bats-version }}
+      run: ./tests/ci/install-deps.sh
+
+    - name: Export NIVUUS_SHELL_DIR
+      shell: sh
+      run: echo "NIVUUS_SHELL_DIR=$GITHUB_WORKSPACE" >> "$GITHUB_ENV"
