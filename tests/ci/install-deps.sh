@@ -29,17 +29,17 @@ install_packages() {
     if command -v apt-get >/dev/null 2>&1; then
         DEBIAN_FRONTEND=noninteractive $SUDO apt-get update -qq
         DEBIAN_FRONTEND=noninteractive $SUDO apt-get install -y -qq \
-            zsh git curl ca-certificates jq procps
+            zsh git curl ca-certificates jq procps diffutils
         _optional env DEBIAN_FRONTEND=noninteractive $SUDO apt-get install -y -qq parallel
     elif command -v apk >/dev/null 2>&1; then
-        $SUDO apk add --no-cache bash zsh git curl ca-certificates ncurses jq procps
+        $SUDO apk add --no-cache bash zsh git curl ca-certificates ncurses jq procps diffutils
         _optional $SUDO apk add --no-cache parallel
     elif command -v pacman >/dev/null 2>&1; then
-        $SUDO pacman -Sy --noconfirm --needed zsh git curl jq procps-ng
+        $SUDO pacman -Sy --noconfirm --needed zsh git curl jq procps-ng diffutils
         _optional $SUDO pacman -S --noconfirm --needed parallel
     elif command -v dnf >/dev/null 2>&1; then
         $SUDO dnf -y --setopt=install_weak_deps=False install \
-            zsh git curl ca-certificates jq procps-ng
+            zsh git curl ca-certificates jq procps-ng diffutils
         _optional $SUDO dnf -y install parallel
     elif command -v brew >/dev/null 2>&1; then
         # macOS fournit déjà zsh, git, curl. jq est présent sur les runners GitHub.

@@ -18,6 +18,10 @@ run_in() {
         bats --version | grep -q "1.11.1"
         bats --count tests/unit/test_lib_detect.bats
         command -v zsh >/dev/null
+        # `diff` : exigé par tests/e2e/test_nivuus_cli.bats ; absent des
+        # images fedora et archlinux de base, où son absence se manifestait
+        # par un code 127 déguisé en échec de test.
+        command -v diff >/dev/null
     '
 }
 
