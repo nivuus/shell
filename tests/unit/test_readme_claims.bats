@@ -265,9 +265,30 @@ command_exists_in_nivuus() {
     [ -z "$manquantes" ] || { echo "sous-commandes inexistantes :$manquantes"; false; }
 }
 
-@test "REGLE 5.1: la règle voit au moins dix commandes (elle n'est pas inerte)" {
+@test "REGLE 5.1: l'extraction de commandes n'est pas inerte" {
+    # Canari. Il portait d'abord sur le README lui-même (« au moins dix
+    # commandes »), ce qui liait la validité de la règle à la LONGUEUR du
+    # README -- exactement la chose que la règle 5.5 fait décroître. Il
+    # porte donc sur un fixture : l'awk doit voir trois commandes, sauter
+    # les commentaires, les lignes vides, le « $ » d'invite, et tout ce qui
+    # est hors bloc.
+    tmp="$BATS_TEST_TMPDIR/fixture.md"
+    {
+        printf 'hors-bloc-a-ignorer\n\n'
+        printf '```bash\n'
+        printf '# un commentaire\n\n'
+        printf 'alpha --flag\n'
+        printf '  $ beta\n'
+        printf 'gamma | delta\n'
+        printf '```\n'
+        printf 'encore-hors-bloc\n'
+    } > "$tmp"
+    vues="$(README="$tmp" readme_commands | tr '\n' ' ')"
+    [ "$vues" = "alpha beta gamma " ] \
+        || { echo "l'awk d'extraction est cassé : [$vues]"; false; }
+    # Et le README réel doit tout de même en produire.
     n="$(readme_commands | wc -l)"
-    [ "$n" -ge 10 ] || { echo "seulement $n commandes extraites : l'awk est cassé"; false; }
+    [ "$n" -ge 2 ] || { echo "seulement $n commandes extraites du README"; false; }
 }
 
 @test "le README promeut les sous-commandes réelles, pas les alias legacy" {
@@ -320,4 +341,63 @@ EOF
     # Onze puces, c'est une liste de courses. Six, c'est un argumentaire.
     n="$(feature_bullets | wc -l)"
     [ "$n" -le 6 ] || { echo "$n puces : au-delà de six, personne ne les lit"; false; }
+}
+
+@test "REGLE 5.5: le README tient en 200 lignes" {
+    # Grossier, et volontairement. La métrique qui a été violée cinq fois
+    # est la longueur : c'est donc elle qu'on instrumente. Ce test sera un
+    # jour ressenti comme une gêne -- c'est le signe qu'il fonctionne.
+    # Le relever se discute en revue, jamais dans le commit qui en a besoin.
+    n="$(wc -l < "$README")"
+    [ "$n" -le 200 ] || { echo "README à $n lignes (budget: 200)"; false; }
+}
+
+@test "REGLE 5.7: le README est en anglais, sans exception" {
+    # Liste noire de lexèmes français fréquents, grossière et sans
+    # ambiguïté. Elle ne vise QUE le README : doc/PROMPT.md,
+    # doc/PACKAGING.md et SECURITY.md restent en français, c'est la langue
+    # de travail du projet.
+    fautes=""
+    for mot in 'désinstall' 'empreinte' 'paquet' 'trousseau' 'mise à jour' \
+               "n'est pas" 'Plateformes' 'Vérifier' 'sauvegarde' 'fichier' \
+               'utilisateur' 'ainsi que' 'toutefois'; do
+        if grep -qiF "$mot" "$README"; then
+            fautes="$fautes
+  $mot: $(grep -inF "$mot" "$README" | head -2)"
+        fi
+    done
+    [ -z "$fautes" ] || { echo "français dans le README :$fautes"; false; }
+}
+
+@test "REGLE 5.7: aucun caractère accenté hors nom propre" {
+    # Second filet, indépendant de la liste noire : un texte anglais n'a
+    # pas de raison d'accentuer. L'échappatoire est nominative et courte.
+    fautes="$(grep -nE '[éèêàçùôîû]' "$README" \
+              | grep -viE 'Allanic|Café|Nord|résumé' || true)"
+    [ -z "$fautes" ] || { echo "accents hors noms propres :$fautes"; false; }
+}
+
+@test "le premier écran contient la promesse, l'installation et la désinstallation" {
+    # « Premier écran » = 40 lignes. La désinstallation n'est plus une
+    # section d'après-vente : c'est elle qui autorise le lecteur à exécuter
+    # le one-liner.
+    head -n 40 "$README" | grep -qF 'byte for byte'
+    head -n 40 "$README" | grep -qF 'raw.githubusercontent.com'
+    head -n 40 "$README" | grep -qF 'nivuus uninstall'
+}
+
+@test "le README garde un index vers doc/, une ligne par page" {
+    grep -qF '](doc/README.md)' "$README"
+    for f in INSTALL.md FEATURES.md PROMPT.md CLAUDE.md; do
+        grep -qF "doc/$f" "$README" || { echo "page absente de l'index : $f"; false; }
+    done
+}
+
+@test "le README ne mentionne pas --system" {
+    # Décision de périmètre (spec § 6) : l'installation multi-utilisateur
+    # n'est pas un argument de page d'accueil, et un chantier en cours
+    # produit sa propre section dans doc/INSTALL.md. Anticiper créerait un
+    # conflit de merge sur le fichier le plus disputé du dépôt.
+    run grep -nF -- '--system' "$README"
+    [ "$status" -ne 0 ] || { echo "--system dans le README : $output"; false; }
 }
