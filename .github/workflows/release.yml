@@ -72,8 +72,17 @@ jobs:
     name: Create Release
     runs-on: ubuntu-latest
     needs: test  # Only run if tests pass
+    # Secrets cloisonnés dans un environnement protégé : un attaquant qui
+    # obtient « contents: write », ou qui injecte une Action tierce dans un
+    # AUTRE job, ne peut pas lire un secret d'environnement. La règle de
+    # protection « réviseur requis » est activable plus tard dans les
+    # réglages GitHub, sans changer une ligne de code (décision actée n° 1 :
+    # signature automatique, pas d'attente manuelle par release).
+    environment: release
     permissions:
       contents: write
+      id-token: write        # attestation de provenance
+      attestations: write
 
     steps:
       - name: Checkout code
@@ -220,6 +229,101 @@ jobs:
           echo "✅ Generated checksums"
           cat SHA256SUMS
 
+      - name: Sign SHA256SUMS
+        env:
+          KEY_ECDSA: ${{ secrets.NIVUUS_SIGNING_KEY_ECDSA }}
+          KEY_SSH:   ${{ secrets.NIVUUS_SIGNING_KEY_SSH }}
+        run: |
+          set -euo pipefail
+          umask 077
+
+          # Garde-fou d'amorçage : tant que le trousseau public n'est pas
+          # committé (procédure humaine, doc/SIGNING.md), on NE PUBLIE PAS.
+          # Fail-closed : mieux vaut pas de release qu'une release que les
+          # clients refuseraient.
+          if ! ls keys/*.pem >/dev/null 2>&1; then
+            echo "❌ keys/*.pem absent : le trousseau de release n'est pas encore en service."
+            echo "   Voir doc/SIGNING.md, « Mise en service du trousseau réel »."
+            exit 1
+          fi
+          if [ -z "${KEY_ECDSA:-}" ] || [ -z "${KEY_SSH:-}" ]; then
+            echo "❌ Secrets de signature absents de l'environnement « release »."
+            echo "   Voir doc/SIGNING.md, étape 3."
+            exit 1
+          fi
+
+          keyfile="$(mktemp)"; sshkey="$(mktemp)"
+          cleanup() {
+            shred -u "$keyfile" "$sshkey" 2>/dev/null || rm -f "$keyfile" "$sshkey"
+          }
+          trap cleanup EXIT
+
+          printf '%s' "$KEY_ECDSA" > "$keyfile"
+          printf '%s\n' "$KEY_SSH" > "$sshkey"
+          chmod 600 "$keyfile" "$sshkey"
+
+          # Chemin primaire : ECDSA P-256 / SHA-256, DER.
+          openssl dgst -sha256 -sign "$keyfile" \
+              -out release-assets/SHA256SUMS.sig release-assets/SHA256SUMS
+
+          # Chemin de repli : Ed25519 SSHSIG.
+          #
+          # PIÈGE DE COLLISION, mesuré et pas théorique : `ssh-keygen -Y sign X`
+          # écrit « X.sig » — exactement le fichier que openssl vient de
+          # produire, et il n'existe pas d'option de sortie portable. La sonde
+          # de disponibilité (doc/SIGNING.md) s'est fait piéger par ce même
+          # détail et a rapporté un « ssh-keygen KO » entièrement faux. On
+          # signe donc depuis une COPIE, puis on renomme.
+          cp release-assets/SHA256SUMS "$RUNNER_TEMP/sums"
+          ssh-keygen -Y sign -f "$sshkey" -n nivuus-release "$RUNNER_TEMP/sums"
+          mv "$RUNNER_TEMP/sums.sig" release-assets/SHA256SUMS.sshsig
+
+          # Une troisième signature (GPG .asc pour les packagers, hors
+          # périmètre) s'ajouterait ici : une étape, un secret de plus,
+          # aucune restructuration.
+          echo "✅ Signed SHA256SUMS (ECDSA + SSHSIG)"
+          ls -l release-assets/
+
+      - name: Verify before publishing
+        run: |
+          set -euo pipefail
+          # Vérification avec la clé publique COMMITÉE, jamais avec celle
+          # dérivée du secret. C'est ce qui rend structurellement
+          # impossible de publier une release que les clients
+          # refuseraient — la panne la plus probable de ce chantier :
+          # rotation du secret sans commit de la clé publique.
+          ok=0
+          for pem in keys/*.pem; do
+            if openssl dgst -sha256 -verify "$pem" \
+                 -signature release-assets/SHA256SUMS.sig \
+                 release-assets/SHA256SUMS >/dev/null 2>&1; then
+              echo "✅ ECDSA verified against $pem"; ok=1; break
+            fi
+          done
+          [ "$ok" = 1 ] || { echo "❌ Aucune clé publique committée ne valide SHA256SUMS.sig"; exit 1; }
+
+          ssh-keygen -Y verify -f keys/allowed_signers -I nivuus-release \
+              -n nivuus-release -s release-assets/SHA256SUMS.sshsig \
+              < release-assets/SHA256SUMS
+          echo "✅ SSHSIG verified against keys/allowed_signers"
+
+      - name: Verify with the real client code
+        run: |
+          set -euo pipefail
+          # Deuxième filet, plus fort que le premier : on n'exécute pas
+          # une commande openssl écrite pour l'occasion, on exécute LA
+          # fonction que les utilisateurs exécuteront. Une divergence
+          # entre le workflow et le client est ainsi impossible.
+          sudo apt-get update && sudo apt-get install -y zsh
+          rm -f config/*.zwc
+          ENABLE_AUTOUPDATE=false NIVUUS_SHELL_DIR="$PWD" zsh -c '
+            source config/20-autoupdate.zsh
+            _nivuus_verify_signature release-assets/SHA256SUMS release-assets keys
+            rc=$?
+            [[ $rc -eq 0 ]] || { echo "❌ le client refuserait cette release (rc=$rc)"; exit 1 }
+            echo "✅ le client accepte cette release"
+          '
+
       - name: Commit version updates
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
@@ -241,6 +345,11 @@ jobs:
         run: |
           git push origin HEAD:master
           echo "✅ Pushed version updates to master"
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: 'release-assets/*.tar.gz'
 
       - name: Create GitHub Release
         env:
