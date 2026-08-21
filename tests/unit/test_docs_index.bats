@@ -131,3 +131,41 @@ anchors_of() {
     # qu'un index écrit à la main oublie.
     grep -qF 'nivuus.1' "$INDEX"
 }
+
+@test "doc/UPDATING.md existe et couvre la vérification de signature" {
+    [ -f "$DOC/UPDATING.md" ]
+    grep -qiE 'signature' "$DOC/UPDATING.md"
+    # Le refus dur est la propriété du chantier signature : la page qui
+    # décrit la mise à jour ne peut pas l'omettre.
+    grep -qiE 'refus|refused|rejected' "$DOC/UPDATING.md"
+    grep -qF 'SIGNING.md' "$DOC/UPDATING.md"
+}
+
+@test "doc/UPDATING.md documente les variables d'auto-update qui existent" {
+    rm -f "$ROOT"/config/*.zwc
+    for v in ENABLE_AUTOUPDATE AUTOUPDATE_CHECK_FREQUENCY_DAYS; do
+        grep -qF "$v" "$DOC/UPDATING.md" || { echo "variable absente : $v"; false; }
+        grep -qF "$v" "$ROOT/config/20-autoupdate.zsh" || { echo "variable morte : $v"; false; }
+    done
+}
+
+@test "doc/UPDATING.md dit ce que fait « nivuus update » en mode paquet" {
+    # Livré par le chantier packaging, et invisible partout ailleurs que
+    # dans doc/PACKAGING.md : celui qui lance « nivuus update » sur une
+    # machine paquetée lit cette page-ci.
+    grep -qiE 'paquet|package' "$DOC/UPDATING.md"
+}
+
+@test "doc/TROUBLESHOOTING.md commence par nivuus doctor" {
+    [ -f "$DOC/TROUBLESHOOTING.md" ]
+    head -n 20 "$DOC/TROUBLESHOOTING.md" | grep -qF 'nivuus doctor'
+}
+
+@test "doc/TROUBLESHOOTING.md ne conserve aucun symptôme dont la commande a disparu" {
+    aide="$("$ROOT/bin/nivuus" help)"
+    for sub in $(grep -ohE '\bnivuus [a-z-]+' "$DOC/TROUBLESHOOTING.md" | awk '{print $2}' | LC_ALL=C sort -u); do
+        case "$sub" in shell) continue ;; esac
+        printf '%s\n' "$aide" | grep -qE "nivuus +$sub" \
+            || { echo "sous-commande inexistante : $sub"; false; }
+    done
+}

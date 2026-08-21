@@ -7,6 +7,8 @@ this index and the directory disagree — in either direction.
 ## Install and remove
 
 - **[INSTALL.md](INSTALL.md)** — every installation route, per platform, plus `--dry-run`, `--minimal`, `--prefix`, version pinning, and how to verify the signing keyring
+- **[UPDATING.md](UPDATING.md)** — how updates are found, verified and applied; how to roll one back
+- **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** — what `nivuus doctor` cannot fix by itself
 
 ## Use
 
