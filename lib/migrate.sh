@@ -55,8 +55,24 @@ nivuus_git_state() {
 
     # (5) aucun fichier SUIVI modifié. Les non-suivis (*.zwc compilés par
     # zsh à l'exécution) sont tolérés : ce n'est pas du travail.
-    [ -z "$(git -C "$dir" status --porcelain --untracked-files=no 2>/dev/null || printf x)" ] \
-        || { printf 'dev\n'; return 0; }
+    #
+    # UNE exception, et une seule : si lib/manifest.sh est présent sur le
+    # disque SANS être suivi par ce dépôt, c'est qu'une version de Nivuus
+    # postérieure à la v3.0.0 (la seule à avoir lib/) a été installée
+    # par-dessus. Les fichiers modifiés le sont alors par l'installeur, pas
+    # par un humain -- et c'est le cas de TOUTES les installations héritées
+    # dès qu'elles se mettent à jour : sans cette exception, « nivuus
+    # migrate » leur répondrait « dépôt de travail » et leur auto-update
+    # resterait bloqué pour toujours, ce que cette tâche existe justement
+    # pour corriger. Un vrai checkout de développement de Nivuus moderne
+    # est déjà écarté par (2) et (3) : il n'a pas un unique commit
+    # « Initial Nivuus Shell installation ».
+    if [ -n "$(git -C "$dir" status --porcelain --untracked-files=no 2>/dev/null || printf x)" ]; then
+        if [ ! -f "$dir/lib/manifest.sh" ] \
+           || git -C "$dir" ls-files --error-unmatch lib/manifest.sh >/dev/null 2>&1; then
+            printf 'dev\n'; return 0
+        fi
+    fi
 
     # (6) aucun stash
     [ -z "$(git -C "$dir" stash list 2>/dev/null || printf x)" ] \

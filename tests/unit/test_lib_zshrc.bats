@@ -185,3 +185,67 @@ teardown() { rm -rf "$TMP"; }
     run bash -c "source '$LIB/zshrc.sh'; nivuus_zshrc_block /opt/nivuus 1"
     [[ "$output" == *"export NIVUUS_MINIMAL=1"* ]]
 }
+
+# --- Compatibilité ascendante : la strophe que v3.0.0 écrivait ----------
+# (git show v3.0.0:install.sh, lignes 257-261 : aucun marqueur, donc
+# classée « absent » par nivuus_zshrc_state.)
+
+@test "la strophe v3.0.0 est reconnue" {
+    cat > "$TMP/zshrc" <<'EOS'
+# Nivuus Shell Configuration
+export NIVUUS_SHELL_DIR="/home/u/.nivuus-shell"
+source "$NIVUUS_SHELL_DIR/.zshrc"
+EOS
+    run nivuus_zshrc_legacy_present "$TMP/zshrc"
+    [ "$status" -eq 0 ]
+}
+
+@test "un .zshrc quelconque n'est PAS pris pour la strophe v3.0.0" {
+    printf 'alias ll="ls -la"\nexport EDITOR=vim\n' > "$TMP/zshrc"
+    run nivuus_zshrc_legacy_present "$TMP/zshrc"
+    [ "$status" -ne 0 ]
+}
+
+@test "sans l'en-tête, la strophe n'est pas reconnue" {
+    printf 'export NIVUUS_SHELL_DIR="/x"\nsource "$NIVUUS_SHELL_DIR/.zshrc"\n' > "$TMP/zshrc"
+    run nivuus_zshrc_legacy_present "$TMP/zshrc"
+    [ "$status" -ne 0 ]
+}
+
+@test "un .zshrc déjà géré par bloc n'est pas traité comme legacy" {
+    nivuus_zshrc_block "/x" > "$TMP/zshrc"
+    printf '# Nivuus Shell Configuration\n' >> "$TMP/zshrc"
+    run nivuus_zshrc_legacy_present "$TMP/zshrc"
+    [ "$status" -ne 0 ]
+}
+
+@test "strip_legacy retire les trois lignes et RIEN d'autre" {
+    cat > "$TMP/zshrc" <<'EOS'
+# mes réglages
+export EDITOR=vim
+# Nivuus Shell Configuration
+export NIVUUS_SHELL_DIR="/home/u/.nivuus-shell"
+source "$NIVUUS_SHELL_DIR/.zshrc"
+alias ll="ls -la"
+EOS
+    run nivuus_zshrc_strip_legacy "$TMP/zshrc"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"export EDITOR=vim"* ]]
+    [[ "$output" == *'alias ll="ls -la"'* ]]
+    [[ "$output" == *"# mes réglages"* ]]
+    [[ "$output" != *"NIVUUS_SHELL_DIR"* ]]
+    [[ "$output" != *"Nivuus Shell Configuration"* ]]
+}
+
+@test "merge sur un .zshrc v3.0.0 ne produit qu'UNE source de Nivuus" {
+    cat > "$TMP/zshrc" <<'EOS'
+# Nivuus Shell Configuration
+export NIVUUS_SHELL_DIR="/ancien"
+source "$NIVUUS_SHELL_DIR/.zshrc"
+EOS
+    run nivuus_zshrc_merge "$TMP/zshrc" "/nouveau" ""
+    [ "$status" -eq 0 ]
+    [ "$(printf '%s\n' "$output" | grep -c 'NIVUUS_SHELL_DIR/.zshrc')" -eq 1 ]
+    [[ "$output" == *"/nouveau"* ]]
+    [[ "$output" != *"/ancien"* ]]
+}

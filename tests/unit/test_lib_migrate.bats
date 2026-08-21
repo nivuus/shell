@@ -49,6 +49,28 @@ make_legacy() {
     [ "$output" = "dev" ]
 }
 
+@test "une installation de HEAD par-dessus le dépôt hérité reste legacy" {
+    # Après « nivuus install » sur une installation v3.0.0, TOUS les
+    # fichiers suivis sont modifiés -- par l'installeur, pas par un humain.
+    # lib/manifest.sh, non suivi et pourtant présent, en est la preuve :
+    # la v3.0.0 n'avait pas de lib/. Sans cette exception, la migration
+    # serait impossible pour exactement les installations qu'elle vise.
+    make_legacy "$TMP/legacy"
+    printf 'edite par l installeur\n' > "$TMP/legacy/fichier"
+    mkdir -p "$TMP/legacy/lib"; printf 'nivuus_manifest_begin() { :; }\n' > "$TMP/legacy/lib/manifest.sh"
+    run nivuus_git_state "$TMP/legacy"
+    [ "$output" = "legacy" ]
+}
+
+@test "un lib/manifest.sh SUIVI ne lève pas l'exception -> dev" {
+    make_legacy "$TMP/legacy"
+    mkdir -p "$TMP/legacy/lib"; printf 'x\n' > "$TMP/legacy/lib/manifest.sh"
+    ( cd "$TMP/legacy" && git add lib/manifest.sh && git commit -q --amend --no-edit ) >/dev/null 2>&1
+    printf 'travail humain\n' > "$TMP/legacy/fichier"
+    run nivuus_git_state "$TMP/legacy"
+    [ "$output" = "dev" ]
+}
+
 @test "un second commit -> dev" {
     make_legacy "$TMP/legacy"
     ( cd "$TMP/legacy" && printf 'x\n' > b && git add b && git commit -q -m "mon travail" ) >/dev/null

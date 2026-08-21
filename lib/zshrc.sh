@@ -49,6 +49,41 @@ nivuus_zshrc_strip() {
     ' "$file"
 }
 
+# La v3.0.0 écrivait dans ~/.zshrc trois lignes sans le moindre marqueur
+# (git show v3.0.0:install.sh, lignes 257-261). nivuus_zshrc_state les
+# classe donc « absent », et une installation de HEAD par-dessus AJOUTERAIT
+# son bloc sans les retirer : le .zshrc sourcerait Nivuus deux fois.
+#
+# La reconnaissance est volontairement étroite -- en-tête exact, aucun bloc
+# délimité présent, et trois formes de ligne précises. Un .zshrc écrit à la
+# main qui contiendrait par hasard l'une de ces lignes n'est pas touché tant
+# que l'en-tête manque.
+NIVUUS_LEGACY_HEADER='# Nivuus Shell Configuration'
+
+nivuus_zshrc_legacy_present() {
+    local file="$1"
+    [ -f "$file" ] || return 1
+    [ "$(nivuus_zshrc_state "$file")" = "absent" ] || return 1
+    grep -qxF "$NIVUUS_LEGACY_HEADER" "$file" || return 1
+    grep -q '^export NIVUUS_SHELL_DIR=' "$file" || return 1
+    grep -qF 'source "$NIVUUS_SHELL_DIR/.zshrc"' "$file" || return 1
+    return 0
+}
+
+nivuus_zshrc_strip_legacy() {
+    local file="$1"
+    [ -f "$file" ] || return 0
+    # Même précaution CRLF que nivuus_zshrc_strip : un .zshrc réenregistré
+    # depuis Windows (WSL) ne doit pas échapper au retrait.
+    awk -v h="$NIVUUS_LEGACY_HEADER" '
+        { line = $0; sub(/\r$/, "", line) }
+        line == h { next }
+        line ~ /^export NIVUUS_SHELL_DIR=/ { next }
+        line == "source \"$NIVUUS_SHELL_DIR/.zshrc\"" { next }
+        { print }
+    ' "$file"
+}
+
 nivuus_zshrc_merge() {
     local file="$1" install_dir="$2" minimal="${3:-}" state
     state="$(nivuus_zshrc_state "$file")"
@@ -67,6 +102,15 @@ nivuus_zshrc_merge() {
             nivuus_zshrc_strip "$file"
             ;;
         absent)
+            if nivuus_zshrc_legacy_present "$file"; then
+                # >&2 impératif : la sortie standard de cette fonction EST
+                # le contenu du futur .zshrc. Un log_info non redirigé s'y
+                # retrouverait écrit, puis survivrait à toutes les
+                # réinstallations suivantes.
+                log_info "Configuration héritée de la v3.0.0 détectée dans $file : elle est remplacée par le bloc délimité." >&2
+                { nivuus_zshrc_block "$install_dir" "$minimal"; nivuus_zshrc_strip_legacy "$file"; }
+                return 0
+            fi
             nivuus_zshrc_block "$install_dir" "$minimal"
             cat "$file"
             # Garantit une newline finale si le fichier n'en avait pas.
