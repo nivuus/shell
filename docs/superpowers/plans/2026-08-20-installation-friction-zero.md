@@ -35,7 +35,7 @@
 
 **Interfaces:**
 - Consumes: rien
-- Produces: `log_info(msg)`, `log_ok(msg)`, `log_warn(msg)`, `log_error(msg)`, `log_dry(msg)` — tous écrivent sur stdout sauf `log_error` (stderr) ; honorent `NIVUUS_QUIET=1` (seuls `log_warn`/`log_error` survivent) et désactivent les couleurs si stdout n'est pas un TTY ou si `NO_COLOR` est défini.
+- Produces: `log_info(msg)`, `log_ok(msg)`, `log_warn(msg)`, `log_error(msg)`, `log_dry(msg)` — `log_warn` et `log_error` écrivent sur **stderr** (convention Unix), les trois autres sur stdout ; honorent `NIVUUS_QUIET=1` (seuls `log_warn`/`log_error` survivent) et désactivent les couleurs si stdout n'est pas un TTY ou si `NO_COLOR` est défini.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -225,7 +225,7 @@ git commit -m "feat(lib): add portable sha256 hashing"
 **Interfaces:**
 - Consumes: `nivuus_hash_file` (Task 2), `log_error` (Task 1)
 - Produces:
-  - `nivuus_manifest_begin <mode> <install_dir>` — initialise un manifeste temporaire ; définit `NIVUUS_STATE_DIR`, `NIVUUS_MANIFEST`, `NIVUUS_BACKUP_DIR` s'ils ne le sont pas déjà.
+  - `nivuus_manifest_begin <mode> <install_dir>` — initialise un manifeste temporaire ; `NIVUUS_STATE_DIR` n'est défini que s'il ne l'est pas déjà (`:=`), tandis que `NIVUUS_MANIFEST` et `NIVUUS_BACKUP_DIR` en sont toujours dérivés.
   - `nivuus_manifest_record <action> <path> <hash> <ref>` — ajoute une ligne ; refuse (code 1) un chemin contenant une tabulation ou un saut de ligne.
   - `nivuus_manifest_commit` — remplace atomiquement le manifeste définitif par le temporaire.
   - `nivuus_manifest_each <callback>` — appelle `callback action path hash ref` pour chaque entrée, en **ordre inverse** d'écriture (pour que la désinstallation défasse dans l'ordre inverse de l'installation).
@@ -385,7 +385,7 @@ git commit -m "feat(lib): add manifest journal with atomic commit"
 - Consumes: `nivuus_manifest_record`, `nivuus_hash_file`
 - Produces:
   - `nivuus_store_backup <path>` — copie le fichier dans `$NIVUUS_BACKUP_DIR/<sha256>` et imprime le sha ; imprime `-` si le fichier n'existe pas.
-  - `nivuus_mkdir_p <dir>` — crée le répertoire s'il manque et enregistre `MKDIR` (une entrée par niveau créé, du plus profond au plus superficiel non existant) ; ne fait rien s'il existe déjà.
+  - `nivuus_mkdir_p <dir>` — crée le répertoire s'il manque et enregistre `MKDIR` (une entrée par niveau créé, **du plus superficiel au plus profond**) ; ne fait rien s'il existe déjà. L'ordre est contraint par la désinstallation : `nivuus_manifest_each` parcourt le manifeste à l'envers, donc un enregistrement superficiel-vers-profond produit un `rmdir` profond-vers-superficiel. L'ordre inverse laisserait le parent non supprimé, `rmdir` échouant sur un répertoire encore occupé par son enfant.
   - `nivuus_install_file <src> <dst>` — enregistre `CREATE` si `dst` n'existait pas, `MODIFY` (avec backup de l'original) sinon ; **`SKIP` silencieux si le contenu est déjà identique** (idempotence) ; respecte `NIVUUS_DRY_RUN`.
   - `nivuus_write_file <dst>` — même contrat, mais le contenu est lu depuis stdin (utilisé pour `.zshrc` et `.version`).
 
@@ -521,7 +521,11 @@ _nivuus_place() {
     fi
 
     if [ "$existed" -eq 1 ]; then
-        backup="$(nivuus_store_backup "$dst")"
+        # Le garde est essentiel : si la sauvegarde échoue, on abandonne AVANT
+        # d'écraser $dst. Sans lui, on enregistrerait un MODIFY dont la
+        # référence de backup est vide — la désinstallation ne pourrait plus
+        # restaurer l'original.
+        backup="$(nivuus_store_backup "$dst")" || return 1
     fi
 
     if [ -n "${NIVUUS_DRY_RUN:-}" ]; then
@@ -1882,8 +1886,7 @@ git commit -m "test(e2e): prove uninstall leaves HOME bit-identical"
 
 **Files:**
 - Modify: `.github/workflows/tests.yml`
-- Modify: `.gitignore`
-- Delete: `config/*.zwc`
+(Les `.zwc` sont déjà couverts par `.gitignore` et non suivis par git — vérifié : `git ls-files 'config/*.zwc'` renvoie 0. Aucune action de dé-suivi n'est nécessaire.)
 
 **Interfaces:**
 - Consumes: toutes les suites précédentes
@@ -1893,13 +1896,6 @@ git commit -m "test(e2e): prove uninstall leaves HOME bit-identical"
 
 Run: `grep -c "tests/e2e" .github/workflows/tests.yml || true`
 Expected: `0` — confirme que les tests e2e ne tournent jamais en CI.
-
-- [ ] **Step 2: Remove the committed bytecode**
-
-```bash
-git rm --cached config/*.zwc
-printf '\n# Bytecode ZSH compilé — jamais commité\n*.zwc\n' >> .gitignore
-```
 
 - [ ] **Step 3: Add the e2e job**
 
@@ -1927,11 +1923,14 @@ Ajouter dans `.github/workflows/tests.yml`, au même niveau que les jobs existan
 
 - [ ] **Step 4: Verify locally before pushing**
 
-Run: `bats tests/unit/ tests/e2e/`
-Expected: PASS. Vérifier ensuite qu'aucun `.zwc` n'est suivi par git :
+Run: `bats tests/unit/test_lib_*.bats tests/e2e/`
+Expected: PASS.
 
-Run: `git ls-files '*.zwc' | wc -l`
-Expected: `0`
+**Attention :** `bats tests/unit/` en entier contient un échec **préexistant et
+hors périmètre** — `test_ai_suggestions.bats` test 6 (`_ai_spinner_tick`), qui
+échoue sur tout checkout propre et ne passe en local que parce que zsh charge un
+`.zwc` périmé. Ne pas tenter de le corriger dans ce chantier ; ne pas non plus
+l'ajouter au job CI de cette tâche.
 
 - [ ] **Step 5: Commit**
 
@@ -1947,10 +1946,9 @@ git commit -m "ci: run library and installation E2E suites, drop committed .zwc"
 Une fois les 12 tâches terminées, ces commandes doivent toutes réussir :
 
 ```bash
-bats tests/unit/ tests/e2e/          # toutes les suites
-./bin/nivuus install --dry-run --yes # n'écrit rien, décrit tout
-git ls-files '*.zwc' | wc -l         # 0
-grep -rn "init_git_repo" install.sh  # aucun résultat
+bats tests/unit/test_lib_*.bats tests/e2e/   # les suites de ce chantier
+./bin/nivuus install --dry-run --yes         # n'écrit rien, décrit tout
+grep -rn "init_git_repo" install.sh          # aucun résultat
 ```
 
 ## Ce que ce plan ne livre pas
@@ -1962,3 +1960,18 @@ Reporté aux plans des phases suivantes, conformément au spec :
 - **Phase 5** — vrai one-liner `curl | sh` avec téléchargement du tarball de release, migration des installations existantes portant un `.git` parasite, refonte de `doctor`, documentation d'installation.
 
 `nivuus update` et `nivuus doctor` délèguent pour l'instant à l'existant (`nivuus-update`, `bin/healthcheck`) sans changement de comportement.
+
+### Deux comportements de l'ancien installeur disparus sans remplacement
+
+Relevé par la revue de la tâche 10, à trancher avant le lancement public :
+
+- **`create_local_config`** — l'ancien `install.sh` déposait un `~/.zsh_local` pré-rempli
+  (template commenté). Le nouveau n'en crée aucun. Conséquence assumée : `--purge` ne
+  supprime jamais ce fichier, puisque Nivuus ne l'a pas créé. Mais le bloc inséré dans
+  `.zshrc` invite l'utilisateur à « mettre ses personnalisations dans ~/.zsh_local », un
+  fichier qui n'existe pas. À réconcilier : soit créer le template (et l'enregistrer au
+  manifeste), soit reformuler le message.
+- **`suggest_optional_tools`** — les suggestions de fin d'installation (`eza`, `bat`,
+  `grc`…) ont disparu. Perte d'ergonomie de première utilisation, sans effet sur la
+  sûreté ni la réversibilité. À réintroduire en phase 3 avec la politique `--with-deps`,
+  ou à abandonner explicitement.

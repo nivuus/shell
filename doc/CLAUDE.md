@@ -39,7 +39,7 @@ NIVUUS_SHELL_DIR="$(pwd)" zsh   # Run from current directory without installing
 # User installation (in test environment)
 ./install.sh --non-interactive
 
-# System installation
+# System installation (temporarily unavailable: exits with an error)
 sudo ./install.sh --system --non-interactive
 
 # With health check
@@ -229,7 +229,8 @@ When adding new config modules:
 `install.sh` supports two modes:
 
 - **User mode** (default): Installs to `~/.nivuus-shell`, modifies `~/.zshrc`
-- **System mode** (`--system`): Installs to `/etc/nivuus-shell`, creates `/etc/skel/.zshrc`
+- **System mode** (`--system`): Installs to `/etc/nivuus-shell`, creates `/etc/skel/.zshrc`.
+  Temporarily unavailable -- `--system` now exits with an error; this is a later phase.
 
 **Backup system**: Always backs up to `~/.config/nivuus-shell-backup/` before modifying configs.
 
