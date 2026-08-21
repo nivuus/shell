@@ -132,21 +132,22 @@ jobs:
           fi
           echo "✅ Tag v${{ steps.version.outputs.version }} is available"
 
-      - name: Update version in package.json
+      - name: Synchronise version across .version, package.json and install.sh
         run: |
-          # Update package.json version
-          sed -i 's/"version": ".*"/"version": "${{ steps.version.outputs.version }}"/' package.json
+          V="${{ steps.version.outputs.version }}"
+          printf '%s\n' "$V" > .version
+          sed -i 's/"version": ".*"/"version": "'"$V"'"/' package.json
+          # Plancher de version du script d'amorçage : il ne sert que quand
+          # l'API GitHub est injoignable, mais s'il diverge il envoie les
+          # nouvelles installations sur une release périmée.
+          sed -i 's/^NIVUUS_PINNED_VERSION=".*"/NIVUUS_PINNED_VERSION="'"$V"'"/' install.sh
 
-          echo "✅ Updated package.json to version ${{ steps.version.outputs.version }}"
-          grep '"version"' package.json
-
-      - name: Update version in install.sh
-        run: |
-          # Update install.sh VERSION variable
-          sed -i 's/^VERSION=.*/VERSION="${{ steps.version.outputs.version }}"/' install.sh
-
-          echo "✅ Updated install.sh to version ${{ steps.version.outputs.version }}"
-          grep '^VERSION=' install.sh
+          # Vérification croisée : c'est elle qui manquait, et c'est elle qui
+          # aurait signalé que le sed précédent ne remplaçait plus rien.
+          test "$(cat .version)" = "$V"
+          test "$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' package.json | head -n1)" = "$V"
+          test "$(sed -n 's/^NIVUUS_PINNED_VERSION="\(.*\)"/\1/p' install.sh | head -n1)" = "$V"
+          echo "Version synchronisée : $V"
 
       - name: Generate changelog
         id: changelog
@@ -171,7 +172,7 @@ jobs:
           ## Installation
 
           \`\`\`bash
-          curl -fsSL https://raw.githubusercontent.com/maximeallanic/nivuus-shell/v${{ steps.version.outputs.version }}/install.sh | bash
+          curl -fsSL https://raw.githubusercontent.com/maximeallanic/nivuus-shell/v${{ steps.version.outputs.version }}/install.sh | sh
           \`\`\`
 
           Or download the release archive and extract it manually.
@@ -329,7 +330,7 @@ jobs:
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
 
-          git add package.json install.sh
+          git add package.json install.sh .version
           git commit -m "chore: bump version to ${{ steps.version.outputs.version }}"
 
           echo "✅ Committed version updates"

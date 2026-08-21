@@ -95,6 +95,20 @@ else
 fi
 echo ""
 
+# Dépôt git hérité de la v3.0.0 : signalé, jamais touché. Lecture seule --
+# doctor diagnostique, « nivuus migrate » agit.
+if [[ -f "$NIVUUS_DIR/lib/migrate.sh" ]]; then
+    # shellcheck source=/dev/null
+    . "$NIVUUS_DIR/lib/migrate.sh" 2>/dev/null || true
+    if command -v nivuus_git_state >/dev/null 2>&1 \
+       && [[ "$(nivuus_git_state "$NIVUUS_DIR")" == "legacy" ]]; then
+        echo -e "${WARN} Dépôt git hérité de la v3.0.0 dans $NIVUUS_DIR"
+        echo "  Tes mises à jour automatiques sont désactivées à cause de lui."
+        echo "  Correction : nivuus migrate"
+        echo ""
+    fi
+fi
+
 # =============================================================================
 # Core Dependencies
 # =============================================================================
@@ -102,16 +116,23 @@ echo ""
 echo -e "${BLUE}Core Dependencies${NC}"
 echo "─────────────────────────────────────────────"
 
+# $3 = "recommended" -> absence signalée en avertissement, pas en erreur.
+# Un outil dont l'absence est supportée ne doit pas afficher une croix
+# rouge : elle enverrait chercher une panne là où il n'y en a pas.
 check_command() {
     if command -v "$1" &>/dev/null; then
         echo -e "${CHECK} $1"
         [[ -n "$2" ]] && echo "  $($1 $2 2>/dev/null | head -1 | sed 's/^/  /')"
+    elif [[ "${3:-}" == "recommended" ]]; then
+        echo -e "${WARN} $1 not found (recommended, not required)"
     else
         echo -e "${CROSS} $1 not found"
     fi
 }
 
-check_command "git" "--version"
+# git n'est plus requis pour installer ni mettre à jour Nivuus : il ne sert
+# qu'au prompt git, qui se désactive proprement en son absence.
+check_command "git" "--version" recommended
 check_command "curl" "--version | head -1"
 check_command "vim" "--version | head -1"
 echo ""
