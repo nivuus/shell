@@ -82,9 +82,11 @@ deps() {   # deps "<commandes du PATH>" "<appel>"
     deps "apt-get sudo" "nivuus_deps_check_required 2>&1"
     [ "$status" -eq 1 ]
     [[ "$output" == *"zsh"* ]]
-    [[ "$output" == *"git"* ]]
     [[ "$output" == *"curl"* ]]
     [[ "$output" == *"apt-get install"* ]]
+    # git n'est plus requis depuis la phase 5 : rien dans le chemin
+    # d'installation ni de mise à jour ne l'utilise.
+    [[ "$output" != *"git"* ]]
 }
 
 @test "check_required succeeds when everything is present" {
@@ -105,4 +107,33 @@ deps() {   # deps "<commandes du PATH>" "<appel>"
 @test "deps_suggest is silent when nothing is missing" {
     deps "zsh git curl fzf" "nivuus_deps_suggest recommended"
     [ "$output" = "" ]
+}
+
+@test "git n'est PAS une dépendance requise" {
+    deps "" "nivuus_deps_list required"
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"git"* ]]
+}
+
+@test "zsh et curl restent requis" {
+    deps "" "nivuus_deps_list required"
+    [[ "$output" == *"zsh"* ]]
+    [[ "$output" == *"curl"* ]]
+}
+
+@test "git est recommandé (prompt git), pas oublié" {
+    deps "" "nivuus_deps_list recommended"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"git"* ]]
+}
+
+@test "check_required réussit sans git" {
+    deps "zsh curl" "nivuus_deps_check_required"
+    [ "$status" -eq 0 ]
+}
+
+@test "check_required échoue toujours sans curl" {
+    deps "zsh" "nivuus_deps_check_required 2>&1"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"curl"* ]]
 }

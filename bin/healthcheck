@@ -102,16 +102,23 @@ echo ""
 echo -e "${BLUE}Core Dependencies${NC}"
 echo "─────────────────────────────────────────────"
 
+# $3 = "recommended" -> absence signalée en avertissement, pas en erreur.
+# Un outil dont l'absence est supportée ne doit pas afficher une croix
+# rouge : elle enverrait chercher une panne là où il n'y en a pas.
 check_command() {
     if command -v "$1" &>/dev/null; then
         echo -e "${CHECK} $1"
         [[ -n "$2" ]] && echo "  $($1 $2 2>/dev/null | head -1 | sed 's/^/  /')"
+    elif [[ "${3:-}" == "recommended" ]]; then
+        echo -e "${WARN} $1 not found (recommended, not required)"
     else
         echo -e "${CROSS} $1 not found"
     fi
 }
 
-check_command "git" "--version"
+# git n'est plus requis pour installer ni mettre à jour Nivuus : il ne sert
+# qu'au prompt git, qui se désactive proprement en son absence.
+check_command "git" "--version" recommended
 check_command "curl" "--version | head -1"
 check_command "vim" "--version | head -1"
 echo ""
