@@ -33,27 +33,8 @@ jobs:
         run: |
           bats tests/unit/
 
-      - name: Run performance tests (CRITICAL <300ms)
-        run: |
-          bats tests/performance/
-
-      - name: Validate startup time requirement
-        run: |
-          # Extract startup time from performance tests
-          output=$(bats tests/performance/test_startup.bats 2>&1)
-          echo "$output"
-
-          # Check if startup test passed or was skipped (both are OK)
-          if echo "$output" | grep -q "ok 1 CRITICAL"; then
-            if echo "$output" | grep -q "# skip"; then
-              echo "⏭️  Startup time test skipped in CI (use bin/benchmark locally)"
-            else
-              echo "✅ Startup time requirement met (<300ms)"
-            fi
-          else
-            echo "❌ Startup time requirement FAILED"
-            exit 1
-          fi
+      - name: Performance (startup budget is enforced, not observed)
+        run: bats tests/performance/
 
       - name: Test count must never regress
         run: ./bin/test-count --check
