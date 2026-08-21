@@ -16,7 +16,7 @@ setup() {
 run_system_in() {
     docker run --rm -v "$ROOT:/src:ro" "$1" sh -c '
         set -e
-        cp -r /src /work && cd /work
+        cp -r /src /work && chmod -R a+rX /work && cd /work
         ./tests/ci/install-deps.sh >/dev/null
         ./tests/ci/run-system-target.sh'
 }

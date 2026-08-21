@@ -14,7 +14,7 @@ setup() {
 in_image() {
     docker run --rm -v "$ROOT:/src:ro" "$1" sh -c "
         set -e
-        cp -r /src /work && cd /work
+        cp -r /src /work && chmod -R a+rX /work && cd /work
         ./tests/ci/install-deps.sh >/dev/null 2>&1 || true
         . ./tests/helpers/users.bash
         $2

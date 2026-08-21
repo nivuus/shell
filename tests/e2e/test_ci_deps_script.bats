@@ -13,7 +13,7 @@ setup() {
 run_in() {
     docker run --rm -v "$ROOT:/src:ro" "$1" sh -c '
         set -e
-        cp -r /src /work && cd /work
+        cp -r /src /work && chmod -R a+rX /work && cd /work
         ./tests/ci/install-deps.sh
         bats --version | grep -q "1.11.1"
         bats --count tests/unit/test_lib_detect.bats
@@ -53,7 +53,7 @@ run_in() {
 @test "install-deps is idempotent (second run is a no-op that still succeeds)" {
     run docker run --rm -v "$ROOT:/src:ro" debian:12 sh -c '
         set -e
-        cp -r /src /work && cd /work
+        cp -r /src /work && chmod -R a+rX /work && cd /work
         ./tests/ci/install-deps.sh >/dev/null
         ./tests/ci/install-deps.sh
     '
@@ -64,7 +64,7 @@ run_in() {
 @test "run-target.sh installs, runs a real interactive shell and reverts, on debian:12" {
     run docker run --rm -v "$ROOT:/src:ro" debian:12 sh -c '
         set -e
-        cp -r /src /work && cd /work
+        cp -r /src /work && chmod -R a+rX /work && cd /work
         ./tests/ci/install-deps.sh >/dev/null
         ./tests/ci/run-target.sh
     '
@@ -76,7 +76,7 @@ run_in() {
 @test "run-target.sh works on alpine:3.20 too" {
     run docker run --rm -v "$ROOT:/src:ro" alpine:3.20 sh -c '
         set -e
-        cp -r /src /work && cd /work
+        cp -r /src /work && chmod -R a+rX /work && cd /work
         ./tests/ci/install-deps.sh >/dev/null
         ./tests/ci/run-target.sh
     '

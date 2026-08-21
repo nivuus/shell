@@ -51,7 +51,7 @@ teardown() { rm -rf "$TMP"; }
     run docker run --rm -v "$ROOT:/src:ro" alpine:3.20 sh -c '
         set -e
         apk add --no-cache bash zsh git curl >/dev/null
-        cp -r /src /work && cd /work
+        cp -r /src /work && chmod -R a+rX /work && cd /work
         export HOME=/root
         ./bin/nivuus install --yes --prefix "$HOME/.nivuus-shell"
         test -f "$HOME/.nivuus-shell/.zshrc"
