@@ -53,7 +53,7 @@ Usage :
                    [--with-deps] [--verify-key EMPREINTE] [--system]
   nivuus enable    [--dry-run] [--yes] [--prefix DIR] [--minimal|--no-minimal]
   nivuus disable   [--dry-run] [--yes] [--purge]
-  nivuus uninstall [--dry-run] [--yes] [--purge]
+  nivuus uninstall [--dry-run] [--yes] [--purge] [--system]
   nivuus migrate   [--dry-run] [--yes] [--prefix DIR]
   nivuus update
   nivuus doctor
@@ -335,20 +335,35 @@ cmd_install() {
 }
 
 cmd_uninstall() {
-    local purge='' f name mkdir_levels level header kept_refs
+    local purge='' f name mkdir_levels level header kept_refs SYSTEM=''
     while [ $# -gt 0 ]; do
         case "$1" in
             --dry-run) export NIVUUS_DRY_RUN=1 ;;
             --yes|-y)  ASSUME_YES=1 ;;
             --purge)   purge=1 ;;
+            --system)  SYSTEM=1 ;;
             *) log_error "Option inconnue : $1"; return 2 ;;
         esac
         shift
     done
 
+    if [ -n "$SYSTEM" ]; then
+        NIVUUS_STATE_DIR="$(nivuus_system_state_dir)"; export NIVUUS_STATE_DIR
+        umask 022
+        if [ -z "${NIVUUS_DRY_RUN:-}" ]; then
+            nivuus_system_require_root "retirer l'installation système" || return 1
+        fi
+    fi
     : "${NIVUUS_STATE_DIR:=${XDG_STATE_HOME:-$HOME/.local/state}/nivuus}"
     NIVUUS_MANIFEST="$NIVUUS_STATE_DIR/manifest.tsv"
     NIVUUS_BACKUP_DIR="$NIVUUS_STATE_DIR/backups"
+
+    if [ -n "$SYSTEM" ] && nivuus_system_manifest_has_home "$NIVUUS_MANIFEST"; then
+        log_error "Le manifeste système décrit des chemins dans un \$HOME : il est corrompu."
+        log_error "Nivuus refuse de le rejouer en root. Rien n'a été touché."
+        log_error "Inspecte-le :  $NIVUUS_MANIFEST"
+        return 1
+    fi
 
     if [ ! -f "$NIVUUS_MANIFEST" ]; then
         log_info "Aucune installation Nivuus tracée ; rien à faire."
@@ -371,6 +386,10 @@ cmd_uninstall() {
     nivuus_manifest_rollback
 
     if [ -n "$purge" ] && [ -z "${NIVUUS_DRY_RUN:-}" ]; then
+        # En mode système, aucun $HOME n'est touché -- ni lu. Le fait qu'un
+        # humain ait tapé « sudo » ne vaut pas consentement au nom des
+        # quatorze personnes qui ont un compte sur cette machine.
+        if [ -z "$SYSTEM" ]; then
         # On ne supprime QUE ce que Nivuus a créé, jamais un répertoire en bloc.
         if [ -f "$HOME/.zsh_local" ]; then
             log_info "~/.zsh_local n'a pas été créé par Nivuus : conservé. Supprime-le à la main si tu le souhaites."
@@ -392,6 +411,7 @@ cmd_uninstall() {
             # même prudence (rmdir échoue silencieusement si non vide) que
             # pour $NIVUUS_STATE_DIR et ses parents.
         fi
+        fi   # fin du bloc « artefacts d'exécution du $HOME » (mode utilisateur)
         # ~/.local, ~/.local/state et l'état Nivuus lui-même sont journalisés
         # en MKDIR par nivuus_manifest_begin, comme toute autre mutation :
         # rien n'est deviné ici. Mais nivuus_manifest_rollback (déjà exécuté
@@ -455,6 +475,11 @@ cmd_uninstall() {
 
     if [ -n "${NIVUUS_DRY_RUN:-}" ]; then
         log_info "Aucune modification effectuée (--dry-run)."
+    elif [ -n "$SYSTEM" ]; then
+        log_ok "Arbre système retiré ($(nivuus_system_tree)), rien d'autre n'a été touché."
+        log_info "Les activations par utilisateur subsistent -- elles appartiennent à chaque compte."
+        log_info "Leurs shells ne casseront pas (le bloc .zshrc est gardé). Chacun peut faire :"
+        log_info "  nivuus disable"
     else
         log_ok "Nivuus Shell désinstallé."
     fi

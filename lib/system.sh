@@ -108,6 +108,25 @@ nivuus_system_package_notice() {
     return 1
 }
 
+# Un manifeste système qui décrit un $HOME est corrompu ou fabriqué :
+# install --system n'en écrit JAMAIS (un test l'interdit). Plutôt que de
+# faire confiance à cette propriété au moment le plus dangereux -- un rejeu
+# en root -- on la vérifie. Quelques lignes d'awk contre la classe entière
+# des scénarios « manifeste trafiqué » et « bug d'une version future ».
+#
+# Trois racines : /home et /Users, les deux conventions, et $HOME lui-même,
+# qui couvre /root, les comptes hors convention et les arbres de test. Ce
+# n'est PAS une lecture d'un $HOME : c'est une comparaison de chaînes.
+nivuus_system_manifest_has_home() {
+    _m="$1"
+    [ -f "$_m" ] || return 1
+    awk -F"$NIVUUS_TAB" -v h="${HOME:-}" '
+        NR > 1 && ($2 ~ /^\/home\// || $2 ~ /^\/Users\//) { found = 1 }
+        NR > 1 && h != "" && h != "/" && index($2, h "/") == 1 { found = 1 }
+        END { exit !found }
+    ' "$_m"
+}
+
 # Charge RÉELLEMENT l'arbre, depuis un environnement vierge et non
 # privilégié. Trois façons d'obtenir un arbre en place que les shells ne
 # peuvent pas charger -- umask restrictif sous sudo, SELinux sans
