@@ -26,6 +26,10 @@ while [ $# -gt 0 ]; do
             shift
             [ $# -gt 0 ] || { printf "L'option --prefix attend un chemin.\n" >&2; exit 2; }
             ARGS+=(--prefix "$1") ;;
+        --verify-key)
+            shift
+            [ $# -gt 0 ] || { printf "L'option --verify-key attend une empreinte.\n" >&2; exit 2; }
+            ARGS+=(--verify-key "$1") ;;
         --help|-h)          exec "$ROOT/bin/nivuus" help ;;
         *) printf 'Option inconnue : %s\n' "$1" >&2; exit 2 ;;
     esac

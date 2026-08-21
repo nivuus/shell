@@ -8,6 +8,7 @@ NIVUUS_SRC_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 . "$NIVUUS_SRC_ROOT/lib/detect.sh"
 . "$NIVUUS_SRC_ROOT/lib/deps.sh"
 . "$NIVUUS_SRC_ROOT/lib/manifest.sh"
+. "$NIVUUS_SRC_ROOT/lib/keys.sh"
 . "$NIVUUS_SRC_ROOT/lib/zshrc.sh"
 . "$NIVUUS_SRC_ROOT/lib/steps.sh"
 
@@ -17,7 +18,7 @@ nivuus — gestion de Nivuus Shell
 
 Usage :
   nivuus install   [--dry-run] [--yes] [--prefix DIR] [--minimal|--no-minimal]
-                   [--with-deps]
+                   [--with-deps] [--verify-key EMPREINTE]
   nivuus uninstall [--dry-run] [--yes] [--purge]
   nivuus update
   nivuus doctor
@@ -32,6 +33,10 @@ Options :
   --with-deps   Propose UNE commande groupée pour installer les dépendances
                 recommandées et optionnelles, après confirmation. Sans elle,
                 Nivuus se contente d'afficher la commande.
+  --verify-key  Empreinte attendue du jeu de clés de signature embarqué
+                (voir SECURITY.md). Si elle ne correspond pas, l'installation
+                est refusée AVANT toute écriture. C'est l'ancrage hors bande :
+                obtiens l'empreinte par un canal de ton choix, colle-la ici.
   --purge     (uninstall) supprime aussi l'état Nivuus (manifeste, sauvegardes).
               Ne supprime que ce que Nivuus a créé : ~/.zsh_local (si présent
               mais non créé par Nivuus) et ~/.zsh_history ne sont JAMAIS supprimés.
@@ -90,6 +95,7 @@ install_optional_deps() {
 
 cmd_install() {
     local prefix="$HOME/.nivuus-shell" MINIMAL='' FORCE_MINIMAL='' FORCE_FULL='' WITH_DEPS=''
+    local verify_key=''
     while [ $# -gt 0 ]; do
         case "$1" in
             --dry-run) export NIVUUS_DRY_RUN=1 ;;
@@ -101,6 +107,11 @@ cmd_install() {
                 shift
                 [ $# -gt 0 ] || { log_error "L'option --prefix attend un chemin."; return 2; }
                 prefix="$1"
+                ;;
+            --verify-key)
+                shift
+                [ $# -gt 0 ] || { log_error "L'option --verify-key attend une empreinte."; return 2; }
+                verify_key="$1"
                 ;;
             *) log_error "Option inconnue : $1"; return 2 ;;
         esac
@@ -122,6 +133,19 @@ cmd_install() {
     fi
     if [ -n "$MINIMAL" ]; then
         log_info "Mode minimal (serveur, container, SSH ou sans TTY) : pas de chsh, pas d'extras."
+    fi
+
+    # AVANT toute écriture : si l'utilisateur a une empreinte obtenue par
+    # un autre canal et qu'elle ne correspond pas, on ne touche à rien.
+    if [ -n "${verify_key:-}" ]; then
+        if ! nivuus_keyset_verify "$NIVUUS_SRC_ROOT/keys" "$verify_key"; then
+            log_error "L'empreinte du jeu de clés ne correspond pas à celle fournie."
+            log_error "  attendue (fournie) : $verify_key"
+            log_error "  trouvée            : $(nivuus_keyset_fingerprint "$NIVUUS_SRC_ROOT/keys" 2>/dev/null || printf 'aucune')"
+            log_error "Installation refusée. Rien n'a été écrit."
+            return 1
+        fi
+        log_ok "Jeu de clés vérifié : $verify_key"
     fi
 
     nivuus_step_check_required_deps || return 1
