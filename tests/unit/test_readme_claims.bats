@@ -182,3 +182,25 @@ readme_env_vars() {
     run grep -rniE 'install[a-z]*.*nivuus-shell-backup' "$README" "$ROOT/doc"
     [ "$status" -ne 0 ] || { echo "chemin périmé présenté comme celui de l'installation : $output"; false; }
 }
+
+@test "le README ne contient plus d'arborescence recopiée à la main" {
+    # Une arborescence à la main ment par construction : elle périme au
+    # premier fichier ajouté, et aucun test raisonnable ne peut la
+    # maintenir (il faudrait décrire l'arbre deux fois). doc/CLAUDE.md
+    # décrit l'architecture ; « ls » décrit l'arborescence.
+    run grep -nE '^[[:space:]]*(├──|└──|│)' "$README"
+    [ "$status" -ne 0 ] || {
+        echo "arborescence ASCII dans le README :"; echo "$output"; false; }
+}
+
+@test "la section Project Structure a disparu" {
+    run grep -niE '^#{2,3} .*project structure' "$README"
+    [ "$status" -ne 0 ]
+}
+
+@test "l'architecture reste documentée quelque part" {
+    # Supprimer sans reloger serait une perte, pas un rangement.
+    [ -f "$ROOT/doc/CLAUDE.md" ]
+    grep -qiE 'architecture|module' "$ROOT/doc/CLAUDE.md"
+    grep -qF 'doc/CLAUDE.md' "$README"
+}

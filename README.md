@@ -484,41 +484,6 @@ Edit any file, then restart the shell to see changes:
 exec zsh
 ```
 
-## 📁 Project Structure
-
-```
-nivuus-shell/
-├── .github/
-│   └── workflows/
-│       ├── tests.yml      # CI/CD testing pipeline
-│       └── release.yml    # Release automation
-├── .zshrc                 # Main entry point
-├── .vimrc.nord            # Vim configuration with Nord theme
-├── install.sh             # Installation script
-├── config/                # Modular configuration
-│   ├── 00-core.zsh        # Core ZSH settings
-│   ├── 05-prompt.zsh      # Configurable prompt (theme + format template)
-│   ├── 06-git.zsh         # Git aliases
-│   ├── 07-navigation.zsh  # Smart navigation
-│   ├── 08-vim.zsh         # Vim integration
-│   ├── 09-nodejs.zsh      # Node.js/NVM
-│   ├── 10-ai.zsh          # AI commands
-│   ├── 20-autoupdate.zsh  # Auto-update system (release-based)
-│   └── ...                # Other modules
-├── themes/
-│   ├── nord.zsh           # Default color palette
-│   └── dracula.zsh        # Second built-in theme / custom-theme template
-├── bin/
-│   ├── healthcheck        # System diagnostics
-│   └── benchmark          # Performance testing
-├── doc/
-│   ├── FEATURES.md        # Complete feature list
-│   ├── PROMPT.md          # Prompt documentation
-│   └── CLAUDE.md          # Developer guide
-├── CHANGELOG.md           # Release history
-└── README.md              # This file
-```
-
 ## 🔧 Requirements
 
 ### Required
