@@ -95,6 +95,32 @@ release y est alors désactivée, volontairement (`git pull` la remplace).
 `git` **n'est pas requis** : il n'est utilisé que pour le prompt git, qui se désactive proprement
 en son absence. L'installation **sans git** est un cas testé, pas une tolérance.
 
+## Installation par un gestionnaire de paquets
+
+Quand Nivuus est installé par un paquet, l'arbre appartient au gestionnaire
+et **l'activation reste un acte par utilisateur** :
+
+    nivuus enable      # ajoute le bloc à ~/.zshrc (et propose chsh)
+    nivuus disable     # retire le bloc, sans toucher à l'arbre
+
+Les mises à jour automatiques sont alors désactivées : c'est le gestionnaire
+qui les gère. `nivuus update` affiche sa commande exacte et sort en 0.
+
+`nivuus install` fait la même chose que `nivuus enable` dans ce mode, et le
+dit — il n'y a rien à copier, le paquet a déjà tout posé.
+
+Le bloc écrit dans `~/.zshrc` est **gardé** :
+
+    [ -r "$NIVUUS_SHELL_DIR/.zshrc" ] && source "$NIVUUS_SHELL_DIR/.zshrc"
+
+Si le paquet est retiré alors que le bloc subsiste, le shell démarre sans la
+moindre erreur. `nivuus doctor` nomme ce cas et donne la commande de
+réparation.
+
+Aucun canal n'est encore publié : cette section décrit le comportement de
+Nivuus face à un paquet, pas une commande d'installation disponible
+aujourd'hui. Voir `doc/PACKAGING.md`.
+
 ## Désinstaller
 
 ```bash

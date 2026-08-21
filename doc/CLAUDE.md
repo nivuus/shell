@@ -177,6 +177,17 @@ The vim system (`config/08-vim.zsh` + `.vimrc.nord`) uses environment detection:
 
 ## Critical Implementation Details
 
+### Invariants du projet
+
+- **Mode paquet** : `.nivuus-origin` absent ⇒ `origin=source` (comportement
+  historique). `bin/nivuus install` n'écrit jamais la valeur `package`. En mode
+  paquet, aucune mise à jour automatique, aucune écriture dans l'arbre
+  partagé, aucun `.zwc`. Le bloc `.zshrc` est **toujours** gardé
+  (`[ -r … ] && source …`), dans tous les modes.
+- **Activation par utilisateur** : `nivuus enable` / `nivuus disable` n'écrivent
+  et ne défont que le domaine de l'utilisateur ; l'arbre n'est jamais touché.
+  Voir `doc/PACKAGING.md`.
+
 ### Never Use These
 
 - **Oh-My-Zsh** or similar frameworks - conflicts with modular architecture

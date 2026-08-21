@@ -41,6 +41,11 @@ Other ways to install (manual download with checksum verification, development c
 per-platform prerequisites, `--minimal`, `--dry-run`, `--prefix`, pinning a version): see
 **[doc/INSTALL.md](doc/INSTALL.md)**.
 
+> Nivuus est conçu pour être empaqueté : quand il provient d'un gestionnaire
+> de paquets, les mises à jour automatiques se désactivent et l'activation
+> reste un acte par utilisateur (`nivuus enable`). Voir
+> **[doc/PACKAGING.md](doc/PACKAGING.md)**.
+
 ### Uninstall
 
 ```bash
