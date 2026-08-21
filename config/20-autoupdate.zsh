@@ -34,6 +34,53 @@ _nivuus_is_dev_checkout() {
     [[ -d "$NIVUUS_SHELL_DIR/.git" ]] || [[ -f "$NIVUUS_SHELL_DIR/.git" ]]
 }
 
+# Detect a package-manager install (spec § 1.2).
+#
+# Source de vérité : $NIVUUS_SHELL_DIR/.nivuus-origin, posé par la recette de
+# paquet. Son ABSENCE vaut « source » : c'est le comportement d'aujourd'hui,
+# mot pour mot, donc une régression ici ne peut pas atteindre le canal
+# principal.
+#
+# Volontairement réimplémenté ici plutôt que sourcé depuis lib/origin.sh :
+# aucun module de config/ ne source lib/*.sh sur le chemin de démarrage, et
+# le budget de 300 ms est un test qui bloque les PR. Coût ajouté quand le
+# marqueur est absent : un [[ -r ]], et rien d'autre -- pas de fork.
+_nivuus_origin() {
+    local f="$NIVUUS_SHELL_DIR/.nivuus-origin" v
+    [[ -r "$f" ]] || { print -r -- source; return 0 }
+    v="${$(sed -n 's/^origin=//p' "$f" 2>/dev/null | head -n1):-source}"
+    [[ "$v" == "package" ]] && { print -r -- package; return 0 }
+    print -r -- source
+}
+
+_nivuus_origin_channel() {
+    local f="$NIVUUS_SHELL_DIR/.nivuus-origin" v
+    [[ -r "$f" ]] || { print -r -- unknown; return 0 }
+    v="${$(sed -n 's/^channel=//p' "$f" 2>/dev/null | head -n1):-unknown}"
+    print -r -- "$v"
+}
+
+_nivuus_origin_package_name() {
+    local f="$NIVUUS_SHELL_DIR/.nivuus-origin" v
+    [[ -r "$f" ]] || { print -r -- nivuus-shell; return 0 }
+    v="${$(sed -n 's/^package=//p' "$f" 2>/dev/null | head -n1):-nivuus-shell}"
+    print -r -- "$v"
+}
+
+_nivuus_origin_package_version() {
+    local f="$NIVUUS_SHELL_DIR/.nivuus-origin" v
+    [[ -r "$f" ]] || return 1
+    v="$(sed -n 's/^version=//p' "$f" 2>/dev/null | head -n1)"
+    [[ -n "$v" ]] || return 1
+    print -r -- "$v"
+}
+
+# Jumelle de _nivuus_is_dev_checkout : deux gardes de même nature, au même
+# endroit, pour la même raison -- l'updater est destructif, il ne doit pas
+# s'exécuter là où il détruirait autre chose que lui-même. La symétrie
+# garantit qu'on ne peut pas corriger l'une en oubliant l'autre.
+_nivuus_is_package_install() { [[ "$(_nivuus_origin)" == "package" ]] }
+
 # Get current installed version
 _nivuus_current_version() {
     if [[ -f "$NIVUUS_VERSION_FILE" ]]; then
@@ -502,6 +549,26 @@ _nivuus_perform_update() {
     # automatique qui rend l'échappatoire inatteignable en arrière-plan.
     local interactive=${2:-}
 
+    # Garde-fou SECONDAIRE (spec § 1.2, règle 3), indépendant du marqueur.
+    # Il couvre le cas « un tiers a empaqueté Nivuus sans poser
+    # .nivuus-origin » -- qui arrivera, parce que l'AUR et les taps sont
+    # ouverts à tous. Placé AVANT le téléchargement : un refus doit être
+    # gratuit et ne rien laisser derrière lui.
+    #
+    # Limite assumée : inopérant pour un shell root sur machine paquetée,
+    # c'est-à-dire faux exactement dans le cas dangereux. C'est le marqueur
+    # qui couvre celui-là. Le marqueur porte le MESSAGE, ce garde-fou porte
+    # la SÛRETÉ ; aucun des deux ne suffit seul.
+    if [[ ! -w "$NIVUUS_SHELL_DIR" ]]; then
+        echo "❌ Mise à jour refusée : $NIVUUS_SHELL_DIR n'est pas inscriptible par $(whoami)."
+        echo "   Nivuus ne réécrit jamais un arbre qu'il ne possède pas — il appartient"
+        echo "   probablement à un gestionnaire de paquets ou à un montage en lecture seule."
+        if _nivuus_is_package_install; then
+            echo "   Mets-le à jour avec ton gestionnaire : $(_nivuus_origin_channel)"
+        fi
+        return 1
+    fi
+
     if [[ -z "$target_version" ]]; then
         echo "❌ Could not determine target version"
         return 1
@@ -564,9 +631,15 @@ _nivuus_check_update_async() {
 # Main Auto-Update Logic
 # ============================================================================
 
-# Only run if enabled — and never against a git checkout (dev mode), where a
-# destructive release install would delete .git and any uncommitted work.
-if [[ "$ENABLE_AUTOUPDATE" == "true" ]] && ! _nivuus_is_dev_checkout; then
+# Only run if enabled — never against a git checkout (dev mode), where a
+# destructive release install would delete .git and any uncommitted work,
+# and never against a package install, where it would rewrite files owned
+# by dpkg / pacman / brew (spec § 1.1). La règle du mode paquet l'emporte
+# délibérément sur ENABLE_AUTOUPDATE=true : il n'existe aucune façon
+# d'honorer ce réglage qui ne produise pas un système incohérent.
+if [[ "$ENABLE_AUTOUPDATE" == "true" ]] \
+   && ! _nivuus_is_dev_checkout \
+   && ! _nivuus_is_package_install; then
     # Check if it's time for an update check
     days_since_check=$(_nivuus_days_since_check)
 
@@ -581,6 +654,42 @@ fi
 # ============================================================================
 
 nivuus-update() {
+    # Mode paquet : le gestionnaire est autoritatif, on lui rend la main
+    # avec la commande exacte -- et on sort en 0. L'utilisateur a posé une
+    # question légitime et a reçu la réponse exacte ; ce n'est pas un échec.
+    # Un code non nul ferait crier les scripts et les tâches planifiées qui
+    # appellent nivuus update, sans rien apprendre à personne.
+    if _nivuus_is_package_install; then
+        local channel pkg version
+        channel="$(_nivuus_origin_channel)"
+        pkg="$(_nivuus_origin_package_name)"
+        version="$(_nivuus_origin_package_version 2>/dev/null || _nivuus_current_version)"
+        case "$channel" in
+            homebrew) print -r -- "Nivuus a été installé par Homebrew ; c'est lui qui gère les mises à jour." ;;
+            aur)      print -r -- "Nivuus a été installé depuis l'AUR ; c'est ton gestionnaire qui gère les mises à jour." ;;
+            deb)      print -r -- "Nivuus a été installé par un paquet Debian ; c'est apt qui gère les mises à jour." ;;
+            *)        print -r -- "Nivuus a été installé par un gestionnaire de paquets ; c'est lui qui gère les mises à jour." ;;
+        esac
+        print -r -- ""
+        case "$channel" in
+            homebrew) print -r -- "    brew upgrade $pkg" ;;
+            aur)      print -r -- "    yay -Syu $pkg      (ou paru -Syu $pkg, selon ton assistant AUR)" ;;
+            deb)      print -r -- "    apt upgrade $pkg   (ou, pour un .deb téléchargé à la main, la page de release du projet)" ;;
+            *)        print -r -- "    la commande de mise à jour de ton gestionnaire de paquets" ;;
+        esac
+        print -r -- ""
+        print -r -- "Version installée : $version"
+        print -r -- "Pour repasser aux mises à jour automatiques de Nivuus :"
+        case "$channel" in
+            homebrew) print -r -- "    brew uninstall $pkg" ;;
+            aur)      print -r -- "    sudo pacman -Rns $pkg" ;;
+            deb)      print -r -- "    sudo apt remove $pkg" ;;
+            *)        print -r -- "    retire le paquet avec ton gestionnaire" ;;
+        esac
+        print -r -- "    curl -fsSL https://raw.githubusercontent.com/${NIVUUS_GITHUB_REPO}/master/install.sh | sh"
+        return 0
+    fi
+
     # Never run the destructive release updater on a git checkout.
     if _nivuus_is_dev_checkout; then
         # Deux situations très différentes derrière un même .git, et le

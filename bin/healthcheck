@@ -95,6 +95,53 @@ else
 fi
 echo ""
 
+# Origine de l'installation : information, jamais réparation. Le marqueur est
+# posé par la recette de paquet ; son absence vaut « source », c'est-à-dire le
+# comportement historique.
+NIVUUS_ORIGIN_LIB="$NIVUUS_DIR/lib/origin.sh"
+[[ -r "$NIVUUS_ORIGIN_LIB" ]] || NIVUUS_ORIGIN_LIB="$(dirname "$0")/../lib/origin.sh"
+if [[ -r "$NIVUUS_ORIGIN_LIB" ]]; then
+    # shellcheck source=/dev/null
+    . "$NIVUUS_ORIGIN_LIB"
+    origin="$(nivuus_origin "$NIVUUS_DIR")"
+    echo "  Origine: $origin"
+    if [[ "$origin" == "package" ]]; then
+        echo "  Canal: $(nivuus_origin_channel "$NIVUUS_DIR")"
+        echo "  Version du paquet: $(nivuus_origin_field "$NIVUUS_DIR" version 2>/dev/null || echo inconnue)"
+        echo -e "  ${INFO} Mises à jour automatiques désactivées : c'est le gestionnaire qui les gère."
+        echo "     $(nivuus_origin_update_command "$NIVUUS_DIR")"
+        if ! nivuus_origin_tree_writable "$NIVUUS_DIR"; then
+            echo -e "  ${CHECK} Arbre en lecture seule (attendu pour un paquet)."
+        fi
+    fi
+fi
+
+# Cas 1 : bloc présent, arbre absent. La garde du bloc rend ce cas SILENCIEUX
+# au démarrage (c'est voulu : un brew uninstall ne doit casser le shell de
+# personne). C'est donc ici, et seulement ici, qu'il devient visible.
+if [[ -f "$HOME/.zshrc" ]] && grep -q '>>> nivuus shell >>>' "$HOME/.zshrc" 2>/dev/null; then
+    if [[ ! -r "$NIVUUS_DIR/.zshrc" ]]; then
+        echo -e "  ${WARN} Bloc Nivuus présent dans ~/.zshrc, mais aucun arbre lisible dans $NIVUUS_DIR."
+        echo "     Ton shell démarre sans erreur (la garde du bloc fait son travail) mais Nivuus ne se charge pas."
+        echo "     Réinstalle Nivuus, ou retire le bloc :  nivuus disable"
+    fi
+# Cas 2 : paquet installé, jamais activé.
+elif [[ -r "$NIVUUS_DIR/.zshrc" ]]; then
+    echo -e "  ${WARN} Nivuus est installé mais n'est pas activé pour cet utilisateur."
+    echo "     Pour l'activer :  nivuus enable"
+fi
+
+# Cas 3 : arbre paquet altéré. On NE répare PAS -- le gestionnaire est
+# autoritatif sur son domaine, et lui seul sait remettre l'arbre en état.
+if [[ -r "$NIVUUS_DIR/.nivuus-origin" ]] && command -v nivuus_origin_channel >/dev/null 2>&1; then
+    case "$(nivuus_origin_channel "$NIVUUS_DIR")" in
+        deb)      echo "  Vérifier l'intégrité de l'arbre :  dpkg -V nivuus-shell" ;;
+        aur)      echo "  Vérifier l'intégrité de l'arbre :  pacman -Qkk nivuus-shell" ;;
+        homebrew) echo "  Vérifier l'intégrité de l'arbre :  brew reinstall nivuus-shell" ;;
+    esac
+fi
+echo ""
+
 # Dépôt git hérité de la v3.0.0 : signalé, jamais touché. Lecture seule --
 # doctor diagnostique, « nivuus migrate » agit.
 if [[ -f "$NIVUUS_DIR/lib/migrate.sh" ]]; then

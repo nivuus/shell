@@ -18,13 +18,40 @@ rehash
 
 # Skip compilation in dev mode for faster iteration
 if [[ "${NIVUUS_NO_COMPILE:-0}" != "1" ]]; then
-    # Compile .zshrc if not already compiled or if source is newer
+    # Compile .zshrc if not already compiled or if source is newer.
+    # Ce fichier appartient à l'utilisateur dans TOUS les modes : il est
+    # compilé même en mode paquet.
     if [[ -f "$HOME/.zshrc" ]] && [[ (! -f "$HOME/.zshrc.zwc" || "$HOME/.zshrc" -nt "$HOME/.zshrc.zwc") ]]; then
         zcompile "$HOME/.zshrc" &>/dev/null
     fi
 
-    # Compile config files for faster loading
-    if [[ -d "$NIVUUS_SHELL_DIR/config" ]]; then
+    # Bytecode de l'arbre Nivuus : DEUX conditions, et c'est délibéré.
+    #
+    #  - inscriptibilité : protège l'utilisateur normal, pour qui l'écriture
+    #    sous /usr/share échouerait de toute façon en silence (&>/dev/null) ;
+    #  - origine : protège le shell ROOT sur machine paquetée -- le cas où
+    #    l'écriture RÉUSSIRAIT et laisserait des orphelins qu'apt purge ne
+    #    nettoie pas. Le projet promet « aucune trace » : c'en serait une.
+    #
+    # Autonome : ce module peut être sourcé sans config/20-autoupdate.zsh
+    # (tests, chargement partiel), donc il relit le marqueur lui-même quand
+    # _nivuus_origin n'existe pas. Coût quand le marqueur est absent : un
+    # [[ -r ]], sans fork.
+    _nivuus_cleanup_owns_tree() {
+        [[ -w "$NIVUUS_SHELL_DIR" ]] || return 1
+        [[ -w "$NIVUUS_SHELL_DIR/config" ]] || return 1
+        local origin
+        if (( $+functions[_nivuus_origin] )); then
+            origin="$(_nivuus_origin)"
+        elif [[ -r "$NIVUUS_SHELL_DIR/.nivuus-origin" ]]; then
+            origin="${$(sed -n 's/^origin=//p' "$NIVUUS_SHELL_DIR/.nivuus-origin" 2>/dev/null | head -n1):-source}"
+        else
+            origin=source
+        fi
+        [[ "$origin" != "package" ]]
+    }
+
+    if [[ -d "$NIVUUS_SHELL_DIR/config" ]] && _nivuus_cleanup_owns_tree; then
         for config_file in "$NIVUUS_SHELL_DIR"/config/*.zsh; do
             if [[ (! -f "${config_file}.zwc" || "$config_file" -nt "${config_file}.zwc") ]]; then
                 { zcompile "$config_file" &>/dev/null } &!
@@ -32,7 +59,7 @@ if [[ "${NIVUUS_NO_COMPILE:-0}" != "1" ]]; then
         done
     fi
 
-    # Compile .zsh_local if exists
+    # Compile .zsh_local if exists (domaine de l'utilisateur, tous modes).
     if [[ -f "$HOME/.zsh_local" ]] && [[ (! -f "$HOME/.zsh_local.zwc" || "$HOME/.zsh_local" -nt "$HOME/.zsh_local.zwc") ]]; then
         zcompile "$HOME/.zsh_local" &>/dev/null
     fi

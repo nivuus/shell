@@ -88,6 +88,22 @@ Une clé compromise ayant déjà signé une release malveillante ne peut pas êt
 contrôle la mise à jour**. La procédure de récupération d'une machine
 compromise est une réinstallation, pas une mise à jour.
 
+## Canaux de distribution tiers
+
+Un canal de distribution tiers est un **point de confiance supplémentaire** :
+l'ajouter **augmente** la surface d'attaque. Les empreintes publiées dans une
+formule ou un `PKGBUILD` proviennent exclusivement d'un `SHA256SUMS`
+authentifié par signature (jamais d'un `sha256sum` recalculé sur un fichier
+retéléchargé), et les jetons de publication vivent dans un environnement CI
+`packaging` **distinct** de l'environnement `release` : la compromission d'un
+jeton de canal permet de publier une mauvaise recette, ce qui est grave, mais
+**pas** de produire une release signée, ce qui serait fatal.
+
+Ce que ce dispositif ne protège pas : un utilisateur qui installe depuis un
+canal déjà compromis. C'est la limite du modèle, et elle est dite ici plutôt
+que maquillée — trois canaux ne valent pas mieux qu'un du point de vue de la
+sécurité.
+
 ## Signaler une vulnérabilité
 
 <adresse ou canal privé — à renseigner par le mainteneur>

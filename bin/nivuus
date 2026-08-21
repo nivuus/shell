@@ -2,11 +2,41 @@
 # bin/nivuus — point d'entrée unique de gestion de Nivuus Shell.
 set -euo pipefail
 
-NIVUUS_SRC_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Racine de l'arbre Nivuus, liens symboliques résolus.
+#
+# Sans cette résolution, un /usr/bin/nivuus -> /usr/share/nivuus-shell/bin/nivuus
+# donnerait BASH_SOURCE=/usr/bin/nivuus, donc une racine /usr, et le premier
+# « . $NIVUUS_SRC_ROOT/lib/log.sh » échouerait. C'est exactement ce que
+# produisent bin.install_symlink (Homebrew) et le ln -s usuel d'un PKGBUILD.
+#
+# readlink -f est écarté : absent des BSD et de macOS avant coreutils. La
+# boucle est BORNÉE (32 sauts) pour terminer même sur un cycle de liens.
+_nivuus_self="${BASH_SOURCE[0]}"
+_nivuus_hops=0
+while [ -L "$_nivuus_self" ] && [ "$_nivuus_hops" -lt 32 ]; do
+    _nivuus_link="$(ls -ld -- "$_nivuus_self" | sed 's/.*-> //')"
+    case "$_nivuus_link" in
+        /*) _nivuus_self="$_nivuus_link" ;;
+        # Un lien relatif n'a de sens que depuis le répertoire du lien.
+        *)  _nivuus_self="$(dirname -- "$_nivuus_self")/$_nivuus_link" ;;
+    esac
+    _nivuus_hops=$((_nivuus_hops + 1))
+done
+NIVUUS_SRC_ROOT="$(cd -- "$(dirname -- "$_nivuus_self")/.." && pwd)"
+unset _nivuus_self _nivuus_link _nivuus_hops
+
+# Crochet de test : imprime la racine calculée et sort, avant tout source.
+# Aucune valeur en production ; il n'apparaît pas dans usage().
+if [ "${NIVUUS_PRINT_SRC_ROOT:-}" = "1" ] && [ "${1:-}" = "__srcroot" ]; then
+    printf '%s\n' "$NIVUUS_SRC_ROOT"
+    exit 0
+fi
+
 # shellcheck source=/dev/null
 . "$NIVUUS_SRC_ROOT/lib/log.sh"
 . "$NIVUUS_SRC_ROOT/lib/detect.sh"
 . "$NIVUUS_SRC_ROOT/lib/deps.sh"
+. "$NIVUUS_SRC_ROOT/lib/origin.sh"
 . "$NIVUUS_SRC_ROOT/lib/manifest.sh"
 . "$NIVUUS_SRC_ROOT/lib/keys.sh"
 . "$NIVUUS_SRC_ROOT/lib/migrate.sh"
@@ -20,6 +50,8 @@ nivuus — gestion de Nivuus Shell
 Usage :
   nivuus install   [--dry-run] [--yes] [--prefix DIR] [--minimal|--no-minimal]
                    [--with-deps] [--verify-key EMPREINTE]
+  nivuus enable    [--dry-run] [--yes] [--prefix DIR] [--minimal|--no-minimal]
+  nivuus disable   [--dry-run] [--yes] [--purge]
   nivuus uninstall [--dry-run] [--yes] [--purge]
   nivuus migrate   [--dry-run] [--yes] [--prefix DIR]
   nivuus update
@@ -39,6 +71,11 @@ Options :
                 (voir SECURITY.md). Si elle ne correspond pas, l'installation
                 est refusée AVANT toute écriture. C'est l'ancrage hors bande :
                 obtiens l'empreinte par un canal de ton choix, colle-la ici.
+  enable      Active Nivuus pour CET utilisateur : ajoute le bloc délimité à
+              ~/.zshrc (et propose chsh). Ne copie aucun fichier : c'est la
+              commande à utiliser après une installation par paquet.
+  disable     Retire le bloc de ~/.zshrc et restaure le shell de connexion.
+              L'arbre Nivuus n'est jamais touché.
   migrate     Met de côté le dépôt git que l'installeur de la v3.0.0
               laissait dans ~/.nivuus-shell et qui bloque les mises à jour.
               Le dépôt est DÉPLACÉ, jamais supprimé, et le chemin est affiché.
@@ -99,6 +136,18 @@ install_optional_deps() {
 }
 
 cmd_install() {
+    # Mode paquet : l'arbre appartient au gestionnaire, « install » ne peut
+    # donc rien copier. Plutôt que de répondre « commande invalide » à un
+    # utilisateur qui vient de taper « brew install nivuus-shell », on fait
+    # ce qu'il voulait -- activer -- et on le dit (spec § 2.3). Le test est
+    # fait AVANT l'analyse des options pour transmettre les arguments intacts.
+    if nivuus_origin_is_package "${NIVUUS_SHELL_DIR:-$NIVUUS_SRC_ROOT}"; then
+        log_info "Nivuus est déjà installé pour la machine par ton gestionnaire de paquets."
+        log_info "« install » se limite donc à l'activation pour cet utilisateur."
+        cmd_enable "$@"
+        return $?
+    fi
+
     local prefix="$HOME/.nivuus-shell" MINIMAL='' FORCE_MINIMAL='' FORCE_FULL='' WITH_DEPS=''
     local verify_key=''
     while [ $# -gt 0 ]; do
@@ -318,10 +367,165 @@ cmd_uninstall() {
     fi
     rm -f "$NIVUUS_ROLLBACK_SURVIVORS" "$NIVUUS_KEPT_BACKUP_REFS"
 
+    if nivuus_origin_is_package "${NIVUUS_SHELL_DIR:-$NIVUUS_SRC_ROOT}"; then
+        log_info "Les fichiers partagés appartiennent à ton gestionnaire de paquets et n'ont pas été touchés."
+        log_info "Pour les retirer aussi :  $(nivuus_origin_update_command_remove "${NIVUUS_SHELL_DIR:-$NIVUUS_SRC_ROOT}")"
+    fi
+
     if [ -n "${NIVUUS_DRY_RUN:-}" ]; then
         log_info "Aucune modification effectuée (--dry-run)."
     else
         log_ok "Nivuus Shell désinstallé."
+    fi
+}
+
+# Écrit le bloc .zshrc (et propose chsh) SANS copier d'arbre. C'est le seul
+# acte journalisé au manifeste quand l'arbre appartient à un gestionnaire de
+# paquets : l'activation est, et reste, un acte par utilisateur.
+cmd_enable() {
+    local prefix="${NIVUUS_SHELL_DIR:-$NIVUUS_SRC_ROOT}" MINIMAL='' FORCE_MINIMAL='' FORCE_FULL=''
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --dry-run) export NIVUUS_DRY_RUN=1 ;;
+            --yes|-y)  ASSUME_YES=1 ;;
+            --minimal)    FORCE_MINIMAL=1 ;;
+            --no-minimal) FORCE_FULL=1 ;;
+            # Options d'« install » sans objet ici : l'arbre est déjà posé,
+            # et c'est le gestionnaire de paquets qui porte son authenticité.
+            # Acceptées et ignorées plutôt que refusées, pour que la surcharge
+            # d'« install » en mode paquet ne casse aucune ligne de commande.
+            --with-deps) : ;;
+            --verify-key)
+                shift
+                [ $# -gt 0 ] || { log_error "L'option --verify-key attend une empreinte."; return 2; } ;;
+            --prefix)
+                shift
+                [ $# -gt 0 ] || { log_error "L'option --prefix attend un chemin."; return 2; }
+                prefix="$1" ;;
+            *) log_error "Option inconnue : $1"; return 2 ;;
+        esac
+        shift
+    done
+
+    if [ ! -r "$prefix/.zshrc" ]; then
+        log_error "Aucun arbre Nivuus lisible dans $prefix."
+        log_error "Installe d'abord Nivuus (paquet ou installeur), puis relance « nivuus enable »."
+        return 1
+    fi
+
+    if [ -n "${FORCE_FULL:-}" ]; then
+        MINIMAL=''; export NIVUUS_NO_MINIMAL=1
+    elif [ -n "${FORCE_MINIMAL:-}" ]; then
+        MINIMAL=1; export NIVUUS_MINIMAL=1
+    elif nivuus_should_minimal; then
+        MINIMAL=1
+    fi
+
+    confirm "Activer Nivuus Shell dans ton shell (bloc ajouté à ~/.zshrc) ?" \
+        || { log_info "Annulé."; return 0; }
+
+    nivuus_manifest_begin user "$prefix"
+    nivuus_manifest_inherit
+    if ! nivuus_step_write_zshrc "$HOME/.zshrc" "$prefix" "$MINIMAL"; then
+        log_error "Activation interrompue."
+        nivuus_manifest_abort
+        return 1
+    fi
+    if [ -z "${MINIMAL:-}" ]; then
+        if confirm "Faire de zsh ton shell de connexion ?"; then
+            nivuus_step_chsh
+        else
+            log_info "Shell de connexion inchangé."
+        fi
+    fi
+    nivuus_manifest_commit
+
+    if [ -n "${NIVUUS_DRY_RUN:-}" ]; then
+        log_info "Aucune modification effectuée (--dry-run)."
+    else
+        log_ok "Nivuus Shell activé pour cet utilisateur ($prefix)."
+        log_info "Lance « exec zsh » pour démarrer."
+    fi
+}
+
+# Retire le bloc et restaure le shell de connexion. Ne touche JAMAIS à
+# l'arbre : en mode paquet il appartient au gestionnaire, en mode source
+# c'est le travail d'« uninstall ».
+cmd_disable() {
+    local purge='' f name mkdir_levels level
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --dry-run) export NIVUUS_DRY_RUN=1 ;;
+            --yes|-y)  ASSUME_YES=1 ;;
+            --purge)   purge=1 ;;
+            *) log_error "Option inconnue : $1"; return 2 ;;
+        esac
+        shift
+    done
+
+    : "${NIVUUS_STATE_DIR:=${XDG_STATE_HOME:-$HOME/.local/state}/nivuus}"
+    NIVUUS_MANIFEST="$NIVUUS_STATE_DIR/manifest.tsv"
+    NIVUUS_BACKUP_DIR="$NIVUUS_STATE_DIR/backups"
+
+    if [ ! -f "$NIVUUS_MANIFEST" ]; then
+        log_info "Aucune activation Nivuus tracée ; rien à faire."
+        return 0
+    fi
+
+    confirm "Désactiver Nivuus pour cet utilisateur (le bloc de ~/.zshrc est retiré) ?" \
+        || { log_info "Annulé."; return 0; }
+
+    NIVUUS_ROLLBACK_SURVIVORS="$(mktemp)"
+    NIVUUS_KEPT_BACKUP_REFS="$(mktemp)"
+    nivuus_manifest_rollback_activation
+    rm -f "$NIVUUS_ROLLBACK_SURVIVORS" "$NIVUUS_KEPT_BACKUP_REFS"
+
+    if [ -n "$purge" ] && [ -z "${NIVUUS_DRY_RUN:-}" ]; then
+        # Artefacts d'exécution, reconnus par leur nom exact -- jamais par un
+        # motif large, jamais de rm -rf sur un répertoire partagé.
+        rm -f "$HOME/.nivuus-shell-last-update-check"
+        if [ -d "$HOME/.cache/nivuus-shell" ]; then
+            find "$HOME/.cache/nivuus-shell" -type f -exec rm -f {} + 2>/dev/null || true
+            find "$HOME/.cache/nivuus-shell" -depth -type d -exec rmdir {} + 2>/dev/null || true
+        fi
+        # L'état Nivuus (manifeste, sauvegardes, répertoires XDG créés pour
+        # eux) n'est supprimé QUE s'il ne décrit plus aucune mutation à
+        # défaire. En mode source, les CREATE de l'arbre y restent : les
+        # effacer priverait « uninstall » de sa seule carte, et le --purge
+        # d'un simple « disable » laisserait l'arbre irrécupérable.
+        if ! nivuus_manifest_has_pending; then
+            mkdir_levels="$(awk -F"$NIVUUS_TAB" '$1=="MKDIR"{print $2}' "$NIVUUS_MANIFEST" 2>/dev/null || true)"
+            rm -f "$NIVUUS_MANIFEST"
+            if [ -d "$NIVUUS_BACKUP_DIR" ]; then
+                for f in "$NIVUUS_BACKUP_DIR"/*; do
+                    [ -f "$f" ] || continue
+                    name="${f##*/}"
+                    # Une sauvegarde Nivuus porte son sha256 : 64 caractères hexadécimaux.
+                    case "$name" in
+                        *[!0-9a-f]*) continue ;;
+                    esac
+                    [ ${#name} -eq 64 ] || continue
+                    rm -f "$f"
+                done
+                rmdir "$NIVUUS_BACKUP_DIR" 2>/dev/null || true
+            fi
+            if [ -n "$mkdir_levels" ]; then
+                printf '%s\n' "$mkdir_levels" | sed '1!G;h;$!d' | while IFS= read -r level; do
+                    [ -z "$level" ] && continue
+                    rmdir "$level" 2>/dev/null || true
+                done
+            fi
+            log_info "État Nivuus supprimé (--purge) : il ne décrivait plus aucune mutation à défaire."
+        else
+            log_info "État Nivuus conservé : il décrit encore une installation à défaire (« nivuus uninstall »)."
+        fi
+    fi
+
+    if [ -n "${NIVUUS_DRY_RUN:-}" ]; then
+        log_info "Aucune modification effectuée (--dry-run)."
+    else
+        log_ok "Nivuus Shell désactivé pour cet utilisateur."
+        log_info "L'arbre Nivuus n'a pas été touché."
     fi
 }
 
@@ -378,8 +582,26 @@ cmd_migrate() {
 # Garde AVANT de déléguer à zsh : sans elle, nivuus-update affiche
 # « Development checkout detected » et envoie l'utilisateur dans une impasse.
 cmd_update() {
-    local dir state
+    local dir state channel pkg version
     dir="${NIVUUS_SHELL_DIR:-$HOME/.nivuus-shell}"
+
+    # Mode paquet : on répond ici, sans déléguer à « zsh -ic ». En conteneur,
+    # en CI et en cron, un zsh interactif n'est pas garanti -- et le message
+    # doit sortir quand même. Code 0 : ce n'est pas un échec (spec § 1.3).
+    if nivuus_origin_is_package "$dir"; then
+        channel="$(nivuus_origin_channel "$dir")"
+        pkg="$(nivuus_origin_field "$dir" package 2>/dev/null || printf 'nivuus-shell')"
+        version="$(nivuus_origin_field "$dir" version 2>/dev/null || printf 'inconnue')"
+        log_info "Nivuus a été installé par un gestionnaire de paquets ($channel) ;"
+        log_info "c'est lui qui gère les mises à jour."
+        printf '\n    %s\n\n' "$(nivuus_origin_update_command "$dir")"
+        log_info "Version installée : $version"
+        log_info "Pour repasser aux mises à jour automatiques de Nivuus, retire le paquet"
+        log_info "puis relance l'installeur :"
+        log_info "  curl -fsSL https://raw.githubusercontent.com/maximeallanic/nivuus-shell/master/install.sh | sh"
+        return 0
+    fi
+
     state="$(nivuus_git_state "$dir")"
     if [ "$state" = "legacy" ]; then
         log_error "Les mises à jour sont bloquées par le dépôt git que l'ancien installeur a laissé dans $dir."
@@ -394,6 +616,8 @@ main() {
     [ $# -gt 0 ] && shift
     case "$cmd" in
         install)   cmd_install "$@" ;;
+        enable)    cmd_enable "$@" ;;
+        disable)   cmd_disable "$@" ;;
         uninstall) cmd_uninstall "$@" ;;
         migrate)   cmd_migrate "$@" ;;
         update)    cmd_update "$@" ;;

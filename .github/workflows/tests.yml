@@ -41,8 +41,29 @@ jobs:
       - name: Integration
         run: ./tests/ci/bats-run.sh tests/integration/
 
+      - name: Packaging core unit suites
+        run: |
+          # Couvertes par « tests/unit/ » ci-dessus ; nommées ici pour qu'un
+          # refactor de CI ne puisse pas les perdre en silence (même
+          # dispositif que pour les suites de signature).
+          rm -f config/*.zwc
+          ./tests/ci/bats-run.sh tests/unit/test_lib_origin.bats \
+               tests/unit/test_lib_selfpath.bats \
+               tests/unit/test_zshrc_block_guard.bats \
+               tests/unit/test_autoupdate_package_mode.bats \
+               tests/unit/test_autoupdate_readonly_tree.bats \
+               tests/unit/test_update_package_message.bats \
+               tests/unit/test_cleanup_zwc_ownership.bats \
+               tests/unit/test_manifest_rollback_activation.bats \
+               tests/unit/test_manpage.bats
+
       - name: Performance (startup budget is enforced, not observed)
         run: ./tests/ci/bats-run.sh tests/performance/
+
+      - name: Startup budget holds without bytecode (package mode)
+        run: |
+          rm -f config/*.zwc
+          ./tests/ci/bats-run.sh tests/performance/test_startup_without_zwc.bats
 
       - name: Test count must never regress
         run: ./bin/test-count --check
@@ -101,6 +122,32 @@ jobs:
           ./tests/ci/bats-run.sh tests/e2e/test_update_signature.bats \
                tests/e2e/test_install_keys.bats \
                tests/e2e/test_verify_key.bats
+
+      - name: Package mode E2E (no package manager involved)
+        run: |
+          rm -f config/*.zwc
+          ./tests/ci/bats-run.sh tests/e2e/test_package_mode.bats \
+               tests/e2e/test_enable_disable.bats \
+               tests/e2e/test_doctor_package.bats \
+               tests/e2e/test_nivuus_update_package.bats
+
+      - name: The two packaging invariants must be present and green
+        run: |
+          # Garde-fou contre une suppression discrète : les tests qui portent
+          # les propriétés du chantier d'empaquetage ne doivent pas pouvoir
+          # disparaître sans que la CI le dise. Même dispositif que pour la
+          # signature.
+          grep -q "INVARIANT: three interactive shells leave no update-check timestamp" \
+            tests/e2e/test_package_mode.bats
+          grep -q "INVARIANT: package removed while the activation remains leaves stderr empty" \
+            tests/e2e/test_package_mode.bats
+          grep -q "INVARIANT: a package install never schedules an async update check" \
+            tests/unit/test_autoupdate_package_mode.bats
+          grep -q "INVARIANT: nivuus-update exits 0 on a package install" \
+            tests/unit/test_update_package_message.bats
+          grep -q "INVARIANT: nivuus install never writes origin=package" \
+            tests/unit/test_lib_origin.bats
+          grep -c "INVARIANT" tests/e2e/test_package_mode.bats
 
       - name: The two invariants must be present and green
         run: |

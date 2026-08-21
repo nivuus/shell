@@ -551,6 +551,67 @@ nivuus_manifest_rollback() {
     nivuus_manifest_each nivuus_restore_entry "$NIVUUS_MANIFEST"
 }
 
+# Rejoue UNIQUEMENT la part « activation » du manifeste : ce que Nivuus a
+# écrit dans le domaine de l'utilisateur -- le bloc délimité d'un fichier
+# existant (MODIFY), le fichier que l'activation a elle-même créé quand il
+# n'existait pas encore (CREATE hors de l'arbre) et le shell de connexion
+# (CHSH).
+#
+# Rien de ce qui vit DANS l'arbre Nivuus n'est rejoué : en mode paquet ces
+# entrées n'existent pas, et en mode source c'est le travail d'« uninstall »,
+# pas de « disable ». L'arbre est identifié par le champ dir= de l'en-tête
+# du manifeste -- jamais deviné.
+#
+# Les entrées effectivement rejouées sont RETIRÉES du manifeste : sans cela,
+# un « uninstall » ultérieur tenterait de restaurer une sauvegarde déjà
+# consommée et signalerait à tort un fichier divergé.
+nivuus_manifest_rollback_activation() {
+    local filtered kept header dir
+    [ -f "$NIVUUS_MANIFEST" ] || return 0
+    header="$(head -n1 "$NIVUUS_MANIFEST")"
+    dir="$(printf '%s' "$header" | sed -n 's/.*dir=//p')"
+    filtered="$(mktemp)"
+    kept="$(mktemp)"
+    awk -F"$NIVUUS_TAB" -v d="$dir" -v f="$filtered" -v k="$kept" '
+        /^#/ { next }
+        NF == 0 { next }
+        {
+            replay = 0
+            if ($1 == "MODIFY" || $1 == "CHSH") replay = 1
+            else if ($1 == "CREATE" && (d == "" || index($2, d "/") != 1)) replay = 1
+            if (replay) print > f; else print > k
+        }
+    ' "$NIVUUS_MANIFEST"
+
+    nivuus_manifest_each nivuus_restore_entry "$filtered"
+
+    if [ -z "${NIVUUS_DRY_RUN:-}" ]; then
+        # Les entrées que le rejeu n'a PAS pu appliquer (fichier divergé,
+        # sauvegarde absente) sont des survivants : elles doivent rester au
+        # manifeste, exactement comme dans cmd_uninstall.
+        {
+            printf '%s\n' "$header"
+            cat "$kept"
+            [ -s "${NIVUUS_ROLLBACK_SURVIVORS:-/dev/null}" ] && cat "$NIVUUS_ROLLBACK_SURVIVORS"
+        } > "$NIVUUS_MANIFEST"
+    fi
+    rm -f "$filtered" "$kept"
+    return 0
+}
+
+# Reste-t-il au manifeste une mutation qu'« uninstall » aurait encore à
+# défaire ? Les MKDIR sont l'échafaudage de l'état Nivuus lui-même : ils ne
+# décrivent aucune mutation du domaine de l'utilisateur.
+nivuus_manifest_has_pending() {
+    [ -f "$NIVUUS_MANIFEST" ] || return 1
+    awk -F"$NIVUUS_TAB" '
+        /^#/ { next }
+        NF == 0 { next }
+        $1 != "MKDIR" { found = 1 }
+        END { exit !found }
+    ' "$NIVUUS_MANIFEST"
+}
+
 # Annule une installation interrompue entre begin et commit (dépendance
 # manquante, .zshrc corrompu, disque plein...). $NIVUUS_MANIFEST_TMP décrit
 # tout ce que les étapes qui ont réussi ont écrit sur le disque avant

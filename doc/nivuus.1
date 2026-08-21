@@ -1,0 +1,120 @@
+.\" doc/nivuus.1 — page de manuel de l'outil de gestion de Nivuus Shell.
+.\" Source de vérité du contenu : la sortie de « nivuus help ».
+.TH NIVUUS 1 "2026-08-21" "Nivuus Shell" "Manuel de l'utilisateur"
+.SH NOM
+nivuus \- gestion de Nivuus Shell
+.SH SYNOPSIS
+.B nivuus
+.I sous-commande
+.RI [ options ]
+.SH DESCRIPTION
+.B nivuus
+installe, active, met à jour et retire Nivuus Shell, un environnement ZSH
+sans configuration.
+.PP
+Nivuus distingue deux domaines qui ne se recouvrent jamais : l'arbre partagé
+(installé par un gestionnaire de paquets ou par l'installeur) et le domaine
+de l'utilisateur (le bloc délimité de
+.IR ~/.zshrc ,
+le shell de connexion, l'état sous
+.IR ~/.local/state/nivuus ).
+Toute écriture dans le second est journalisée et réversible à l'octet près.
+.SH SOUS-COMMANDES
+.TP
+.B install
+Installe l'arbre Nivuus et l'active pour l'utilisateur courant. Lorsque
+Nivuus a été installé par un gestionnaire de paquets, cette commande se
+limite à l'activation (équivalente à
+.BR enable ).
+.TP
+.B enable
+Active Nivuus pour l'utilisateur courant : ajoute le bloc délimité à
+.I ~/.zshrc
+et propose de changer le shell de connexion. Ne copie aucun fichier.
+.TP
+.B disable
+Retire le bloc de
+.I ~/.zshrc
+et restaure le shell de connexion. L'arbre Nivuus n'est jamais touché.
+.TP
+.B uninstall
+Rejoue le journal d'installation et restaure la configuration d'origine.
+Ne supprime jamais un fichier appartenant à un gestionnaire de paquets.
+.TP
+.B update
+Met à jour Nivuus depuis la dernière release signée. Lorsque Nivuus provient
+d'un paquet, affiche la commande du gestionnaire et sort en 0 sans rien
+télécharger.
+.TP
+.B migrate
+Met de côté le dépôt git que l'installeur de la v3.0.0 laissait dans
+.IR ~/.nivuus-shell .
+Le dépôt est déplacé, jamais supprimé.
+.TP
+.B doctor
+Diagnostic complet : origine de l'installation, canal, version, état de
+l'activation, dépendances. Ne répare rien.
+.TP
+.B help
+Affiche l'aide.
+.SH OPTIONS
+.TP
+.B \-\-dry\-run
+N'écrit rien ; affiche ce qui serait fait.
+.TP
+.B \-\-yes
+Ne pose aucune question.
+.TP
+.BI \-\-prefix " RÉPERTOIRE"
+Répertoire d'installation (défaut :
+.IR ~/.nivuus\-shell ).
+.TP
+.B \-\-minimal
+Mode serveur ou conteneur : pas de changement de shell, pas d'extras.
+.TP
+.B \-\-with\-deps
+Propose une commande groupée pour installer les dépendances recommandées.
+.TP
+.BI \-\-verify\-key " EMPREINTE"
+Empreinte attendue du jeu de clés de signature embarqué. Si elle ne
+correspond pas, l'installation est refusée avant toute écriture.
+.TP
+.B \-\-purge
+Pour
+.B uninstall
+et
+.BR disable :
+supprime aussi l'état Nivuus. Ne supprime que ce que Nivuus a créé.
+.SH INSTALLATIONS PAR PAQUET
+Lorsque Nivuus provient d'un gestionnaire de paquets, l'arbre partagé porte
+un fichier
+.I .nivuus\-origin
+et la mise à jour automatique est désactivée : c'est le gestionnaire qui
+gère les versions. L'activation reste un acte par utilisateur, et c'est le
+seul acte journalisé :
+.PP
+.RS 4
+nivuus enable
+.RE
+.SH FICHIERS
+.TP
+.I ~/.zshrc
+Contient le bloc délimité Nivuus, gardé : si l'arbre disparaît, le shell
+démarre sans erreur.
+.TP
+.I ~/.zsh_local
+Personnalisations de l'utilisateur. Jamais écrit ni supprimé par Nivuus.
+.TP
+.I ~/.local/state/nivuus/manifest.tsv
+Journal des mutations, base de la réversibilité.
+.TP
+.I $NIVUUS_SHELL_DIR/.nivuus\-origin
+Marqueur d'origine posé par une recette de paquet. Son absence vaut
+.IR origin=source .
+.SH VOIR AUSSI
+La documentation complète du projet, notamment
+.I doc/INSTALL.md
+et
+.IR doc/PACKAGING.md .
+.SH AUTEUR
+Maxime Allanic.

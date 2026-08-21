@@ -106,6 +106,55 @@ test_workflow_files() {
     grep -qF "install-verify-tools.sh" "$f"
 }
 
+@test "the packaging core suites are named in tests.yml" {
+    # Même garde-fou que pour les suites de signature : elles sont couvertes
+    # par « bats tests/unit/ », mais les nommer interdit qu'un refactor de CI
+    # les perde en silence.
+    f="$WF/tests.yml"
+    for suite in tests/unit/test_lib_origin.bats \
+                 tests/unit/test_lib_selfpath.bats \
+                 tests/unit/test_zshrc_block_guard.bats \
+                 tests/unit/test_autoupdate_package_mode.bats \
+                 tests/unit/test_autoupdate_readonly_tree.bats \
+                 tests/unit/test_update_package_message.bats \
+                 tests/unit/test_cleanup_zwc_ownership.bats \
+                 tests/unit/test_manifest_rollback_activation.bats \
+                 tests/unit/test_manpage.bats \
+                 tests/e2e/test_package_mode.bats \
+                 tests/e2e/test_enable_disable.bats \
+                 tests/e2e/test_doctor_package.bats \
+                 tests/e2e/test_nivuus_update_package.bats \
+                 tests/performance/test_startup_without_zwc.bats; do
+        grep -qF "$suite" "$f" || { echo "suite d'empaquetage perdue: $suite"; false; }
+    done
+}
+
+@test "the two packaging invariants are guarded by grep in tests.yml" {
+    # Si ces tests disparaissent, la CI doit le dire -- exactement comme
+    # pour les deux invariants de signature.
+    f="$WF/tests.yml"
+    grep -qF "INVARIANT: three interactive shells leave no update-check timestamp" "$f"
+    grep -qF "INVARIANT: package removed while the activation remains leaves stderr empty" "$f"
+    grep -qF "INVARIANT: a package install never schedules an async update check" "$f"
+    grep -qF "INVARIANT: nivuus-update exits 0 on a package install" "$f"
+    grep -qF "INVARIANT: nivuus install never writes origin=package" "$f"
+}
+
+@test "the packaging invariants actually exist in their test files" {
+    # Garde-fou du garde-fou : sans lui, la règle ci-dessus se contenterait
+    # de chaînes mortes dans un YAML.
+    grep -qF "INVARIANT: three interactive shells leave no update-check timestamp" \
+        "$ROOT/tests/e2e/test_package_mode.bats"
+    grep -qF "INVARIANT: package removed while the activation remains leaves stderr empty" \
+        "$ROOT/tests/e2e/test_package_mode.bats"
+    grep -qF "INVARIANT: a package install never schedules an async update check" \
+        "$ROOT/tests/unit/test_autoupdate_package_mode.bats"
+    grep -qF "INVARIANT: nivuus-update exits 0 on a package install" \
+        "$ROOT/tests/unit/test_update_package_message.bats"
+    grep -qF "INVARIANT: nivuus install never writes origin=package" \
+        "$ROOT/tests/unit/test_lib_origin.bats"
+}
+
 @test "no workflow parses a bats plan line with sed" {
     # Le comptage historique relançait TOUTE la suite pour lire « 1..N ».
     # bin/test-count le fait avec `bats --count`, qui n'exécute rien.
