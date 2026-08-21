@@ -3,12 +3,11 @@
 > A modern, fast, AI-powered ZSH shell with a configurable theme/prompt and intelligent features
 
 [![Version](https://img.shields.io/github/v/release/maximeallanic/nivuus-shell?label=version)](https://github.com/maximeallanic/nivuus-shell/releases)
-![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![Shell](https://img.shields.io/badge/shell-ZSH-green.svg)
-![Startup](https://img.shields.io/badge/startup-<300ms-brightgreen.svg)
 [![Tests](https://github.com/maximeallanic/nivuus-shell/actions/workflows/tests.yml/badge.svg?branch=master)](https://github.com/maximeallanic/nivuus-shell/actions/workflows/tests.yml)
 [![uninstall verified](https://github.com/maximeallanic/nivuus-shell/actions/workflows/uninstall-verified.yml/badge.svg?branch=master)](https://github.com/maximeallanic/nivuus-shell/actions/workflows/uninstall-verified.yml)
 [![Matrix](https://github.com/maximeallanic/nivuus-shell/actions/workflows/matrix.yml/badge.svg?branch=master)](https://github.com/maximeallanic/nivuus-shell/actions/workflows/matrix.yml)
+<!-- badge-proof: tests/performance/test_startup.bats -->
+[![startup <300ms](https://img.shields.io/badge/startup-<300ms-brightgreen.svg)](https://github.com/maximeallanic/nivuus-shell/actions/workflows/matrix.yml)
 
 ## ✨ Features
 
