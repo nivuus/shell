@@ -7,14 +7,17 @@
 
 set -e
 
-# Colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+# Couleurs — lib/charte.sh est la source unique (doc/CHARTE.md).
+_HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$_HERE/../lib/charte.sh" ]; then . "$_HERE/../lib/charte.sh"; fi
 
-# Symbols
+RED="${NIVUUS_C_DANGER:-}"
+GREEN="${NIVUUS_C_OK:-}"
+YELLOW="${NIVUUS_C_WARN:-}"
+BLUE="${NIVUUS_C_BUSY:-}"
+NC="${NIVUUS_C_OFF:-}"
+
+# Symboles — la couleur ne s'emploie jamais seule (charte § 2.4).
 CHECK="${GREEN}✓${NC}"
 CROSS="${RED}✗${NC}"
 WARN="${YELLOW}⚠${NC}"
