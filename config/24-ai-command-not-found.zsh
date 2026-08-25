@@ -222,7 +222,7 @@ If it is a known tool, respond with ONLY valid JSON (no markdown fences, no expl
 }
 
 # =============================================================================
-# UI Box Rendering (Nord Palette)
+# UI Box Rendering — charte Nivuus (doc/CHARTE.md)
 # =============================================================================
 
 _ai_cnf_render_box() {
@@ -232,21 +232,23 @@ _ai_cnf_render_box() {
     local install_cmd="$4"
     local alt_cmd="$5"
 
+    _ai_charte_load
+
     print -u2 ""
-    print -u2 -P "%F{110}╭─ 🤖 Nivuus AI Package Assistant ────────────────────────────────────%f"
+    print -u2 -r -- "╭─ 🤖 Nivuus AI Package Assistant ────────────────────────────────────"
     if [[ -n "$desc" ]]; then
-        print -u2 -P "%F{110}│%f  %F{254}Command:%f  %F{143}${cmd}%f %F{244}— ${desc}%f"
+        print -u2 -r -- "│  ${NIVUUS_C_STRONG:-}Command:${NIVUUS_C_OFF:-}  ${cmd} — ${desc}"
     else
-        print -u2 -P "%F{110}│%f  %F{254}Command:%f  %F{143}${cmd}%f"
+        print -u2 -r -- "│  ${NIVUUS_C_STRONG:-}Command:${NIVUUS_C_OFF:-}  ${cmd}"
     fi
     if [[ -n "$pkg" ]]; then
-        print -u2 -P "%F{110}│%f  %F{254}Package:%f  %F{221}${pkg}%f"
+        print -u2 -r -- "│  ${NIVUUS_C_STRONG:-}Package:${NIVUUS_C_OFF:-}  ${pkg}"
     fi
-    print -u2 -P "%F{110}│%f  %F{254}Install:%f  %F{109}${install_cmd}%f"
+    print -u2 -r -- "│  ${NIVUUS_C_STRONG:-}Install:${NIVUUS_C_OFF:-}  ${install_cmd}"
     if [[ -n "$alt_cmd" ]]; then
-        print -u2 -P "%F{110}│%f  %F{244}Alternative: ${alt_cmd}%f"
+        print -u2 -r -- "│  ${NIVUUS_C_STRONG:-}Alternative:${NIVUUS_C_OFF:-} ${alt_cmd}"
     fi
-    print -u2 -P "%F{110}╰─────────────────────────────────────────────────────────────────────%f"
+    print -u2 -r -- "╰─────────────────────────────────────────────────────────────────────"
     print -u2 ""
 }
 
@@ -325,26 +327,26 @@ _ai_cnf_handle_suggestion() {
     # Only offer interactive confirmation if stdin is a terminal and shell is interactive
     if [[ -t 0 && -o interactive && "${AI_CNF_AUTO_PROMPT:-true}" == "true" ]]; then
         local user_choice
-        print -u2 -n -P "%F{221}Install package now with '%F{109}${install_cmd}%F{221}'? [y/N] %f"
+        print -u2 -n -r -- "${NIVUUS_C_STRONG:-}Install package now with '${install_cmd}'? [y/N] ${NIVUUS_C_OFF:-}"
         read -r user_choice
         print -u2 ""
 
         if [[ "$user_choice" =~ ^[yY]([eE][sS])?$ ]]; then
-            print -u2 -P "%F{110}⚙ Installing ${pkg:-$cmd}...%f"
+            print -u2 -r -- "${NIVUUS_C_BUSY:-}⚙ Installing ${pkg:-$cmd}...${NIVUUS_C_OFF:-}"
             eval "$install_cmd"
             local install_status=$?
 
             if (( install_status == 0 )); then
-                print -u2 -P "%F{143}✓ Successfully installed ${pkg:-$cmd}!%f"
+                print -u2 -r -- "${NIVUUS_C_OK:-}✓ Successfully installed ${pkg:-$cmd}!${NIVUUS_C_OFF:-}"
                 if [[ "${AI_CNF_RE_EXECUTE:-true}" == "true" ]]; then
-                    print -u2 -P "%F{110}▶ Running: ${cmd} ${original_args[*]}%f"
+                    print -u2 -r -- "${NIVUUS_C_BUSY:-}▶ Running: ${cmd} ${original_args[*]}${NIVUUS_C_OFF:-}"
                     print -u2 ""
                     "$cmd" "${original_args[@]}"
                     return $?
                 fi
                 return 0
             else
-                print -u2 -P "%F{167}✗ Installation failed with exit code $install_status%f"
+                print -u2 -r -- "${NIVUUS_C_DANGER:-}✗ Installation failed with exit code $install_status${NIVUUS_C_OFF:-}"
                 return 127
             fi
         fi
