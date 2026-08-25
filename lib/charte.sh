@@ -16,11 +16,14 @@ case "${NIVUUS_CHARTE_MODE:-}" in
     light|dark) _nivuus_charte_mode="$NIVUUS_CHARTE_MODE" ;;
     *)
         # COLORFGBG vaut « avant-plan;fond » ou « avant-plan;défaut;fond » :
-        # le champ utile est toujours le dernier.
-        case "${COLORFGBG##*;}" in
+        # le champ utile est toujours le dernier. Gardée avant découpe : sous
+        # set -u, ${COLORFGBG##*;} explose si la variable n'est pas posée.
+        _nivuus_fgbg="${COLORFGBG:-}"
+        case "${_nivuus_fgbg##*;}" in
             7|9|10|11|12|13|14|15) _nivuus_charte_mode=light ;;
             *)                     _nivuus_charte_mode=dark ;;
         esac
+        unset _nivuus_fgbg
         ;;
 esac
 

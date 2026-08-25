@@ -107,3 +107,8 @@ setup() {
         after=\$(declare -F | wc -l); [ \"\$before\" = \"\$after\" ]"
     [ "$status" -eq 0 ]
 }
+
+@test "charte.sh est sourcable sous set -u sans COLORFGBG" {
+    run bash -c "unset COLORFGBG; set -euo pipefail; . '$LIB/charte.sh'"
+    [ "$status" -eq 0 ]
+}
