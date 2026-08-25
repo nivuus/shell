@@ -206,9 +206,9 @@ if [[ -n "$zsh_mem" ]]; then
     if (( mem_int < 10 )); then
         echo -e "  ${GREEN}✓ Excellent (<10MB)${NC}"
     elif (( mem_int < 50 )); then
-        echo -e "  ${YELLOW}✓ Good (<50MB)${NC}"
+        echo -e "  ${GREEN}✓ Good (<50MB)${NC}"
     else
-        echo -e "  ${RED}⚠ High memory usage${NC}"
+        echo -e "  ${YELLOW}⚠ High memory usage${NC}"
     fi
 else
     echo "  Could not measure memory usage"
