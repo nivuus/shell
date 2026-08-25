@@ -206,4 +206,19 @@ mdview() {
     _render_markdown "$@"
 }
 
+# =============================================================================
+# Charte Graphique Loader
+# =============================================================================
+
+# Charge lib/charte.sh a la demande, jamais au chargement du module : la
+# cible de demarrage <300 ms de .zshrc ne doit rien payer pour une sortie
+# qui n'apparait qu'en cas d'erreur. Partage entre config/22-ai-errors.zsh
+# et config/24-ai-command-not-found.zsh.
+_ai_charte_load() {
+    [[ -n "${NIVUUS_CHARTE_LOADED:-}" ]] && return 0
+    local charte="${NIVUUS_SHELL_DIR:-$HOME/.nivuus-shell}/lib/charte.sh"
+    [[ -f "$charte" ]] && source "$charte"
+    return 0
+}
+
 
