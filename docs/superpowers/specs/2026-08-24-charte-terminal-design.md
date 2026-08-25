@@ -151,11 +151,10 @@ n'appelle aucun `log_*` et n'a donc aucun libellé d'étape à passer en `STRONG
 ### 4.2 `bin/healthcheck`, `bin/benchmark`, `bin/test`
 
 Suppriment leurs définitions locales et sourcent `charte.sh`. Substitution
-mécanique sur 62 sites d'appel :
-
-    RED → NIVUUS_C_DANGER    GREEN → NIVUUS_C_OK
-    YELLOW → NIVUUS_C_WARN   BLUE  → NIVUUS_C_BUSY
-    NC → NIVUUS_C_OFF
+mécanique : `RED → NIVUUS_C_DANGER`, `GREEN → NIVUUS_C_OK`, 
+`YELLOW → NIVUUS_C_WARN`, `NC → NIVUUS_C_OFF`, plus ajout de 
+`STRONG → NIVUUS_C_STRONG` ; les filets et le texte ordinaire restent 
+achromatiques, car ils ne portent aucune sémantique d'événement.
 
 ### 4.3 `config/22-ai-errors.zsh` et `config/24-ai-command-not-found.zsh`
 
