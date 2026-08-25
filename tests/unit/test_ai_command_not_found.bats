@@ -153,7 +153,7 @@ command_not_found_handler 'unknown_cmd_123' 'arg1'
     [[ "$output" == *"zsh: command not found: unknown_cmd_123"* ]]
 }
 
-@test "command_not_found_handler displays Nord UI box when package is found" {
+@test "command_not_found_handler displays UI box when package is found" {
     run -127 zsh -c "
 export AI_COMMAND_NOT_FOUND_CACHE_DIR='$AI_COMMAND_NOT_FOUND_CACHE_DIR'
 export AI_CNF_AUTO_PROMPT=false
