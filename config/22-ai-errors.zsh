@@ -177,7 +177,7 @@ _ai_explain_error_widget() {
     print ""
     print ""
     print "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    print -r -- "${NIVUUS_C_DANGER:-}⚠  AI Error Analysis${NIVUUS_C_OFF:-}"
+    print -r -- "${NIVUUS_C_DANGER:-}✗  AI Error Analysis${NIVUUS_C_OFF:-}"
     print "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     print ""
     print -r -- "${NIVUUS_C_STRONG:-}Command:${NIVUUS_C_OFF:-} $_AI_LAST_COMMAND"
@@ -193,7 +193,7 @@ _ai_explain_error_widget() {
     # Check cache first
     local analysis=""
     if analysis=$(_ai_error_cache_get "$cache_key"); then
-        print -r -- "${NIVUUS_C_STRONG:-}💾 From cache:${NIVUUS_C_OFF:-}"
+        print -r -- "💾 From cache:"
         print ""
     else
         print -r -- "${NIVUUS_C_BUSY:-}🤖 Analyzing with AI...${NIVUUS_C_OFF:-}"

@@ -215,7 +215,6 @@ mdview() {
 # qui n'apparait qu'en cas d'erreur. Partage entre config/22-ai-errors.zsh
 # et config/24-ai-command-not-found.zsh.
 _ai_charte_load() {
-    [[ -n "${NIVUUS_CHARTE_LOADED:-}" ]] && return 0
     local charte="${NIVUUS_SHELL_DIR:-$HOME/.nivuus-shell}/lib/charte.sh"
     [[ -f "$charte" ]] && source "$charte"
     return 0
