@@ -64,6 +64,8 @@ Deux règles portent tout le reste :
 | `NIVUUS_CHARTE_MODE` | `light` ou `dark`, force la paire de teintes |
 | `NO_COLOR` | neutralise les sept variables |
 | `COLORTERM` | `truecolor`/`24bit` active les hex exacts, sinon repli ANSI-256 |
+| stdout (`[ -t 1 ]`) | si ce n'est pas un terminal, neutralise les sept variables, sauf si `NIVUUS_CHARTE_TTY` est posée |
+| `NIVUUS_CHARTE_TTY` | force la détection TTY à vrai ; réservée aux tests, dont la sortie est toujours capturée |
 
 Sans `NIVUUS_CHARTE_MODE`, le mode est déduit de `COLORFGBG`, et à défaut
 sombre — le contexte du produit.

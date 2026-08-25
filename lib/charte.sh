@@ -1,5 +1,7 @@
 # Couleur des sorties Nivuus. Applique la charte graphique (socle 0.3.0).
 # Sourcé, jamais exécuté : ne fixe pas set -euo pipefail.
+# Compatible bash et zsh, pas sh POSIX : les séquences ANSI emploient $'...',
+# une extension bash/zsh que dash n'interprète pas (reproduite telle quelle).
 #
 # Spec : docs/superpowers/specs/2026-08-24-charte-terminal-design.md
 # Doc  : doc/CHARTE.md

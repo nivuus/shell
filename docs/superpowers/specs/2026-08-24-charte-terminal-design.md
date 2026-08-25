@@ -53,8 +53,15 @@ projet, pas un ajustement.
 
 ### 3.1 Forme
 
-Un unique fichier en `sh` POSIX, sourcé indifféremment par l'installeur
-(`bash`/`sh`) et par les modules `zsh`. Il est déployé chez l'utilisateur par
+Un unique fichier compatible `bash` et `zsh`, sourcé indifféremment par
+l'installeur (`bash`) et par les modules `zsh` — pas du `sh` POSIX : le fichier
+emploie `$'...'` pour les séquences ANSI, une extension `bash`/`zsh` absente de
+POSIX. Sous `dash`, `$'...'` n'est pas interprété et se retrouve reproduit tel
+quel dans les variables `NIVUUS_C_*`, ce qui corromprait silencieusement toute
+sortie qui les consomme. Tous les consommateurs réels sont `bash` ou `zsh`
+(`install.sh`, `bin/nivuus`, `bin/healthcheck`, `bin/benchmark` en `bash`,
+`bin/test` en `zsh`) ; le fichier n'est donc jamais sourcé sous `dash`, mais ne
+prétend plus l'être compatible. Il est déployé chez l'utilisateur par
 `nivuus_step_copy_tree`, qui copie déjà `lib/` (`lib/steps.sh`).
 
 Il n'expose que sept variables, et ne définit aucune fonction :
@@ -62,8 +69,9 @@ Il n'expose que sept variables, et ne définit aucune fonction :
     NIVUUS_C_DANGER  NIVUUS_C_WARN  NIVUUS_C_OK  NIVUUS_C_BUSY
     NIVUUS_C_TEXT    NIVUUS_C_STRONG  NIVUUS_C_OFF
 
-Il pose `NIVUUS_CHARTE_LOADED=1` en fin de fichier, qui sert de garde au
-chargement paresseux (§ 4.3).
+Il pose `NIVUUS_CHARTE_LOADED=1` en fin de fichier, qui signale que le fichier
+a été sourcé (§ 4.3) — ce n'est plus une garde de rechargement depuis que
+`_ai_charte_load` resource à chaque appel.
 
 ### 3.2 Vecteur
 
@@ -136,8 +144,9 @@ supplémentaire : chaque helper porte un glyphe distinguable en noir et blanc et
 le message qui nomme l'état.
 
 `lib/steps.sh`, `lib/manifest.sh`, `lib/zshrc.sh` et `bin/nivuus` passent tous
-par ces helpers et ne changent pas, hormis l'emploi de `STRONG` sur le libellé
-d'étape là où la hiérarchie le demande (§ 6.2).
+par ces helpers et ne changent pas. Point vérifié et clos : `lib/steps.sh`
+n'appelle aucun `log_*` et n'a donc aucun libellé d'étape à passer en `STRONG`
+— la hiérarchie du § 6.2 ne s'y applique pas faute de matière.
 
 ### 4.2 `bin/healthcheck`, `bin/benchmark`, `bin/test`
 
@@ -165,9 +174,18 @@ n'est ni un succès ni un avertissement. Ne restent colorés que les événement
 |---|---|
 | `🤖 Analyzing with AI…`, `⚙ Installing …`, `▶ Running: …` | `busy` |
 | `✓ Successfully installed …` | `ok` |
-| `⚠ AI Error Analysis`, `✗ Installation failed …`, échec d'analyse | `danger` |
+| `✗ AI Error Analysis`, `✗ Installation failed …`, échec d'analyse | `danger` |
 | Invite `Install package now …? [y/N]` | `STRONG`, sans couleur |
 | Tout le reste | texte nu |
+
+Dans ce module, l'invariant glyphe ↔ rôle est : `✓` = `ok`, `⚠` = `warn`,
+`✗` = `danger`. Un même glyphe ne change jamais de rôle d'un message à
+l'autre dans `config/22-ai-errors.zsh`/`config/24-ai-command-not-found.zsh` —
+c'est ce qui permet de lire une sortie en noir et blanc. `AI Error Analysis`
+porte donc `✗`, pas `⚠` : le glyphe `⚠` de ce module est déjà pris par
+l'avertissement « No error to explain » (`explain-error`), et `danger` exige
+`✗`. (`lib/log.sh`, § 4.1, a sa propre table de glyphes — `!` y porte `warn` —
+et n'est pas concerné par cet invariant.)
 
 **Conversion technique.** Ces modules emploient `print -P "%F{110}…"`.
 `charte.sh` fournit des séquences brutes et non des codes `%F` : les appels
@@ -176,9 +194,13 @@ concernés passent à `print -r --`. Aucun n'exploite d'autre expansion de
 relus un par un, la substitution n'étant pas mécanique ici.
 
 **Chargement paresseux.** Le `source` de `charte.sh` se fait dans la fonction
-d'affichage, gardé par `NIVUUS_CHARTE_LOADED`, et non au chargement du module :
-la cible de démarrage <300 ms de `.zshrc` ne doit rien payer pour une sortie
-qui n'apparaît qu'en cas d'erreur.
+d'affichage (`_ai_charte_load`), et non au chargement du module : la cible de
+démarrage <300 ms de `.zshrc` ne doit rien payer pour une sortie qui n'apparaît
+qu'en cas d'erreur. `_ai_charte_load` resource `charte.sh` à chaque appel, sans
+garde sur `NIVUUS_CHARTE_LOADED` : la décision `[ -t 1 ]` de `charte.sh` porte
+sur le descripteur de sortie du moment, qui peut changer d'un appel à l'autre
+(pipe, redirection) ; la geler à la première évaluation figerait la session
+entière sur cette première décision.
 
 ### 4.4 Dégradation
 
