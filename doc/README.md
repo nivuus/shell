@@ -10,6 +10,7 @@ This directory contains all documentation for Nivuus Shell.
 ## Developer Documentation
 
 - **[CLAUDE.md](CLAUDE.md)** - Developer guide, architecture, and best practices for contributing
+- **[CHARTE.md](CHARTE.md)** - Graphic charter applied to Nivuus's own output: scope, the seven variables, tuning (in French)
 
 ## Testing Documentation
 
