@@ -12,23 +12,26 @@ NIVUUS_DIR="${NIVUUS_SHELL_DIR:-$HOME/.nivuus-shell}"
 ZSHRC_FILE="${NIVUUS_SHELL_DIR:+$NIVUUS_SHELL_DIR/.zshrc}"
 ZSHRC_FILE="${ZSHRC_FILE:-$HOME/.zshrc}"
 
-# Colors
-BLUE='\033[0;34m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-RED='\033[0;31m'
-NC='\033[0m'
+# Couleurs — lib/charte.sh est la source unique (doc/CHARTE.md).
+_HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$_HERE/../lib/charte.sh" ]; then . "$_HERE/../lib/charte.sh"; fi
 
-echo -e "${BLUE}═══════════════════════════════════════════${NC}"
-echo -e "${BLUE}  Nivuus Shell - Performance Benchmark${NC}"
-echo -e "${BLUE}═══════════════════════════════════════════${NC}"
+GREEN="${NIVUUS_C_OK:-}"
+YELLOW="${NIVUUS_C_WARN:-}"
+RED="${NIVUUS_C_DANGER:-}"
+STRONG="${NIVUUS_C_STRONG:-}"
+NC="${NIVUUS_C_OFF:-}"
+
+echo "═══════════════════════════════════════════"
+echo -e "${STRONG}  Nivuus Shell - Performance Benchmark${NC}"
+echo "═══════════════════════════════════════════"
 echo ""
 
 # =============================================================================
 # Full Shell Load Time
 # =============================================================================
 
-echo -e "${BLUE}Full Shell Load Time${NC}"
+echo -e "${STRONG}Full Shell Load Time${NC}"
 echo "─────────────────────────────────────────────"
 
 runs=5
@@ -60,9 +63,9 @@ avg_int=${average%.*}
 if (( avg_int < 300 )); then
     echo -e "${GREEN}✓ Excellent (<300ms)${NC}"
 elif (( avg_int < 500 )); then
-    echo -e "${YELLOW}✓ Good (<500ms)${NC}"
+    echo -e "${GREEN}✓ Good (<500ms)${NC}"
 else
-    echo -e "${RED}⚠ Slow (>500ms)${NC}"
+    echo -e "${YELLOW}⚠ Slow (>500ms)${NC}"
 fi
 echo ""
 
@@ -70,7 +73,7 @@ echo ""
 # Module Load Times
 # =============================================================================
 
-echo -e "${BLUE}Individual Module Load Times${NC}"
+echo -e "${STRONG}Individual Module Load Times${NC}"
 echo "─────────────────────────────────────────────"
 
 if [[ -d "$NIVUUS_DIR/config" ]]; then
@@ -102,7 +105,7 @@ echo ""
 # Command Execution Speed
 # =============================================================================
 
-echo -e "${BLUE}Command Execution Speed${NC}"
+echo -e "${STRONG}Command Execution Speed${NC}"
 echo "─────────────────────────────────────────────"
 
 # Test simple commands in ZSH context
@@ -148,7 +151,7 @@ echo ""
 # Prompt Generation Speed
 # =============================================================================
 
-echo -e "${BLUE}Prompt Generation Speed${NC}"
+echo -e "${STRONG}Prompt Generation Speed${NC}"
 echo "─────────────────────────────────────────────"
 
 temp_file=$(mktemp)
@@ -180,9 +183,9 @@ prompt_int=${prompt_time%.*}
 if (( prompt_int < 50 )); then
     echo -e "  ${GREEN}✓ Excellent (<50ms)${NC}"
 elif (( prompt_int < 100 )); then
-    echo -e "  ${YELLOW}✓ Good (<100ms)${NC}"
+    echo -e "  ${GREEN}✓ Good (<100ms)${NC}"
 else
-    echo -e "  ${RED}⚠ Slow (>100ms) - check git cache settings${NC}"
+    echo -e "  ${YELLOW}⚠ Slow (>100ms) - check git cache settings${NC}"
 fi
 echo ""
 
@@ -190,7 +193,7 @@ echo ""
 # Memory Usage
 # =============================================================================
 
-echo -e "${BLUE}Memory Usage${NC}"
+echo -e "${STRONG}Memory Usage${NC}"
 echo "─────────────────────────────────────────────"
 
 # Find ZSH processes
@@ -203,9 +206,9 @@ if [[ -n "$zsh_mem" ]]; then
     if (( mem_int < 10 )); then
         echo -e "  ${GREEN}✓ Excellent (<10MB)${NC}"
     elif (( mem_int < 50 )); then
-        echo -e "  ${YELLOW}✓ Good (<50MB)${NC}"
+        echo -e "  ${GREEN}✓ Good (<50MB)${NC}"
     else
-        echo -e "  ${RED}⚠ High memory usage${NC}"
+        echo -e "  ${YELLOW}⚠ High memory usage${NC}"
     fi
 else
     echo "  Could not measure memory usage"
@@ -216,7 +219,7 @@ echo ""
 # Compilation Status
 # =============================================================================
 
-echo -e "${BLUE}Compilation Status${NC}"
+echo -e "${STRONG}Compilation Status${NC}"
 echo "─────────────────────────────────────────────"
 
 compiled=0
@@ -253,13 +256,13 @@ echo ""
 # Summary
 # =============================================================================
 
-echo -e "${BLUE}═══════════════════════════════════════════${NC}"
+echo "═══════════════════════════════════════════"
 echo -e "${GREEN}Benchmark complete!${NC}"
-echo -e "${BLUE}═══════════════════════════════════════════${NC}"
+echo "═══════════════════════════════════════════"
 echo ""
 
 # Recommendations
-echo -e "${BLUE}Recommendations:${NC}"
+echo -e "${STRONG}Recommendations:${NC}"
 
 if (( avg_int > 300 )); then
     echo "  • Shell load time is slow. Try:"

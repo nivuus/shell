@@ -445,14 +445,14 @@ export ENABLE_PROJECT_DETECTION=true     # Show project suggestions
 
 ### User Installation (Default)
 ```bash
-curl -fsSL https://github.com/maximeallanic/nivuus-shell/releases/latest/download/install.sh | bash
+curl -fsSL https://github.com/nivuus/shell/releases/latest/download/install.sh | bash
 ```
 
 Install for current user only.
 
 ### System-Wide Installation
 ```bash
-curl -fsSL https://github.com/maximeallanic/nivuus-shell/releases/latest/download/install.sh | sudo bash -s -- --system
+curl -fsSL https://github.com/nivuus/shell/releases/latest/download/install.sh | sudo bash -s -- --system
 ```
 
 Install for all users on the system.

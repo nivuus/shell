@@ -171,15 +171,17 @@ _ai_explain_error_widget() {
         return 0
     fi
 
+    _ai_charte_load
+
     # Clear the current line and move to new line
     print ""
     print ""
     print "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    print -P "%F{167}⚠  AI Error Analysis%f"
+    print -r -- "${NIVUUS_C_DANGER:-}✗  AI Error Analysis${NIVUUS_C_OFF:-}"
     print "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     print ""
-    print -P "%F{246}Command:%f $_AI_LAST_COMMAND"
-    print -P "%F{246}Exit Code:%f $_AI_LAST_ERROR_CODE"
+    print -r -- "${NIVUUS_C_STRONG:-}Command:${NIVUUS_C_OFF:-} $_AI_LAST_COMMAND"
+    print -r -- "${NIVUUS_C_STRONG:-}Exit Code:${NIVUUS_C_OFF:-} $_AI_LAST_ERROR_CODE"
     print ""
 
     # Get context
@@ -191,10 +193,10 @@ _ai_explain_error_widget() {
     # Check cache first
     local analysis=""
     if analysis=$(_ai_error_cache_get "$cache_key"); then
-        print -P "%F{143}💾 From cache:%f"
+        print -r -- "💾 From cache:"
         print ""
     else
-        print -P "%F{110}🤖 Analyzing with AI...%f"
+        print -r -- "${NIVUUS_C_BUSY:-}🤖 Analyzing with AI...${NIVUUS_C_OFF:-}"
         print ""
 
         # Call AI
@@ -210,7 +212,7 @@ _ai_explain_error_widget() {
     if [[ -n "$analysis" ]]; then
         _render_markdown "$analysis"
     else
-        print -P "%F{167}Failed to analyze error. Check your AI backend configuration (run 'aihelp')%f"
+        print -r -- "${NIVUUS_C_DANGER:-}✗ Failed to analyze error. Check your AI backend configuration (run 'aihelp')${NIVUUS_C_OFF:-}"
     fi
 
     print ""
@@ -227,7 +229,8 @@ _ai_explain_error_widget() {
 
 explain-error() {
     if [[ "$_AI_ERROR_AVAILABLE" != "true" ]]; then
-        print -P "%F{167}⚠  No error to explain (last command succeeded)%f"
+        _ai_charte_load
+        print -r -- "${NIVUUS_C_WARN:-}⚠  No error to explain (last command succeeded)${NIVUUS_C_OFF:-}"
         return 1
     fi
 

@@ -56,6 +56,10 @@ export NIVUUS_THEME_FILE="${NIVUUS_THEME_FILE:-}"
 [[ -z "$NIVUUS_PROMPT_FORMAT" ]] && NIVUUS_PROMPT_FORMAT='{ssh}{root}{status} {path}{venv}{cloud}{firebase}{git} '
 [[ -z "$NIVUUS_RPROMPT_FORMAT" ]] && NIVUUS_RPROMPT_FORMAT='{jobs}'
 export NIVUUS_PROMPT_FORMAT NIVUUS_RPROMPT_FORMAT
+# NIVUUS_CHARTE_MODE: 'light' ou 'dark' — force la paire de teintes des
+#   sorties propres à Nivuus (installeur, healthcheck, messages IA). Sans
+#   valeur, le mode est déduit de COLORFGBG, à défaut sombre. N'affecte ni le
+#   prompt ni les thèmes. Voir doc/CHARTE.md.
 
 # =============================================================================
 # User Local Configuration (load BEFORE modules for environment variables)

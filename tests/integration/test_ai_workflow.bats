@@ -280,9 +280,12 @@ EOF
     [ "$status" -eq 0 ]
 }
 
-@test "AI error messages use Nord colors" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -E '(NORD_|%F\\{)' config/22-ai-errors.zsh"
+@test "AI error messages use charte colors, not raw palette codes" {
+    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -E '(NORD_|%F\{)' config/22-ai-errors.zsh"
+    [ "$status" -ne 0 ]
+    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -c 'NIVUUS_C_' config/22-ai-errors.zsh"
     [ "$status" -eq 0 ]
+    [ "$output" -ge 5 ]
 }
 
 # =============================================================================

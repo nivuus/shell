@@ -232,3 +232,9 @@ teardown() { rm -rf "$TMP"; }
     [ "$status" -eq 0 ]
     [[ "$output" == *"désinstallé"* ]]
 }
+
+@test "nivuus help exits 0 even without COLORFGBG in the environment" {
+    unset COLORFGBG
+    run "$NIVUUS" help
+    [ "$status" -eq 0 ]
+}
