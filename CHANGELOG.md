@@ -60,6 +60,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Core utilities and aliases
 - Installation script
 
-[Unreleased]: https://github.com/maximeallanic/nivuus-shell/compare/v2.0.0...HEAD
-[2.0.0]: https://github.com/maximeallanic/nivuus-shell/releases/tag/v2.0.0
-[1.0.0]: https://github.com/maximeallanic/nivuus-shell/releases/tag/v1.0.0
+[Unreleased]: https://github.com/nivuus/shell/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/nivuus/shell/releases/tag/v2.0.0
+[1.0.0]: https://github.com/nivuus/shell/releases/tag/v1.0.0

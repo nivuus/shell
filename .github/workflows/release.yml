@@ -162,7 +162,7 @@ jobs:
           ## Installation
 
           \`\`\`bash
-          curl -fsSL https://raw.githubusercontent.com/maximeallanic/nivuus-shell/v${{ steps.version.outputs.version }}/install.sh | bash
+          curl -fsSL https://raw.githubusercontent.com/nivuus/shell/v${{ steps.version.outputs.version }}/install.sh | bash
           \`\`\`
 
           Or download the release archive and extract it manually.
@@ -175,7 +175,7 @@ jobs:
           nivuus-update
           \`\`\`
 
-          **Full Changelog**: https://github.com/maximeallanic/nivuus-shell/compare/${PREVIOUS_TAG}...v${{ steps.version.outputs.version }}
+          **Full Changelog**: https://github.com/nivuus/shell/compare/${PREVIOUS_TAG}...v${{ steps.version.outputs.version }}
           EOF
 
           echo "✅ Generated changelog"
@@ -263,8 +263,8 @@ jobs:
           echo "- SHA256 checksums" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 🔗 Links" >> $GITHUB_STEP_SUMMARY
-          echo "- [View Release](https://github.com/maximeallanic/nivuus-shell/releases/tag/v${{ steps.version.outputs.version }})" >> $GITHUB_STEP_SUMMARY
-          echo "- [Download Archive](https://github.com/maximeallanic/nivuus-shell/archive/refs/tags/v${{ steps.version.outputs.version }}.tar.gz)" >> $GITHUB_STEP_SUMMARY
+          echo "- [View Release](https://github.com/nivuus/shell/releases/tag/v${{ steps.version.outputs.version }})" >> $GITHUB_STEP_SUMMARY
+          echo "- [Download Archive](https://github.com/nivuus/shell/archive/refs/tags/v${{ steps.version.outputs.version }}.tar.gz)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 📋 Next Steps" >> $GITHUB_STEP_SUMMARY
           echo "1. Verify the release on GitHub" >> $GITHUB_STEP_SUMMARY

@@ -2,34 +2,34 @@
 
 > A modern, fast, AI-powered ZSH shell with a configurable theme/prompt and intelligent features
 
-![Version](https://img.shields.io/github/v/release/maximeallanic/nivuus-shell?label=version)
-![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![Shell](https://img.shields.io/badge/shell-ZSH-green.svg)
-![Performance](https://img.shields.io/badge/startup-<100ms-brightgreen.svg)
-![Tests](https://github.com/maximeallanic/nivuus-shell/workflows/Tests/badge.svg)
+![Version](https://img.shields.io/github/v/release/nivuus/shell?label=version)
+![License](https://img.shields.io/badge/license-MIT-black.svg)
+![Shell](https://img.shields.io/badge/shell-ZSH-black.svg)
+![Performance](https://img.shields.io/badge/startup-<100ms-black.svg)
+![Tests](https://github.com/nivuus/shell/workflows/Tests/badge.svg)
 
-## ✨ Features
+## Features
 
-- ⚡ **Lightning Fast** - Sub-100ms startup time (lazy-loaded completion)
-- 🎨 **Configurable Theme & Prompt** - Nord by default, swap themes or the prompt layout via `~/.zsh_local`
-- 🤖 **AI-Powered** - Command suggestions via the Gemini API
-- 📝 **Modern Vim** - Ctrl+C/V/X/A shortcuts
-- 🔍 **Smart Navigation** - History prefix search with ↑/↓
-- 📦 **Auto Node.js** - Version switching with .nvmrc
-- 🐍 **Python Venv** - Auto-detection in prompt (venv/conda/poetry)
-- ☁️ **Cloud Context** - AWS/GCP/Azure in prompt
-- 🛡️ **Safety Checks** - Warns before dangerous commands
-- 🌿 **Git Integration** - Fast shortcuts + beautiful prompt
-- 🛠️ **Zero Config** - Works out of the box
+- **Lightning Fast** - Sub-100ms startup time (lazy-loaded completion)
+- **Configurable Theme & Prompt** - Nord by default, swap themes or the prompt layout via `~/.zsh_local`
+- **AI-Powered** - Command suggestions via the Gemini API
+- **Modern Vim** - Ctrl+C/V/X/A shortcuts
+- **Smart Navigation** - History prefix search with ↑/↓
+- **Auto Node.js** - Version switching with .nvmrc
+- **Python Venv** - Auto-detection in prompt (venv/conda/poetry)
+- **Cloud Context** - AWS/GCP/Azure in prompt
+- **Safety Checks** - Warns before dangerous commands
+- **Git Integration** - Fast shortcuts + beautiful prompt
+- **Zero Config** - Works out of the box
 
-## 🚀 Quick Start
+## Quick Start
 
 ### One-Line Installation
 
 Install Nivuus Shell with a single command:
 
 ```bash
-git clone https://github.com/maximeallanic/nivuus-shell.git /tmp/nivuus-shell && /tmp/nivuus-shell/install.sh --non-interactive && rm -rf /tmp/nivuus-shell && exec zsh
+git clone https://github.com/nivuus/shell.git /tmp/nivuus-shell && /tmp/nivuus-shell/install.sh --non-interactive && rm -rf /tmp/nivuus-shell && exec zsh
 ```
 
 This will:
@@ -42,14 +42,14 @@ This will:
 
 #### User Installation (Recommended)
 ```bash
-git clone https://github.com/maximeallanic/nivuus-shell.git
+git clone https://github.com/nivuus/shell.git
 cd nivuus-shell
 ./install.sh
 ```
 
 #### System-Wide Installation
 ```bash
-git clone https://github.com/maximeallanic/nivuus-shell.git
+git clone https://github.com/nivuus/shell.git
 cd nivuus-shell
 sudo ./install.sh --system
 ```
@@ -62,7 +62,7 @@ exec zsh
 # or just restart your terminal
 ```
 
-## 📖 Usage
+## Usage
 
 ### AI Commands
 
@@ -222,7 +222,7 @@ nivuus-version --check  # Check for updates
 nivuus-update           # Install latest update
 ```
 
-## 🎨 Theme & Prompt
+## Theme & Prompt
 
 Nivuus ships with the [Nord color scheme](https://www.nordtheme.com/) by default, but the theme
 and the prompt layout are both configurable — no code changes needed.
@@ -285,7 +285,7 @@ export GEMINI_MODEL='gemini-3.1-flash-lite'
 See [PROMPT.md](doc/PROMPT.md) for the full list of prompt tokens and the theme file contract
 (to write your own theme, copy `themes/nord.zsh` or `themes/dracula.zsh`).
 
-## 📊 Performance
+## Performance
 
 Nivuus is optimized for speed:
 
@@ -302,7 +302,7 @@ Nivuus is optimized for speed:
 benchmark               # Run performance tests
 ```
 
-## 🛠️ Configuration
+## Configuration
 
 ### Edit Configuration
 
@@ -324,7 +324,7 @@ Automatic backups are created at:
 - During installation: `~/.config/nivuus-shell-backup/`
 - Auto-maintenance: Weekly cleanup
 
-## 🔄 Updating
+## Updating
 
 Nivuus Shell includes an automatic update system that checks for new releases weekly and installs them automatically with checksum verification.
 
@@ -397,12 +397,12 @@ Nivuus Shell uses semantic versioning (MAJOR.MINOR.PATCH):
 
 See [CHANGELOG.md](CHANGELOG.md) for release history.
 
-## 🔧 Development
+## Development
 
 Test changes without installing:
 
 ```bash
-git clone https://github.com/maximeallanic/nivuus-shell.git
+git clone https://github.com/nivuus/shell.git
 cd nivuus-shell
 ./dev.sh
 ```
@@ -417,7 +417,7 @@ Edit any file, then restart the shell to see changes:
 exec zsh
 ```
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 nivuus-shell/
@@ -452,7 +452,7 @@ nivuus-shell/
 └── README.md              # This file
 ```
 
-## 🔧 Requirements
+## Requirements
 
 ### Required
 - **ZSH** 5.0+
@@ -468,26 +468,26 @@ nivuus-shell/
 - **bat** - Better cat (`cargo install bat`)
 - **eza** - Modern ls (`cargo install eza`)
 
-## 📚 Documentation
+## Documentation
 
 - **[FEATURES.md](doc/FEATURES.md)** - Complete feature guide
 - **[PROMPT.md](doc/PROMPT.md)** - Prompt configuration details
 - **[CLAUDE.md](doc/CLAUDE.md)** - Developer guide and architecture
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
-## 📝 License
+## License
 
 MIT License - see LICENSE file for details
 
-## 🙏 Credits
+## Credits
 
 - **Nord Theme** - [Arctic Ice Studio](https://www.nordtheme.com/)
 - **Gemini AI** - [Google](https://ai.google.dev/)
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### Shell loads slowly
 
@@ -525,10 +525,10 @@ vim --version | grep clipboard
 vim.ssh myfile  # Uses internal clipboard
 ```
 
-## 📞 Support
+## Support
 
-- **Issues**: [GitHub Issues](https://github.com/maximeallanic/nivuus-shell/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/maximeallanic/nivuus-shell/discussions)
+- **Issues**: [GitHub Issues](https://github.com/nivuus/shell/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/nivuus/shell/discussions)
 
 ---
 

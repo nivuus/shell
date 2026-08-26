@@ -4,7 +4,7 @@
   "description": "Modern ZSH configuration framework with Nord theme and AI integration",
   "repository": {
     "type": "git",
-    "url": "https://github.com/maximeallanic/nivuus-shell.git"
+    "url": "https://github.com/nivuus/shell.git"
   },
   "scripts": {
     "test": "./bin/test",
