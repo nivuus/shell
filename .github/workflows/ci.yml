@@ -1,0 +1,18 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  policy:
+    uses: nivuus/.github/.github/workflows/policy.yml@main
+  security:
+    uses: nivuus/.github/.github/workflows/security.yml@main
+  shell:
+    uses: nivuus/.github/.github/workflows/ci-shell.yml@main
+    with:
+      test-dirs: tests/unit tests/performance tests/e2e
+      shellcheck-paths: "."
+      zsh-syntax-paths: ".zshrc config/*.zsh themes/*.zsh"

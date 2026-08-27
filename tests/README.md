@@ -89,11 +89,12 @@ Performance tests validate:
 ## CI/CD
 
 Tests run automatically on:
-- Every push to master
+- Every push to `main`
 - Every pull request
-- Scheduled daily runs
 
-See `.github/workflows/tests.yml` for configuration.
+CI is configured in `.github/workflows/ci.yml`, which delegates to the
+reusable workflows published in `nivuus/.github` (policy, security, and the
+shell job that runs `bats`, `shellcheck` and the zsh syntax check).
 
 ## Debugging Failed Tests
 

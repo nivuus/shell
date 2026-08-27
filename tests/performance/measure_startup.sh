@@ -7,6 +7,7 @@ NIVUUS_SHELL_DIR="${NIVUUS_SHELL_DIR:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 runs=10
 total_ns=0
 
+# shellcheck disable=SC2034 # loop counter used only to repeat, not read
 for i in $(seq 1 $runs); do
     # Create temp script that measures its own load time
     temp=$(mktemp)

@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # tests/helpers/fingerprint.bash
 # Empreinte reproductible d'une arborescence : chemin, permissions, contenu.
 #

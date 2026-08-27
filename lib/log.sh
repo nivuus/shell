@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # Sortie utilisateur. Aucune connaissance du métier.
 # Sourcé, jamais exécuté : ne fixe pas set -euo pipefail.
 #

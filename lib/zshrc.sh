@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # lib/zshrc.sh
 # Lecture, fusion et retrait du bloc Nivuus dans un .zshrc.
 # Toutes les fonctions sont pures : elles écrivent sur stdout.

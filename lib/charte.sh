@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # Couleur des sorties Nivuus. Applique la charte graphique (socle 0.3.0).
 # Sourcé, jamais exécuté : ne fixe pas set -euo pipefail.
 # Compatible bash et zsh, pas sh POSIX : les séquences ANSI emploient $'...',
@@ -12,6 +13,10 @@
 #
 # Les huit valeurs viennent de assets/tokens.css du dépôt design. Ne pas les
 # retoucher sans relancer tests/unit/test_charte_conformity.bats.
+
+# These are the palette this file exists to publish: they are consumed by the
+# files that source it, not here.
+# shellcheck disable=SC2034
 
 # --- Mode : explicite, puis COLORFGBG, puis sombre (charte § 2.2). ---
 case "${NIVUUS_CHARTE_MODE:-}" in

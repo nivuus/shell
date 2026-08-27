@@ -93,14 +93,12 @@ tests/e2e/
 └── test_benchmark.zsh          # bin/benchmark
 ```
 
-### 📝 TODO - GitHub Actions CI/CD
+### ✅ GitHub Actions CI/CD
 
-Create `.github/workflows/tests.yml`:
-- Matrix: Ubuntu + macOS
-- Separate jobs for each test suite
-- Performance validation (<300ms REQUIRED)
-- Coverage reporting
-- CI badge for README
+CI runs through `.github/workflows/ci.yml`, which delegates to the reusable
+workflows published in `nivuus/.github`: `policy`, `security`, and a `shell`
+job that runs `bats` (unit, performance and e2e suites), `shellcheck`, and a
+`zsh -n` syntax check on `.zshrc`, `config/*.zsh` and `themes/*.zsh`.
 
 ## Test Infrastructure Created
 
@@ -223,32 +221,12 @@ source tests/helpers/mocks.zsh
 }
 ```
 
-## CI/CD Integration (TODO)
+## CI/CD Integration
 
-Create `.github/workflows/tests.yml`:
-
-```yaml
-name: Tests
-
-on: [push, pull_request]
-
-jobs:
-  test:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
-        with:
-          node-version: '18'
-      - run: npm install
-      - run: npm test
-      - name: Validate startup time
-        run: npm run test:performance
-```
+CI/CD is already wired up: `.github/workflows/ci.yml` triggers on push to
+`main` and on every pull request, and delegates to the shared workflows in
+`nivuus/.github` for policy checks, security scanning, and the shell test
+job (`bats`, `shellcheck`, and a zsh syntax check).
 
 ## Current Status
 

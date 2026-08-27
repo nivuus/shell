@@ -12,6 +12,10 @@ setup() {
 }
 
 @test "benchmark produces expected output format" {
+    if [[ "${CI:-false}" == "true" ]] || [[ -n "${GITHUB_ACTIONS:-}" ]]; then
+        skip "Requires a provisioned shell environment; a CI runner only has a clone"
+    fi
+
     # Run benchmark and check it produces output (don't check exit code due to bats context issues)
     output=$("$NIVUUS_SHELL_DIR/bin/benchmark" 2>&1 || true)
     [[ "$output" == *"ms"* ]]
@@ -28,21 +32,37 @@ setup() {
 }
 
 @test "benchmark shows performance rating" {
+    if [[ "${CI:-false}" == "true" ]] || [[ -n "${GITHUB_ACTIONS:-}" ]]; then
+        skip "Requires a provisioned shell environment; a CI runner only has a clone"
+    fi
+
     output=$("$NIVUUS_SHELL_DIR/bin/benchmark" 2>&1 || true)
     [[ "$output" == *"Excellent"* ]] || [[ "$output" == *"Good"* ]] || [[ "$output" == *"Slow"* ]] || [[ "$output" == *"✓"* ]]
 }
 
 @test "benchmark references 300ms performance target" {
+    if [[ "${CI:-false}" == "true" ]] || [[ -n "${GITHUB_ACTIONS:-}" ]]; then
+        skip "Requires a provisioned shell environment; a CI runner only has a clone"
+    fi
+
     output=$("$NIVUUS_SHELL_DIR/bin/benchmark" 2>&1 || true)
     [[ "$output" == *"300"* ]]
 }
 
 @test "benchmark shows average time" {
+    if [[ "${CI:-false}" == "true" ]] || [[ -n "${GITHUB_ACTIONS:-}" ]]; then
+        skip "Requires a provisioned shell environment; a CI runner only has a clone"
+    fi
+
     output=$("$NIVUUS_SHELL_DIR/bin/benchmark" 2>&1 || true)
     [[ "$output" == *"Average"* ]] || [[ "$output" == *"average"* ]]
 }
 
 @test "benchmark tests multiple runs" {
+    if [[ "${CI:-false}" == "true" ]] || [[ -n "${GITHUB_ACTIONS:-}" ]]; then
+        skip "Requires a provisioned shell environment; a CI runner only has a clone"
+    fi
+
     output=$("$NIVUUS_SHELL_DIR/bin/benchmark" 2>&1 || true)
     # Should show multiple runs (Run 1, Run 2, etc.)
     [[ "$output" == *"Run"* ]]

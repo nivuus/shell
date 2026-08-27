@@ -233,7 +233,7 @@ Git aliases:      5ms  ██░░░░░░░░
 - **TEST_PROGRESS.md** - Progress tracking
 - **TEST_SUMMARY.md** - This file
 - **tests/README.md** - Test framework documentation
-- **.github/workflows/tests.yml** - CI/CD configuration
+- **.github/workflows/ci.yml** - CI entry point, delegates to the reusable workflows in `nivuus/.github`
 
 ---
 

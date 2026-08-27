@@ -84,36 +84,22 @@ jobs:
       - name: Calculate new version
         id: version
         run: |
-          # Read current version from package.json
-          CURRENT_VERSION=$(grep '"version"' package.json | sed 's/.*"version": "\(.*\)".*/\1/')
+          source scripts/version.sh
+          CURRENT_VERSION="$(current_version)"
           echo "Current version: $CURRENT_VERSION"
 
-          # Split version into parts
           IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
-
-          # Increment based on bump type
-          case "${{ inputs.bump_type }}" in
-            major)
-              MAJOR=$((MAJOR + 1))
-              MINOR=0
-              PATCH=0
-              ;;
-            minor)
-              MINOR=$((MINOR + 1))
-              PATCH=0
-              ;;
-            patch)
-              PATCH=$((PATCH + 1))
-              ;;
+          case "${{ github.event.inputs.bump_type }}" in
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH + 1)) ;;
+            *) echo "Unknown bump type"; exit 1 ;;
           esac
 
-          # Create new version
           NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
           echo "New version: $NEW_VERSION"
-
-          # Export for other steps
-          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
-          echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
+          echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+          echo "NEW_VERSION=$NEW_VERSION" >> "$GITHUB_ENV"
 
       - name: Check if tag already exists
         run: |
@@ -220,27 +206,12 @@ jobs:
           echo "✅ Generated checksums"
           cat SHA256SUMS
 
-      - name: Commit version updates
-        run: |
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-
-          git add package.json install.sh
-          git commit -m "chore: bump version to ${{ steps.version.outputs.version }}"
-
-          echo "✅ Committed version updates"
-
       - name: Create and push tag
         run: |
           git tag -a "v${{ steps.version.outputs.version }}" -m "Release v${{ steps.version.outputs.version }}"
           git push origin "v${{ steps.version.outputs.version }}"
 
           echo "✅ Created and pushed tag v${{ steps.version.outputs.version }}"
-
-      - name: Push version updates to master
-        run: |
-          git push origin HEAD:master
-          echo "✅ Pushed version updates to master"
 
       - name: Create GitHub Release
         env:
