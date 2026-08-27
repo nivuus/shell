@@ -37,3 +37,6 @@ tests/fixtures/.firebaserc
 coverage/
 .coverage
 .worktrees
+
+.worktrees/
+.superpowers/
