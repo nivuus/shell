@@ -13,5 +13,6 @@ jobs:
   shell:
     uses: nivuus/.github/.github/workflows/ci-shell.yml@main
     with:
-      test-dirs: tests/unit tests/performance
+      test-dirs: tests/unit tests/performance tests/e2e
       shellcheck-paths: "."
+      zsh-syntax-paths: ".zshrc config/*.zsh themes/*.zsh"
