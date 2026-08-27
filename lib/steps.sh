@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # Étapes d'installation, chacune idempotente.
 # N'écrit jamais en direct : tout passe par lib/manifest.sh.
 

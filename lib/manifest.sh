@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # Journal des mutations et restauration.
 # SEULE bibliothèque autorisée à écrire sur le système de fichiers.
 

@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # Détection de plateforme. Ne connaît pas le système de fichiers cible.
 # Les chemins système sont paramétrables pour rester testables.
 
