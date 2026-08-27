@@ -1,4 +1,7 @@
 # shellcheck shell=bash
+# policy: allow-long-file — 545 lignes de logique de manifeste et de rollback.
+# Le découpage est souhaitable mais doit être décidé à froid : ce fichier porte
+# la garantie que HOME est intact après une désinstallation.
 # Journal des mutations et restauration.
 # SEULE bibliothèque autorisée à écrire sur le système de fichiers.
 
