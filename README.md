@@ -423,7 +423,7 @@ exec zsh
 nivuus-shell/
 ├── .github/
 │   └── workflows/
-│       ├── tests.yml      # CI/CD testing pipeline
+│       ├── ci.yml         # CI entry point, delegates to nivuus/.github reusable workflows
 │       └── release.yml    # Release automation
 ├── .zshrc                 # Main entry point
 ├── .vimrc.nord            # Vim configuration with Nord theme
