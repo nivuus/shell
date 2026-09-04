@@ -66,7 +66,7 @@ L'ordre compte : le cliquet anti-gris (tâche 7) ne peut passer qu'une fois les 
   - `NIVUUS_CHARTE_LOADED` — vaut `1` après chargement. Sert de garde au chargement paresseux en tâche 5 et 6.
 - Lit en entrée : `NO_COLOR`, `COLORTERM`, `COLORFGBG`, `NIVUUS_CHARTE_MODE`.
 
-- [ ] **Step 1: Écrire le test qui échoue**
+- [x] **Step 1: Écrire le test qui échoue**
 
 Créer `tests/unit/test_lib_charte.bats` :
 
@@ -182,12 +182,12 @@ setup() {
 }
 ```
 
-- [ ] **Step 2: Lancer le test pour vérifier qu'il échoue**
+- [x] **Step 2: Lancer le test pour vérifier qu'il échoue**
 
 Run: `bats tests/unit/test_lib_charte.bats`
 Expected: FAIL — les 15 tests échouent, `lib/charte.sh` n'existe pas.
 
-- [ ] **Step 3: Écrire `lib/charte.sh`**
+- [x] **Step 3: Écrire `lib/charte.sh`**
 
 ```sh
 # Couleur des sorties Nivuus. Applique la charte graphique (socle 0.3.0).
@@ -273,14 +273,14 @@ unset _nivuus_charte_mode
 NIVUUS_CHARTE_LOADED=1
 ```
 
-- [ ] **Step 4: Lancer le test pour vérifier qu'il passe**
+- [x] **Step 4: Lancer le test pour vérifier qu'il passe**
 
 Run: `bats tests/unit/test_lib_charte.bats`
 Expected: PASS — 15 tests.
 
 Si « le fichier est sourcable par zsh » échoue : vérifier que `zsh` est installé (`command -v zsh`). Le fichier n'emploie que `case`, l'expansion `##`, et `$'...'`, tous trois supportés par `bash`, `zsh` et `dash`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add lib/charte.sh tests/unit/test_lib_charte.bats
@@ -306,7 +306,7 @@ C'est le garde-fou qui remplace un générateur : la divergence avec le dépôt 
 - Consumes: `lib/charte.sh` de la tâche 1 — lu comme du texte, pas sourcé.
 - Produces: rien de consommé par les tâches suivantes.
 
-- [ ] **Step 1: Écrire le test**
+- [x] **Step 1: Écrire le test**
 
 Il n'y a pas de cycle rouge-vert ici : le test doit passer immédiatement si la tâche 1 a copié les bonnes valeurs. C'est précisément son rôle.
 
@@ -388,7 +388,7 @@ Deux points sur lesquels l'implémenteur va buter :
 - Le bloc clair de `tokens.css` s'ouvre sur `:root,` suivi de `[data-mode="light"] {` en ligne suivante — d'où le motif `':root,'` et non `':root'`. Ouvrir le fichier pour vérifier avant de lancer.
 - `rgb_of` découpe par branche parce que les deux paires de valeurs portent les mêmes noms de variables dans `lib/charte.sh`. Si la mise en forme du `case` de la tâche 1 change, ces bornes changent aussi.
 
-- [ ] **Step 2: Lancer le test**
+- [x] **Step 2: Lancer le test**
 
 Run: `bats tests/unit/test_charte_conformity.bats`
 Expected: PASS — 3 tests, si `~/Projects/Nivuus/design` est présent à côté du dépôt.
@@ -398,7 +398,7 @@ Vérifier explicitement qu'il ne passe pas *par accident* en étant skippé :
 Run: `bats tests/unit/test_charte_conformity.bats 2>&1 | grep -c skipped`
 Expected: `0`. Si les tests sont skippés, le chemin par défaut est faux — corriger `DESIGN` ou lancer avec `NIVUUS_DESIGN_DIR=~/Projects/Nivuus/design`.
 
-- [ ] **Step 3: Vérifier que le test détecte bien une divergence**
+- [x] **Step 3: Vérifier que le test détecte bien une divergence**
 
 Un garde-fou qu'on n'a pas vu échouer ne garde rien.
 
@@ -410,7 +410,7 @@ Expected: FAIL sur `--ok sombre : charte.sh dit 78;211;155, tokens.css dit 78;21
 
 Puis restaurer : `git checkout lib/charte.sh` et relancer, Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add tests/unit/test_charte_conformity.bats
@@ -434,7 +434,7 @@ installable et testable seul."
 
   Le § 4.1 de la spec réserve l'emploi de `NIVUUS_C_STRONG` « sur le libellé d'étape là où la hiérarchie le demande ». Vérification faite, **il n'y a nulle part où l'appliquer** : `lib/steps.sh` n'appelle aucun `log_*`, et tous les appels de `lib/manifest.sh` et `lib/zshrc.sh` sont des messages d'une seule pièce (`log_error`, `log_warn`, `log_dry`), sans couple libellé/détail à hiérarchiser. Ne pas en inventer un. Si un jour une étape affiche un libellé suivi d'un détail, c'est là que `STRONG` ira.
 
-- [ ] **Step 1: Écrire les tests qui échouent**
+- [x] **Step 1: Écrire les tests qui échouent**
 
 Ajouter à la fin de `tests/unit/test_lib_log.bats` :
 
@@ -492,12 +492,12 @@ Ajouter à la fin de `tests/unit/test_lib_log.bats` :
 }
 ```
 
-- [ ] **Step 2: Lancer les tests pour vérifier qu'ils échouent**
+- [x] **Step 2: Lancer les tests pour vérifier qu'ils échouent**
 
 Run: `bats tests/unit/test_lib_log.bats`
 Expected: FAIL — les 6 tests de teinte et les 2 tests de gras/dim échouent (`log.sh` emploie encore ses propres codes et `_C_DIM`). Les 7 tests d'origine passent toujours.
 
-- [ ] **Step 3: Réécrire `lib/log.sh`**
+- [x] **Step 3: Réécrire `lib/log.sh`**
 
 Remplacer intégralement le contenu par :
 
@@ -521,17 +521,17 @@ log_error() { printf '%s\n' "${NIVUUS_C_DANGER:-}✗${NIVUUS_C_OFF:-} $*" >&2; }
 log_dry()   { [ -n "${NIVUUS_QUIET:-}" ] && return 0; printf '%s\n' "${NIVUUS_C_STRONG:-}[dry-run]${NIVUUS_C_OFF:-} $*"; }
 ```
 
-- [ ] **Step 4: Lancer les tests pour vérifier qu'ils passent**
+- [x] **Step 4: Lancer les tests pour vérifier qu'ils passent**
 
 Run: `bats tests/unit/test_lib_log.bats`
 Expected: PASS — 15 tests (7 d'origine + 8 ajoutés).
 
-- [ ] **Step 5: Vérifier que les consommateurs n'ont pas bougé**
+- [x] **Step 5: Vérifier que les consommateurs n'ont pas bougé**
 
 Run: `bats tests/e2e/test_install_sh_compat.bats tests/e2e/test_reversibility.bats tests/e2e/test_nivuus_cli.bats`
 Expected: PASS. Ces suites exercent `lib/steps.sh`, `lib/manifest.sh` et `bin/nivuus`, qui consomment `log_*` sans être modifiés.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add lib/log.sh tests/unit/test_lib_log.bats
@@ -555,7 +555,7 @@ Substitution mécanique de trois copies de la même palette. 62 sites d'appel au
 - Consumes: les sept variables de la tâche 1.
 - Produces: rien pour les tâches suivantes.
 
-- [ ] **Step 1: Constater l'état de départ**
+- [x] **Step 1: Constater l'état de départ**
 
 ```bash
 grep -c '\\033\[' bin/healthcheck bin/benchmark bin/test
@@ -563,7 +563,7 @@ bats tests/e2e/test_healthcheck.bats tests/e2e/test_benchmark.bats
 ```
 Expected: des occurrences dans les trois fichiers, et les suites e2e au vert. Ce vert est la référence : il doit être identique à la fin.
 
-- [ ] **Step 2: `bin/healthcheck`**
+- [x] **Step 2: `bin/healthcheck`**
 
 Remplacer les lignes 10 à 21 (le bloc `# Colors` et le bloc `# Symbols`) par :
 
@@ -595,12 +595,12 @@ if [ -f "$_HERE/../lib/charte.sh" ]; then . "$_HERE/../lib/charte.sh"; fi
 
 C'est la forme à employer dans les trois fichiers, tous sous `set -e`.
 
-- [ ] **Step 3: Lancer la suite healthcheck**
+- [x] **Step 3: Lancer la suite healthcheck**
 
 Run: `bats tests/e2e/test_healthcheck.bats`
 Expected: PASS, à l'identique du step 1.
 
-- [ ] **Step 4: `bin/benchmark`**
+- [x] **Step 4: `bin/benchmark`**
 
 Remplacer les lignes 15 à 20 (le bloc `# Colors`) par le même bloc, en conservant l'ordre de déclaration d'origine :
 
@@ -616,12 +616,12 @@ RED="${NIVUUS_C_DANGER:-}"
 NC="${NIVUUS_C_OFF:-}"
 ```
 
-- [ ] **Step 5: Lancer la suite benchmark**
+- [x] **Step 5: Lancer la suite benchmark**
 
 Run: `bats tests/e2e/test_benchmark.bats`
 Expected: PASS.
 
-- [ ] **Step 6: `bin/test`**
+- [x] **Step 6: `bin/test`**
 
 Ce fichier est en `zsh`, pas en `bash` : `BASH_SOURCE` n'existe pas. Remplacer les lignes 8 à 13 par :
 
@@ -637,19 +637,19 @@ BLUE="${NIVUUS_C_BUSY:-}"
 NC="${NIVUUS_C_OFF:-}"
 ```
 
-- [ ] **Step 7: Vérifier que le lanceur de tests fonctionne encore**
+- [x] **Step 7: Vérifier que le lanceur de tests fonctionne encore**
 
 `bin/test` est l'outil qui lance les tests : le casser rendrait tout le reste invisible.
 
 Run: `./bin/test --unit`
 Expected: la suite unitaire s'exécute et passe, sortie colorée intacte.
 
-- [ ] **Step 8: Vérifier qu'aucun code ANSI en dur ne subsiste**
+- [x] **Step 8: Vérifier qu'aucun code ANSI en dur ne subsiste**
 
 Run: `grep -n '\\033\[' bin/healthcheck bin/benchmark bin/test`
 Expected: aucune sortie (code 1).
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add bin/healthcheck bin/benchmark bin/test
@@ -673,7 +673,7 @@ Première des deux surfaces IA. Ici la substitution n'est **pas** mécanique : c
 - Consumes: les sept variables de la tâche 1, chargées paresseusement.
 - Produces: rien pour les tâches suivantes. La tâche 6 applique le même motif de chargement paresseux, décrit ici et répété là-bas.
 
-- [ ] **Step 1: Corriger le test d'intégration qui exige des codes Nord**
+- [x] **Step 1: Corriger le test d'intégration qui exige des codes Nord**
 
 `tests/integration/test_ai_workflow.bats:283-286` exige aujourd'hui que le fichier **contienne** `%F{` — il cassera par construction. Il doit devenir l'assertion inverse. Remplacer le test :
 
@@ -698,12 +698,12 @@ par :
 
 Ne pas toucher au test voisin sur `config/19-ai-suggestions.zsh` : ce fichier est hors périmètre (spec § 2.2).
 
-- [ ] **Step 2: Lancer le test pour vérifier qu'il échoue**
+- [x] **Step 2: Lancer le test pour vérifier qu'il échoue**
 
 Run: `bats tests/integration/test_ai_workflow.bats --filter "charte colors"`
 Expected: FAIL — le fichier contient encore des `%F{`.
 
-- [ ] **Step 3: Ajouter le chargement paresseux**
+- [x] **Step 3: Ajouter le chargement paresseux**
 
 Insérer cette fonction avant `_ai_explain_error_widget` (celle qui contient la ligne 178) :
 
@@ -719,7 +719,7 @@ _ai_charte_load() {
 }
 ```
 
-- [ ] **Step 4: Convertir les appels**
+- [x] **Step 4: Convertir les appels**
 
 Appeler `_ai_charte_load` en tête de `_ai_explain_error_widget`, juste après le `return 0` du cas « pas d'erreur », puis remplacer chaque `print -P` par `print -r --`.
 
@@ -759,7 +759,7 @@ Les remplacements, un par un :
 
 Noter le `✗` ajouté ligne 213 : le message était jusqu'ici coloré sans porter de glyphe, ce qui viole la règle « couleur plus icône plus libellé » du § 2.4. `explain-error` (ligne 230) appelle ensuite `_ai_explain_error_widget`, qui charge la charte : appeler `_ai_charte_load` aussi en tête de `explain-error`, dont la ligne 230 s'exécute *avant* le widget.
 
-- [ ] **Step 5: Lancer les tests**
+- [x] **Step 5: Lancer les tests**
 
 Run: `bats tests/integration/test_ai_workflow.bats`
 Expected: PASS, y compris le test réécrit.
@@ -767,7 +767,7 @@ Expected: PASS, y compris le test réécrit.
 Run: `grep -n '%F{' config/22-ai-errors.zsh`
 Expected: aucune sortie.
 
-- [ ] **Step 6: Vérifier le coût au démarrage**
+- [x] **Step 6: Vérifier le coût au démarrage**
 
 Le chargement paresseux ne vaut que s'il est réellement paresseux.
 
@@ -777,7 +777,7 @@ Expected: `charte chargee: non`.
 Run: `bats tests/performance/test_startup.bats`
 Expected: PASS, cible <300 ms tenue.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add config/22-ai-errors.zsh tests/integration/test_ai_workflow.bats
@@ -802,12 +802,12 @@ Chargement paresseux de charte.sh : le demarrage ne paie rien."
 **Interfaces:**
 - Consumes: les sept variables de la tâche 1. `_ai_charte_load` est **redéfinie ici**, à l'identique de la tâche 5 : les deux modules se chargent indépendamment l'un de l'autre et aucun ne peut supposer que l'autre est présent.
 
-- [ ] **Step 1: Constater le vert de départ**
+- [x] **Step 1: Constater le vert de départ**
 
 Run: `bats tests/unit/test_ai_command_not_found.bats`
 Expected: PASS. Ces tests assertent du texte (`Package:`, `Nivuus AI Package Assistant`, `cowsay`) et non des couleurs : ils doivent rester verts sans être modifiés. C'est le filet de cette tâche.
 
-- [ ] **Step 2: Ajouter le chargement paresseux**
+- [x] **Step 2: Ajouter le chargement paresseux**
 
 Insérer avant `_ai_cnf_render_box` :
 
@@ -822,7 +822,7 @@ _ai_charte_load() {
 }
 ```
 
-- [ ] **Step 3: Dépeindre le cadre**
+- [x] **Step 3: Dépeindre le cadre**
 
 Le cadre `╭─ … ╰─` est aujourd'hui entièrement bleu sans signaler aucun état, le nom de commande est vert et le paquet jaune : trois couleurs décoratives que le § 2.4 interdit. Remplacer le corps de `_ai_cnf_render_box` (lignes 234 à 250) par :
 
@@ -853,7 +853,7 @@ Corriger aussi le commentaire de section ligne 225, `# UI Box Rendering (Nord Pa
 # UI Box Rendering — charte Nivuus (doc/CHARTE.md)
 ```
 
-- [ ] **Step 4: Convertir le bloc d'installation**
+- [x] **Step 4: Convertir le bloc d'installation**
 
 Lignes 326 à 350. Table de décision :
 
@@ -883,7 +883,7 @@ Lignes 326 à 350. Table de décision :
 
 Noter que l'invite perd la couleur imbriquée `%F{109}` autour de `${install_cmd}` : elle colorait la commande à l'intérieur d'une phrase déjà colorée, ce qui ne signalait rien.
 
-- [ ] **Step 5: Lancer les tests**
+- [x] **Step 5: Lancer les tests**
 
 Run: `bats tests/unit/test_ai_command_not_found.bats`
 Expected: PASS, inchangé par rapport au step 1.
@@ -891,7 +891,7 @@ Expected: PASS, inchangé par rapport au step 1.
 Run: `grep -n '%F{' config/24-ai-command-not-found.zsh`
 Expected: aucune sortie.
 
-- [ ] **Step 6: Vérifier le rendu à l'œil**
+- [x] **Step 6: Vérifier le rendu à l'œil**
 
 Les tests assertent le texte, pas l'apparence. Regarder une fois la vraie sortie :
 
@@ -901,7 +901,7 @@ _ai_cnf_render_box "cowsay" "Configurable cow" "cowsay" "sudo apt install cowsay
 ```
 Expected: le cadre est de la couleur du terminal, les quatre libellés sont en gras, aucune valeur n'est colorée. Si quoi que ce soit apparaît en couleur dans ce cadre, c'est une décoration qui a survécu.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add config/24-ai-command-not-found.zsh
@@ -927,7 +927,7 @@ Sans lui, un gris revient au premier correctif pressé. Il ne pilote pas la conv
 - Consumes: l'état du dépôt après les tâches 3 à 6.
 - Produces: rien.
 
-- [ ] **Step 1: Écrire le test**
+- [x] **Step 1: Écrire le test**
 
 ```bash
 #!/usr/bin/env bats
@@ -982,12 +982,12 @@ setup() {
 }
 ```
 
-- [ ] **Step 2: Lancer le test**
+- [x] **Step 2: Lancer le test**
 
 Run: `bats tests/unit/test_charte_no_grey.bats`
 Expected: PASS — 4 tests. S'il échoue, c'est qu'une des tâches 3 à 6 a laissé un gris : le corriger là-bas plutôt qu'assouplir le test.
 
-- [ ] **Step 3: Vérifier que le cliquet mord**
+- [x] **Step 3: Vérifier que le cliquet mord**
 
 ```bash
 printf "\n_UNUSED=\$'\\\\033[2m'\n" >> lib/log.sh
@@ -997,12 +997,12 @@ Expected: FAIL sur « aucun dim (SGR 2) dans le perimetre ».
 
 Restaurer : `git checkout lib/log.sh`, relancer, Expected: PASS.
 
-- [ ] **Step 4: Lancer la suite complète**
+- [x] **Step 4: Lancer la suite complète**
 
 Run: `./bin/test`
 Expected: PASS — unitaires, intégration, performance et e2e.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tests/unit/test_charte_no_grey.bats
@@ -1024,7 +1024,7 @@ clair : y ajouter un fichier demande de modifier la spec d'abord."
 - Consumes: tout ce qui précède.
 - Produces: rien.
 
-- [ ] **Step 1: Écrire `doc/CHARTE.md`**
+- [x] **Step 1: Écrire `doc/CHARTE.md`**
 
 ```markdown
 # Charte graphique appliquée au terminal
@@ -1116,7 +1116,7 @@ texte. Des trois leviers, l'épaisseur est celui qui existe : le premier plan
 passe en gras, le second reste en texte normal, de la même couleur.
 ```
 
-- [ ] **Step 2: Référencer depuis `doc/README.md`**
+- [x] **Step 2: Référencer depuis `doc/README.md`**
 
 Ajouter une ligne à la liste des documents, dans le style des entrées voisines (les lire avant d'écrire, pour suivre leur forme) :
 
@@ -1124,7 +1124,7 @@ Ajouter une ligne à la liste des documents, dans le style des entrées voisines
 - [CHARTE.md](CHARTE.md) — la charte graphique appliquée aux sorties de Nivuus : périmètre, sept variables, réglage.
 ```
 
-- [ ] **Step 3: Documenter `NIVUUS_CHARTE_MODE` dans `.zshrc`**
+- [x] **Step 3: Documenter `NIVUUS_CHARTE_MODE` dans `.zshrc`**
 
 Ajouter au bloc de commentaires des variables de thème (`.zshrc:38-56`), après les lignes `NIVUUS_PROMPT_FORMAT` :
 
@@ -1137,17 +1137,17 @@ Ajouter au bloc de commentaires des variables de thème (`.zshrc:38-56`), après
 
 Ne pas `export` de valeur par défaut : `lib/charte.sh` traite l'absence, et poser une valeur ici priverait `COLORFGBG` de son rôle.
 
-- [ ] **Step 4: Vérifier que le démarrage n'a pas régressé**
+- [x] **Step 4: Vérifier que le démarrage n'a pas régressé**
 
 Run: `bats tests/performance/test_startup.bats`
 Expected: PASS. Le step 3 n'ajoute que des commentaires, mais `.zshrc` est le chemin chaud.
 
-- [ ] **Step 5: Lancer la suite complète une dernière fois**
+- [x] **Step 5: Lancer la suite complète une dernière fois**
 
 Run: `./bin/test`
 Expected: PASS sur les quatre suites.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add doc/CHARTE.md doc/README.md .zshrc
@@ -1162,9 +1162,161 @@ couleur bouge dans tokens.css."
 
 ## Vérification finale
 
-- [ ] `./bin/test` — les quatre suites au vert.
-- [ ] `bats tests/unit/test_charte_conformity.bats 2>&1 | grep -c skipped` renvoie `0` avec le dépôt design présent.
-- [ ] `grep -rn '%F{' config/22-ai-errors.zsh config/24-ai-command-not-found.zsh` ne renvoie rien.
-- [ ] `grep -rn '\\033\[' bin/healthcheck bin/benchmark bin/test lib/log.sh` ne renvoie rien.
-- [ ] `git diff master --stat -- config/05-prompt.zsh themes/ doc/PROMPT.md config/17-colorization.zsh config/98-syntax.zsh config/18-autosuggestions.zsh config/03-completion.zsh` ne renvoie rien : le hors-périmètre est intact.
-- [ ] Un `nivuus doctor` et un `./install.sh --non-interactive --prefix /tmp/essai` lancés à l'œil, pour voir les vraies couleurs une fois.
+- [x] `./bin/test` — les quatre suites au vert.
+- [x] `bats tests/unit/test_charte_conformity.bats 2>&1 | grep -c skipped` renvoie `0` avec le dépôt design présent.
+- [x] `grep -rn '%F{' config/22-ai-errors.zsh config/24-ai-command-not-found.zsh` ne renvoie rien.
+- [x] `grep -rn '\\033\[' bin/healthcheck bin/benchmark bin/test lib/log.sh` ne renvoie rien.
+- [x] `git diff master --stat -- config/05-prompt.zsh themes/ doc/PROMPT.md config/17-colorization.zsh config/98-syntax.zsh config/18-autosuggestions.zsh config/03-completion.zsh` ne renvoie rien : le hors-périmètre est intact.
+- [x] Un `nivuus doctor` et un `./install.sh --non-interactive --prefix /tmp/essai` lancés à l'œil, pour voir les vraies couleurs une fois.
+
+---
+
+## Journal d'exécution — 4 septembre 2026
+
+Les 55 étapes sont cochées après **vérification**, pas après écriture.
+
+Le plan avait bien été exécuté, mais son historique a été écrasé : la PR #2 a
+été fusionnée en squash, et le commit `85fdd04` porte à lui seul un commit
+par tâche — huit, de `feat(charte)` à `docs(charte)`, dans l'ordre du plan —
+**plus** huit commits de correctifs issus d'une revue de code, tous lisibles
+dans son corps de message. Aucun commit ne porte donc le nom d'une tâche dans
+`git log --oneline`, d'où l'impression d'un plan jamais joué.
+
+Cette session a rejoué chaque étape sur le dépôt tel qu'il est aujourd'hui, et
+mesuré chaque vérification que le plan demande. Les écarts entre la lettre du
+plan et le dépôt sont listés plus bas : la plupart sont les correctifs de
+revue, décidés après l'écriture du plan et donc absents de son texte.
+
+### Ce qui a été mesuré
+
+| Commande | Résultat |
+|---|---|
+| `bats tests/unit/test_lib_charte.bats tests/unit/test_lib_log.bats tests/unit/test_charte_no_grey.bats tests/unit/test_charte_conformity.bats` | 39/39 (les 2 tests de conformité, `skip` en début de session faute de `tokens.css`, sont depuis pleinement joués — § Écart 1) |
+| `./bin/test --unit` | 580/580 en 57 s |
+| `./bin/test --performance` | 10/10 |
+| `bats tests/e2e/test_install_sh_compat.bats tests/e2e/test_reversibility.bats tests/e2e/test_nivuus_cli.bats` | 44/44 |
+| `bats tests/e2e/test_healthcheck.bats tests/e2e/test_benchmark.bats` | 16/18 — deux échecs pré-existants, § Écart 5 |
+| `./bin/test --integration` | 172/193 — 21 échecs pré-existants, § Écart 5 |
+
+Les deux cliquets ont été vus mordre, puis restaurés :
+
+- conformité : `--ok` sombre passé à `78;211;155` → `not ok 1 … charte.sh dit
+  '78;211;155', tokens.css dit '78;211;154' (#4ED39A)` ;
+- anti-gris : `_UNUSED=$'\033[2m'` ajouté à `lib/log.sh` → `not ok 1 aucun dim
+  (SGR 2) dans le perimetre`.
+
+Installation réelle dans un `HOME` jetable (jamais celui de l'utilisateur) :
+`install.sh --non-interactive` émet bien `\033[38;2;78;211;154m✓` et
+`\033[38;2;122;182;255m·`, et `healthcheck` n'emploie de couleur que sur ses
+glyphes d'état, ses titres de section étant en `\033[1m` nu.
+
+### Écarts entre le plan et le dépôt
+
+**Écart 1 — le garde-fou de conformité a failli rester dormant (tâche 2).**
+Au début de cette session, `design/assets/tokens.css` n'existait pas : le dépôt
+`design` était bien présent au chemin par défaut, mais sa propre charte
+n'avait jamais été produite — son plan
+`docs/superpowers/plans/2026-08-22-charte-graphique.md` était lui aussi
+inexécuté et `assets/` ne contenait que des SVG de marque. Les deux tests de
+conformité se marquaient donc `skip` en permanence, et le plan exige
+l'inverse (`grep -c skipped` = `0`). Faute de source, la vérification a
+d'abord été rejouée contre un `tokens.css` reconstruit depuis le bloc CSS du
+plan design (lignes 178-205) : 2/2 au vert, rouge sur une divergence d'une
+unité.
+
+Le dépôt design a été produit **pendant** cette session (commits `b14b05d`,
+`f4363dd`, `45090ff` ; `assets/tokens.css` et `tools/check_contrast.py`
+existent désormais, `docs/charte.md` pas encore). Le garde-fou a été rejoué
+contre le vrai fichier :
+
+- `bats tests/unit/test_charte_conformity.bats 2>&1 | grep -c skipped` → `0`,
+  la condition du plan est tenue ;
+- les huit hex concordent exactement (`#C11F2E #8A5A00 #1B6B4A #1A5FB4` clair,
+  `#FF7A85 #F2B33D #4ED39A #7AB6FF` sombre) ;
+- `--warn` clair passé à `138;90;1` → `not ok 2 … charte.sh dit '138;90;1',
+  tokens.css dit '138;90;0' (#8A5A00)`.
+
+Le garde-fou est vivant. Réserve à retenir : le dépôt design est en cours
+d'écriture, ce constat vaut pour son état à `45090ff`. Si `tokens.css` bouge
+encore, c'est ce test qui le dira — c'est précisément son emploi.
+
+**Écart 2 — `BLUE` a disparu au lieu d'être traduit (tâche 4).** Le plan
+prescrivait une substitution mécanique `BLUE → NIVUUS_C_BUSY` et un
+`INFO="${BLUE}ℹ${NC}"`. C'est précisément ce que la revue a corrigé : la
+substitution mécanique avait repeint en `busy` 33 filets et titres de section
+qui ne signalent aucun état (15 dans `bin/healthcheck`, 12 dans
+`bin/benchmark`, 6 dans `bin/test`). `BLUE` a été retiré des trois binaires,
+les filets rendus au texte nu, les titres passés en `STRONG`, et `INFO`
+dépeint en `ℹ` nu. L'étape 2 de la tâche 4 est donc **fausse telle qu'écrite**
+— sa substitution mécanique produit de la couleur décorative, ce que la charte
+interdit. Le dépôt a raison contre le plan.
+
+**Écart 3 — `_ai_charte_load` est partagée, pas dupliquée (tâches 5 et 6).**
+Le plan demandait de redéfinir la fonction à l'identique dans les deux modules
+IA. Elle est définie une seule fois dans `config/09-ai-core.zsh`, que les deux
+modules chargent de toute façon. L'argument du plan (« aucun module ne peut
+supposer l'autre présent ») visait une dépendance entre les modules 22 et 24 ;
+la dépendance réelle est sur le socle 09, qui est un prérequis des deux.
+Conservé.
+
+**Écart 4 — deux lignes de la table de décision de la tâche 5 sont fausses.**
+La revue les a corrigées et la spec a été amendée dans la foulée ; le texte du
+plan, lui, est resté :
+
+- `💾 From cache:` y est rangé en `STRONG`, réservé par le § 4.3 de la spec aux
+  libellés du type `Command:`/`Exit Code:`. Le dépôt le laisse en texte nu.
+- `⚠  AI Error Analysis` y est rangé en `danger`. Or `⚠` porte `warn` neuf
+  lignes plus bas dans le même fichier (« No error to explain ») : même
+  glyphe, deux rôles, illisible en noir et blanc. Le dépôt écrit `✗  AI Error
+  Analysis`, l'invariant du module étant `✓`=ok, `⚠`=warn, `✗`=danger.
+
+Ne pas rejouer la table du plan telle quelle : elle réintroduirait les deux
+défauts.
+
+**Écart 5 — « les quatre suites au vert » n'est pas atteignable, et pas à
+cause de la charte.** 23 tests échouent sur `master` avant toute intervention
+(arbre de travail identique à `HEAD`, vérifié) :
+
+- 21 en intégration, parce que la pile IA a été refondue depuis le 24 août :
+  `config/23-ai-terminal-titles.zsh` n'existe plus et les modules `09-ai-*`
+  l'ont remplacé. `tests/integration/test_ai_workflow.bats` et
+  `test_module_loading.bats` cherchent encore les anciens fichiers. Hors
+  périmètre de la charte (spec § 2.2), et sans rapport avec elle : le seul
+  test de ce fichier qui porte sur la charte, « AI error messages use charte
+  colors, not raw palette codes », passe.
+- `healthcheck runs quickly (<2 seconds)` : 1,5 s mesurées contre un budget
+  compté en secondes entières par `date +%s`, qui échoue dès que la mesure
+  chevauche une seconde. Flakiness de mesure, pas de régression.
+- `benchmark references 300ms performance target` : la chaîne `300` n'apparaît
+  dans la sortie que par la branche `✓ Excellent (<300ms)`, prise seulement si
+  la machine démarre le shell en moins de 300 ms. Assertion dépendante de la
+  machine, indépendante de la couleur.
+
+Aucun de ces échecs ne touche une ligne que la charte a écrite. Les corriger
+est un autre chantier — celui de la refonte IA — et le faire ici aurait
+mélangé deux sujets.
+
+**Écart 6 — quatre durcissements non prévus, tous conservés.**
+
+- `lib/charte.sh` garde `COLORFGBG` derrière `_nivuus_fgbg`. Le
+  `${COLORFGBG##*;}` écrit dans la tâche 1 fait planter tout sourcing sous
+  `set -u` quand la variable est absente — donc `bin/nivuus` et `install.sh`,
+  latent jusqu'à ce que la tâche 3 câble `charte.sh` dans `lib/log.sh`. Une
+  régression unitaire et une régression e2e (`nivuus help` sans `COLORFGBG`)
+  le tiennent.
+- `tests/unit/test_charte_no_grey.bats` porte 6 tests au lieu de 4 : la liste
+  littérale du plan (`\033[2m`, `%F{8}`, 232–255) rate les formes qu'emploie
+  réellement du bash pur — SGR bright-black 90/100 et gris par terminfo
+  (`tput dim`, `tput setaf 0|8`).
+- `_ai_charte_load` **ne garde plus** sur `NIVUUS_CHARTE_LOADED`, contrairement
+  à ce qu'écrivent les tâches 5 et 6. `charte.sh` tranche sur `[ -t 1 ]` au
+  moment du source : la garde gelait la décision pour toute la session, si bien
+  qu'après une seule commande dont stdout est un tube, la boîte de l'assistant
+  paquets — qui écrit sur stderr, donc sur le terminal — sortait sans couleur
+  ni gras jusqu'à la fin de la session. La garde a été retirée ; le chargement
+  reste paresseux.
+- `bin/test` employait `${BASH_SOURCE[0]}` pour `PROJECT_ROOT`, inexistant sous
+  `zsh` : le lanceur sortait du dépôt, ne trouvait aucune suite, et annonçait
+  « All tests passed! » sans rien exécuter. Corrigé avec `$_HERE`. À retenir :
+  l'étape 7 de la tâche 4 (« vérifier que le lanceur fonctionne encore »)
+  n'aurait pas attrapé ce défaut, un `bin/test` qui n'exécute rien sortant 0.
