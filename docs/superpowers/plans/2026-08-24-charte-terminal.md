@@ -40,7 +40,7 @@
 | `tests/unit/test_lib_charte.bats` | **Créé.** Comportement de `charte.sh` : vecteur, mode, neutralisation. | 1 |
 | `tests/unit/test_charte_conformity.bats` | **Créé.** Les huit hex sont ceux de `design/assets/tokens.css`. | 2 |
 | `lib/log.sh` | **Modifié.** Perd ses six codes ANSI et `_C_DIM`, consomme `charte.sh`. | 3 |
-| `bin/healthcheck`, `bin/benchmark`, `bin/test` | **Modifiés.** Perdent leurs trois copies de `RED/GREEN/YELLOW/BLUE/NC`. | 4 |
+| `bin/healthcheck`, `bin/benchmark`, `bin/test` | **Modifiés.** Perdent leurs trois copies de `RED/GREEN/YELLOW/BLUE/NC`, et `BLUE` avec — voir la correction du 4 septembre 2026 en tâche 4. | 4 |
 | `config/22-ai-errors.zsh` | **Modifié.** Gris et couleur décorative retirés, `print -P` → `print -r --`. | 5 |
 | `config/24-ai-command-not-found.zsh` | **Modifié.** Idem, plus le cadre décoratif dépeint. | 6 |
 | `tests/unit/test_charte_no_grey.bats` | **Créé.** Cliquet : interdit tout gris sur le périmètre. | 7 |
@@ -63,7 +63,7 @@ L'ordre compte : le cliquet anti-gris (tâche 7) ne peut passer qu'une fois les 
   - `NIVUUS_C_TEXT` — **toujours** la chaîne vide.
   - `NIVUUS_C_STRONG` — `\033[1m`, ou chaîne vide.
   - `NIVUUS_C_OFF` — `\033[0m`, ou chaîne vide.
-  - `NIVUUS_CHARTE_LOADED` — vaut `1` après chargement. Sert de garde au chargement paresseux en tâche 5 et 6.
+  - `NIVUUS_CHARTE_LOADED` — vaut `1` après chargement. Signale seulement que le fichier a été sourcé. **Ne sert pas de garde** : la version du 24 août lui donnait ce rôle aux tâches 5 et 6, corrigé le 4 septembre 2026 — `charte.sh` tranche sur `[ -t 1 ]` au moment du source, et une garde figerait cette décision pour toute la session.
 - Lit en entrée : `NO_COLOR`, `COLORTERM`, `COLORFGBG`, `NIVUUS_CHARTE_MODE`.
 
 - [x] **Step 1: Écrire le test qui échoue**
@@ -567,6 +567,32 @@ Expected: des occurrences dans les trois fichiers, et les suites e2e au vert. Ce
 
 Remplacer les lignes 10 à 21 (le bloc `# Colors` et le bloc `# Symbols`) par :
 
+> **Corrigé le 4 septembre 2026 — la version du 24 août était fausse.** Elle
+> prescrivait une substitution mécanique en cinq lignes, `RED/GREEN/YELLOW/NC`
+> **plus `BLUE="${NIVUUS_C_BUSY:-}"`**, et un `INFO="${BLUE}ℹ${NC}"`, en
+> concluant que « les 19 sites d'appel qui suivent ne changent pas ».
+>
+> C'est précisément ce qui ne pouvait pas marcher. `BLUE` ne servait pas à
+> signaler un traitement en cours : il peignait des filets de séparation, des
+> titres de section et des préfixes `ℹ` — 33 sites au total sur les trois
+> fichiers (15 dans `bin/healthcheck`, 12 dans `bin/benchmark`, 6 dans
+> `bin/test`). Le traduire en `busy` transportait donc telle quelle la
+> décoration que la charte interdit (§ 2.4 : la couleur ne s'emploie que sur
+> un événement), sous un nom de rôle qui la faisait passer pour légitime. Une
+> substitution mécanique n'est valide que si le nom d'origine porte déjà une
+> sémantique ; `BLUE` n'en portait aucune, il nommait une teinte.
+>
+> Rejouer la version d'origine repeindrait ces 33 sites en `#7AB6FF` et
+> laisserait le cliquet anti-gris au vert — il interdit les gris, pas la
+> couleur décorative. Rien ne rattraperait le défaut.
+
+Remplacer par le bloc ci-dessous. `BLUE` **disparaît** : après retrait de la
+décoration, plus aucun usage légitime ne restait dans ces trois fichiers. Les
+titres de section passent en `STRONG` (gras, sans couleur — la hiérarchie ne
+passe jamais par la teinte, spec § 6.2), les filets et le texte ordinaire en
+texte nu, et `INFO` perd sa couleur : `ℹ` préfixe une ligne d'information,
+ce n'est pas un état.
+
 ```bash
 # Couleurs — lib/charte.sh est la source unique (doc/CHARTE.md).
 _HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -575,17 +601,26 @@ _HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RED="${NIVUUS_C_DANGER:-}"
 GREEN="${NIVUUS_C_OK:-}"
 YELLOW="${NIVUUS_C_WARN:-}"
-BLUE="${NIVUUS_C_BUSY:-}"
+STRONG="${NIVUUS_C_STRONG:-}"
 NC="${NIVUUS_C_OFF:-}"
 
 # Symboles — la couleur ne s'emploie jamais seule (charte § 2.4).
 CHECK="${GREEN}✓${NC}"
 CROSS="${RED}✗${NC}"
 WARN="${YELLOW}⚠${NC}"
-INFO="${BLUE}ℹ${NC}"
+INFO="ℹ"
 ```
 
-Les 19 sites d'appel qui suivent emploient déjà `${RED}`/`${GREEN}`/`${YELLOW}`/`${BLUE}`/`${NC}` : ils ne changent pas. `echo -e` continue de fonctionner, les séquences étant désormais déjà réelles plutôt qu'échappées.
+Les sites d'appel qui suivent **changent** : chaque `${BLUE}` doit être relu
+un par un et tranché — `STRONG` si c'est un titre, rien si c'est un filet ou
+du texte courant. Aucun ne devient `busy` : ces trois scripts ne rendent
+compte d'aucun traitement en cours. `echo -e` continue de fonctionner, les
+séquences étant désormais déjà réelles plutôt qu'échappées.
+
+Même travail dans `bin/benchmark`, dont les paliers employaient trois couleurs
+pour trois niveaux, `RED` compris pour un démarrage lent qui n'est qu'un
+avertissement. Deux états suffisent : Excellent/Good en `ok`, Slow en `warn` —
+le libellé porte la nuance, la couleur ne porte que l'état.
 
 Attention : `bin/healthcheck` fixe `set -e` en ligne 8. Le `[ -f … ] && . …` renvoie faux si le fichier manque, ce qui tuerait le script. L'écrire en `if` si le `&&` pose problème :
 
@@ -602,19 +637,27 @@ Expected: PASS, à l'identique du step 1.
 
 - [x] **Step 4: `bin/benchmark`**
 
-Remplacer les lignes 15 à 20 (le bloc `# Colors`) par le même bloc, en conservant l'ordre de déclaration d'origine :
+Remplacer les lignes 15 à 20 (le bloc `# Colors`) par le même bloc, en
+conservant l'ordre de déclaration d'origine. `BLUE` disparaît ici aussi, et
+pour la même raison qu'à l'étape 2 — 12 sites décoratifs dans ce fichier :
 
 ```bash
 # Couleurs — lib/charte.sh est la source unique (doc/CHARTE.md).
 _HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [ -f "$_HERE/../lib/charte.sh" ]; then . "$_HERE/../lib/charte.sh"; fi
 
-BLUE="${NIVUUS_C_BUSY:-}"
 GREEN="${NIVUUS_C_OK:-}"
 YELLOW="${NIVUUS_C_WARN:-}"
 RED="${NIVUUS_C_DANGER:-}"
+STRONG="${NIVUUS_C_STRONG:-}"
 NC="${NIVUUS_C_OFF:-}"
 ```
+
+Puis relire les trois blocs de paliers de ce fichier — démarrage, génération
+du prompt, mémoire. Ils employaient chacun trois couleurs pour trois niveaux,
+avec `RED` sur ce qui n'est qu'un avertissement et `✓` sur ce qui n'est pas un
+succès. Deux états, et le glyphe qui va avec le rôle : `✓` en `ok` pour
+Excellent et Good, `⚠` en `warn` pour Slow et High memory usage.
 
 - [x] **Step 5: Lancer la suite benchmark**
 
@@ -633,16 +676,29 @@ if [ -f "$_HERE/../lib/charte.sh" ]; then . "$_HERE/../lib/charte.sh"; fi
 RED="${NIVUUS_C_DANGER:-}"
 GREEN="${NIVUUS_C_OK:-}"
 YELLOW="${NIVUUS_C_WARN:-}"
-BLUE="${NIVUUS_C_BUSY:-}"
+STRONG="${NIVUUS_C_STRONG:-}"
 NC="${NIVUUS_C_OFF:-}"
 ```
+
+`BLUE` disparaît, comme aux étapes 2 et 4 : 6 sites décoratifs ici.
+
+Pendant qu'on est dans ce fichier, `PROJECT_ROOT` doit passer par `$_HERE` et
+non par `${BASH_SOURCE[0]}`, qui n'existe pas sous `zsh`. Avec `BASH_SOURCE`
+vide, `dirname ""` vaut `.` et `PROJECT_ROOT` devient le parent du dépôt :
+`bin/test` sort du dépôt, ne trouve aucune suite, et annonce « All tests
+passed! » sans rien avoir exécuté. L'étape 7 ci-dessous **n'attrape pas** ce
+défaut — un lanceur qui n'exécute rien sort `0`. Vérifier le nombre de tests
+rapporté, pas le code de sortie.
 
 - [x] **Step 7: Vérifier que le lanceur de tests fonctionne encore**
 
 `bin/test` est l'outil qui lance les tests : le casser rendrait tout le reste invisible.
 
 Run: `./bin/test --unit`
-Expected: la suite unitaire s'exécute et passe, sortie colorée intacte.
+Expected: la suite unitaire s'exécute et passe, sortie colorée intacte —
+et le **nombre de tests rapporté est non nul** (580/580 au 4 septembre 2026).
+Un `0/0` suivi de « All tests passed! » est le symptôme du `PROJECT_ROOT`
+décrit à l'étape 6, pas un succès.
 
 - [x] **Step 8: Vérifier qu'aucun code ANSI en dur ne subsiste**
 
@@ -656,7 +712,9 @@ git add bin/healthcheck bin/benchmark bin/test
 git commit -m "refactor(bin): trois palettes ANSI dupliquees remplacees par charte.sh
 
 healthcheck, benchmark et test declaraient chacun leur propre
-RED/GREEN/YELLOW/BLUE. Les 62 sites d'appel sont inchanges."
+RED/GREEN/YELLOW/BLUE. BLUE disparait : ses 33 sites peignaient des
+filets, des titres et le prefixe info, jamais un etat. Les titres
+passent en STRONG, le reste en texte nu."
 ```
 
 ---
@@ -705,14 +763,45 @@ Expected: FAIL — le fichier contient encore des `%F{`.
 
 - [x] **Step 3: Ajouter le chargement paresseux**
 
-Insérer cette fonction avant `_ai_explain_error_widget` (celle qui contient la ligne 178) :
+Définir cette fonction dans `config/09-ai-core.zsh`, chargé avant les modules
+22 et 24 qui la consomment tous deux — et non dans chaque module, voir la
+correction de la tâche 6, étape 2 :
+
+> **Corrigé le 4 septembre 2026 — la garde du 24 août était fausse.** La
+> version d'origine ouvrait la fonction sur
+> `[[ -n "${NIVUUS_CHARTE_LOADED:-}" ]] && return 0`, en la présentant comme
+> une garde de rechargement anodine. Elle ne l'est pas.
+>
+> Le mécanisme : `lib/charte.sh` ne décide pas une fois pour toutes. Il
+> tranche sur `[ -t 1 ]` — « le descripteur 1 est-il un terminal ? » — **au
+> moment où il est sourcé**, et c'est ce test qui vide ou remplit les sept
+> variables. Or ce descripteur change d'une commande à l'autre au cours d'une
+> même session : `commande-inexistante | grep x` fait de stdout un tube, une
+> redirection `> fichier` aussi. La garde fige donc la réponse de la toute
+> première évaluation et la garde jusqu'à la fin de la session.
+>
+> Ce que cela produit concrètement : il suffit d'une seule commande inconnue
+> lancée dans un tube pour que `charte.sh` conclue « pas un terminal », pose
+> les sept variables à vide, et pose `NIVUUS_CHARTE_LOADED=1`. À partir de là
+> la garde court-circuite tout rechargement, et la boîte de l'assistant de
+> paquets — qui écrit pourtant sur **stderr**, donc bien sur le terminal —
+> sort sans couleur ni gras, ainsi que tout le reste de la session, jusqu'à
+> ce que l'utilisateur ouvre un nouveau shell. Le défaut est invisible en
+> test : chaque test part d'un shell neuf.
+>
+> Retirer la garde ne coûte rien à ce que la paresse protège. Ce qui est
+> paresseux, c'est de ne pas sourcer `charte.sh` au chargement du module —
+> le démarrage de `.zshrc` ne paie rien, et cela reste vrai. Resourcer un
+> fichier de 80 lignes sans I/O au moment où l'on affiche une erreur est
+> hors de tout budget. `NIVUUS_CHARTE_LOADED` reste posé par `charte.sh`,
+> mais ne sert plus de garde ici.
 
 ```zsh
 # Charge lib/charte.sh à la demande, jamais au chargement du module : la
 # cible de démarrage <300 ms de .zshrc ne doit rien payer pour une sortie
-# qui n'apparaît qu'en cas d'erreur.
+# qui n'apparaît qu'en cas d'erreur. Resource à chaque appel, sans garde :
+# charte.sh tranche sur [ -t 1 ], qui change d'un appel à l'autre.
 _ai_charte_load() {
-    [[ -n "${NIVUUS_CHARTE_LOADED:-}" ]] && return 0
     local charte="${NIVUUS_SHELL_DIR:-$HOME/.nivuus-shell}/lib/charte.sh"
     [[ -f "$charte" ]] && source "$charte"
     return 0
@@ -727,7 +816,7 @@ Table de décision — les rôles ne sont pas devinés, ils suivent le § 4.3 de
 
 | Ligne | Avant | Après | Pourquoi |
 |---|---|---|---|
-| 178 | `%F{167}⚠  AI Error Analysis%f` | `danger` | une erreur est un état |
+| 178 | `%F{167}⚠  AI Error Analysis%f` | `danger`, **glyphe `✗`** | une erreur est un état — mais `⚠` est déjà pris, voir ci-dessous |
 | 181 | `%F{246}Command:%f` | `STRONG` | libellé de second plan, pas un état — le gris devient du gras |
 | 182 | `%F{246}Exit Code:%f` | `STRONG` | idem |
 | 194 | `%F{143}💾 From cache:%f` | `STRONG` | « depuis le cache » n'est pas un succès |
@@ -737,8 +826,29 @@ Table de décision — les rôles ne sont pas devinés, ils suivent le § 4.3 de
 
 Les remplacements, un par un :
 
+> **Corrigé le 4 septembre 2026 — la table du 24 août était fausse ici.** Elle
+> gardait le glyphe `⚠` sur `AI Error Analysis` en ne changeant que sa
+> couleur. Or neuf lignes plus bas, dans le même fichier, `⚠` porte `warn`
+> (« No error to explain »). Le même glyphe désignait donc deux rôles.
+>
+> Le critère qui tranche est la lisibilité **sans couleur** : la charte § 2.4
+> exige qu'une sortie reste compréhensible en noir et blanc — pour une
+> personne daltonienne, pour un journal de CI, pour un `NO_COLOR`. Dans ce
+> cas-là il ne reste que le glyphe ; s'il vaut tantôt « erreur » tantôt
+> « avertissement », il ne dit plus rien. La couleur ne peut pas servir de
+> désambiguïsation, puisque c'est justement elle qui manque.
+>
+> L'invariant du module est donc `✓`=ok, `⚠`=warn, `✗`=danger, un glyphe par
+> rôle et jamais deux rôles par glyphe. `AI Error Analysis` prend `✗`.
+> (`lib/log.sh` a sa propre table — § 4.1, où `!` porte `warn` — et n'est pas
+> concerné : l'invariant vaut par module, pas globalement.)
+>
+> Rejouer la ligne d'origine rendrait la sortie ambiguë en noir et blanc sans
+> qu'aucun test ne le voie : les cliquets contrôlent les teintes, pas
+> l'appariement glyphe/rôle.
+
 ```zsh
-    print -r -- "${NIVUUS_C_DANGER:-}⚠  AI Error Analysis${NIVUUS_C_OFF:-}"
+    print -r -- "${NIVUUS_C_DANGER:-}✗  AI Error Analysis${NIVUUS_C_OFF:-}"
 ```
 ```zsh
     print -r -- "${NIVUUS_C_STRONG:-}Command:${NIVUUS_C_OFF:-} $_AI_LAST_COMMAND"
@@ -800,7 +910,7 @@ Chargement paresseux de charte.sh : le demarrage ne paie rien."
 - Test: `tests/unit/test_ai_command_not_found.bats` (existant, ne pas modifier)
 
 **Interfaces:**
-- Consumes: les sept variables de la tâche 1. `_ai_charte_load` est **redéfinie ici**, à l'identique de la tâche 5 : les deux modules se chargent indépendamment l'un de l'autre et aucun ne peut supposer que l'autre est présent.
+- Consumes: les sept variables de la tâche 1, et `_ai_charte_load` définie par `config/09-ai-core.zsh` (voir l'étape 2 : la consigne d'origine, « redéfinie ici à l'identique de la tâche 5 », a été corrigée le 4 septembre 2026).
 
 - [x] **Step 1: Constater le vert de départ**
 
@@ -811,11 +921,26 @@ Expected: PASS. Ces tests assertent du texte (`Package:`, `Nivuus AI Package Ass
 
 Insérer avant `_ai_cnf_render_box` :
 
+> **Corrigé le 4 septembre 2026 sur deux points.** La version du 24 août
+> portait la même garde `NIVUUS_CHARTE_LOADED` qu'en tâche 5, fausse pour la
+> même raison — voir le mécanisme détaillé là-bas ; il mord même plus fort
+> ici, cette boîte écrivant sur stderr alors que la décision figée porte sur
+> stdout.
+>
+> Elle demandait aussi de **redéfinir la fonction verbatim** dans ce module,
+> au motif que « aucun module ne peut supposer l'autre présent ». L'argument
+> visait une dépendance de 24 sur 22, qui n'existe effectivement pas — mais
+> les deux modules dépendent tous deux de `config/09-ai-core.zsh`, chargé
+> avant eux. La fonction y est donc définie une seule fois, et les deux
+> modules la consomment. Deux copies verbatim auraient divergé à la première
+> correction — ce qui est exactement ce qui s'est produit avec la garde.
+
+Rien à insérer dans ce fichier : `_ai_charte_load` est définie une fois pour
+toutes dans `config/09-ai-core.zsh`, sous la forme donnée en tâche 5.
+
 ```zsh
-# Charge lib/charte.sh à la demande. Identique au module 22 : chaque module
-# se charge seul et ne suppose pas l'autre présent.
+# Dans config/09-ai-core.zsh, partagée par les modules 22 et 24.
 _ai_charte_load() {
-    [[ -n "${NIVUUS_CHARTE_LOADED:-}" ]] && return 0
     local charte="${NIVUUS_SHELL_DIR:-$HOME/.nivuus-shell}/lib/charte.sh"
     [[ -f "$charte" ]] && source "$charte"
     return 0
@@ -1187,6 +1312,13 @@ mesuré chaque vérification que le plan demande. Les écarts entre la lettre du
 plan et le dépôt sont listés plus bas : la plupart sont les correctifs de
 revue, décidés après l'écriture du plan et donc absents de son texte.
 
+**Trois de ces écarts ont été corrigés dans le corps du plan lui-même**, aux
+tâches 4, 5 et 6, chacun signalé par un encadré « Corrigé le 4 septembre
+2026 » qui dit ce qui était écrit le 24 août, pourquoi c'était faux, et ce
+que rejouer la version d'origine produirait. Le texte fautif n'est pas
+supprimé en silence : un plan qu'on rejoue doit porter ses propres
+corrections, sans quoi le piège remord.
+
 ### Ce qui a été mesuré
 
 | Commande | Résultat |
@@ -1240,6 +1372,21 @@ Le garde-fou est vivant. Réserve à retenir : le dépôt design est en cours
 d'écriture, ce constat vaut pour son état à `45090ff`. Si `tokens.css` bouge
 encore, c'est ce test qui le dira — c'est précisément son emploi.
 
+**À rejouer une fois le dépôt design clos.** La mesure ci-dessus est datée et
+ne vaut que pour `45090ff`. Quand `nivuus/design` aura livré sa charte
+(`docs/charte.md` manque encore), rejouer, depuis la racine de ce dépôt :
+
+```bash
+bats tests/unit/test_charte_conformity.bats
+bats tests/unit/test_charte_conformity.bats 2>&1 | grep -c skipped   # doit valoir 0
+```
+
+Attendu : 3/3 et `0`. Un `skip` signifie que `tokens.css` a bougé de place ;
+un échec nomme le rôle et les deux valeurs qui divergent, et la marche à
+suivre est celle du § « Quand une couleur bouge dans `tokens.css` » de
+`doc/CHARTE.md`. C'est un renvoi, pas une dette : le test existe, il est
+correct, et il passe aujourd'hui.
+
 **Écart 2 — `BLUE` a disparu au lieu d'être traduit (tâche 4).** Le plan
 prescrivait une substitution mécanique `BLUE → NIVUUS_C_BUSY` et un
 `INFO="${BLUE}ℹ${NC}"`. C'est précisément ce que la revue a corrigé : la
@@ -1247,9 +1394,9 @@ substitution mécanique avait repeint en `busy` 33 filets et titres de section
 qui ne signalent aucun état (15 dans `bin/healthcheck`, 12 dans
 `bin/benchmark`, 6 dans `bin/test`). `BLUE` a été retiré des trois binaires,
 les filets rendus au texte nu, les titres passés en `STRONG`, et `INFO`
-dépeint en `ℹ` nu. L'étape 2 de la tâche 4 est donc **fausse telle qu'écrite**
-— sa substitution mécanique produit de la couleur décorative, ce que la charte
-interdit. Le dépôt a raison contre le plan.
+dépeint en `ℹ` nu. L'étape 2 de la tâche 4 était donc **fausse telle
+qu'écrite** — sa substitution mécanique produit de la couleur décorative, ce
+que la charte interdit. **Corrigée en place** dans la tâche 4.
 
 **Écart 3 — `_ai_charte_load` est partagée, pas dupliquée (tâches 5 et 6).**
 Le plan demandait de redéfinir la fonction à l'identique dans les deux modules
@@ -1270,8 +1417,11 @@ plan, lui, est resté :
   glyphe, deux rôles, illisible en noir et blanc. Le dépôt écrit `✗  AI Error
   Analysis`, l'invariant du module étant `✓`=ok, `⚠`=warn, `✗`=danger.
 
-Ne pas rejouer la table du plan telle quelle : elle réintroduirait les deux
-défauts.
+La ligne 178 de la table a été **corrigée en place** dans la tâche 5, avec le
+critère qui tranche : la lisibilité sans couleur. La ligne 194
+(`💾 From cache:`) est laissée telle quelle, `STRONG` et texte nu étant tous
+deux dépourvus de couleur — la divergence est sans conséquence et la signaler
+ici suffit.
 
 **Écart 5 — « les quatre suites au vert » n'est pas atteignable, et pas à
 cause de la charte.** 23 tests échouent sur `master` avant toute intervention
@@ -1314,9 +1464,67 @@ mélangé deux sujets.
   qu'après une seule commande dont stdout est un tube, la boîte de l'assistant
   paquets — qui écrit sur stderr, donc sur le terminal — sortait sans couleur
   ni gras jusqu'à la fin de la session. La garde a été retirée ; le chargement
-  reste paresseux.
+  reste paresseux. **Corrigé en place** dans les tâches 5 et 6, mécanisme
+  écrit.
 - `bin/test` employait `${BASH_SOURCE[0]}` pour `PROJECT_ROOT`, inexistant sous
   `zsh` : le lanceur sortait du dépôt, ne trouvait aucune suite, et annonçait
   « All tests passed! » sans rien exécuter. Corrigé avec `$_HERE`. À retenir :
   l'étape 7 de la tâche 4 (« vérifier que le lanceur fonctionne encore »)
   n'aurait pas attrapé ce défaut, un `bin/test` qui n'exécute rien sortant 0.
+
+### Dettes ouvertes
+
+Deux dettes nommées, constatées ici et **délibérément non corrigées** : ni
+l'une ni l'autre ne touche une ligne écrite par la charte, et les traiter dans
+ce chantier aurait mêlé deux sujets. Elles sont consignées pour ne pas être
+redécouvertes à chaque exécution de la suite.
+
+**Dette 1 — les suites d'intégration parlent encore de l'ancienne pile IA.**
+`tests/integration/test_ai_workflow.bats` et `test_module_loading.bats`
+cherchent `config/23-ai-terminal-titles.zsh`, qui n'existe plus, et
+`config/19-ai-suggestions.zsh` dans son état d'avant la refonte ; la pile a
+été redécoupée en modules `09-ai-*`. **21 tests rouges**, en permanence.
+
+Ce que ça coûte aujourd'hui : `./bin/test` ne peut pas servir de feu vert.
+Une suite qui est rouge quoi qu'on fasse cesse d'être lue, et le prochain vrai
+échec d'intégration passera inaperçu au milieu des 21 autres. C'est le coût
+réel, et il est immédiat. À traiter avec la refonte IA, dont ces tests sont le
+reliquat.
+
+**Dette 2 — deux assertions e2e mesurent la machine, pas le produit.**
+
+- `tests/e2e/test_healthcheck.bats` : `healthcheck runs quickly (<2 seconds)`
+  compare deux `date +%s`, donc des secondes entières. `healthcheck` prend
+  1,5 s ici : le test échoue chaque fois que la mesure chevauche une seconde,
+  et passe sinon. C'est un tirage au sort, pas une assertion.
+- `tests/e2e/test_benchmark.bats` : `benchmark references 300ms performance
+  target` cherche la chaîne `300` dans la sortie de `bin/benchmark`. Or `300`
+  n'y apparaît que par la branche `✓ Excellent (<300ms)`, prise seulement si
+  la machine démarre le shell en moins de 300 ms. Le test n'atteste pas que
+  la cible est documentée, il atteste que la machine est rapide.
+
+Ce que ça coûte aujourd'hui : **2 tests rouges** sur une suite e2e par
+ailleurs saine (16/18), et la même érosion de confiance que la dette 1 à plus
+petite échelle. Le correctif est cheap des deux côtés — mesurer en
+millisecondes, et chercher `300` dans le texte du script plutôt que dans sa
+sortie — mais il appartient à qui reprendra ces suites, pas à la charte.
+
+### Renvoi au dépôt design
+
+Les deux dérogations du § 6 de la spec doivent **remonter dans `docs/charte.md`
+du dépôt `nivuus/design`**, où elles n'ont pas encore d'existence — ce fichier
+reste à écrire. Ce ne sont pas des tâches de ce dépôt-ci : la charte fait foi,
+et une dérogation qui ne vit que chez celui qui la prend n'est pas une
+dérogation, c'est une divergence.
+
+- **`--text` n'émet aucune séquence.** La charte garantit ses ratios contre
+  `--surface` ; dans un terminal la surface ne nous appartient pas. Écrire
+  `#FFFFFF` sur le fond blanc de quelqu'un produirait exactement
+  l'illisibilité que le § 2.3 protège. `NIVUUS_C_TEXT` reste donc vide et
+  laisse l'avant-plan que le propriétaire du terminal a réglé contre son
+  propre fond.
+- **L'épaisseur remplace la taille.** Le § 2.2 remplace les gris par
+  « l'épaisseur, la taille, l'espacement et le mouvement ». Un terminal n'a
+  qu'un seul corps de texte : la taille n'y existe pas. Des leviers restants,
+  l'épaisseur est celui que la charte nomme et qui existe — d'où
+  `NIVUUS_C_STRONG`, et jamais de `dim`.
