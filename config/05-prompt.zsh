@@ -320,7 +320,7 @@ _nivuus_expand_prompt_template() {
 # Synchronous prompt building
 build_prompt() {
     local template="$NIVUUS_PROMPT_FORMAT"
-    [[ -z "$template" ]] && template='{ssh}{root}{status} {path}{venv}{cloud}{firebase}{git} '
+    [[ -z "$template" ]] && template='{ssh}{root}{status}{path}{venv}{cloud}{firebase}{git} '
     _nivuus_expand_prompt_template "$template"
 }
 

@@ -422,7 +422,7 @@ segment correspondant. Tokens disponibles :
 
 Défauts (reproduisent le format actuel) :
 ```bash
-export NIVUUS_PROMPT_FORMAT='{ssh}{root}{status} {path}{venv}{cloud}{firebase}{git} '
+export NIVUUS_PROMPT_FORMAT='{ssh}{root}{status}{path}{venv}{cloud}{firebase}{git} '
 export NIVUUS_RPROMPT_FORMAT='{jobs}'
 ```
 

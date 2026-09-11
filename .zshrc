@@ -86,7 +86,7 @@ export NIVUUS_THEME_FILE="${NIVUUS_THEME_FILE:-}"
 # NOTE: default templates use literal { } tokens, which zsh's ${VAR:-default}
 # brace-matching mishandles when nested in double quotes — set them via a
 # plain conditional assignment instead.
-[[ -z "$NIVUUS_PROMPT_FORMAT" ]] && NIVUUS_PROMPT_FORMAT='{ssh}{root}{status} {path}{venv}{cloud}{firebase}{git} '
+[[ -z "$NIVUUS_PROMPT_FORMAT" ]] && NIVUUS_PROMPT_FORMAT='{ssh}{root}{status}{path}{venv}{cloud}{firebase}{git} '
 [[ -z "$NIVUUS_RPROMPT_FORMAT" ]] && NIVUUS_RPROMPT_FORMAT='{jobs}'
 export NIVUUS_PROMPT_FORMAT NIVUUS_RPROMPT_FORMAT
 
