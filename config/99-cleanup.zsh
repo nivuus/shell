@@ -107,7 +107,7 @@ ulimit -c 0
 # =============================================================================
 
 # Mark shell as fully loaded
-export NIVUUS_SHELL_LOADED=1
+typeset -g NIVUUS_SHELL_LOADED=1
 
 # Export version
 export NIVUUS_SHELL_VERSION="1.0.0"

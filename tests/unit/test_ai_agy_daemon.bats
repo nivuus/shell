@@ -205,3 +205,26 @@ _ai_backend_gemini_call 'ping' 'ignored-api-model' 100 0.3 10
     [ "$status" -eq 0 ]
     [[ "$output" == oneshot:* ]]
 }
+
+# The agy CLI model slug is a moving target: Antigravity retires tiers, and a
+# retired slug makes every AI call fail after a 4-6s timeout instead of
+# erroring fast. Duplicating the default across files means one of the copies
+# silently keeps pointing at a dead model, so the default lives in exactly one
+# place and everything else reads GEMINI_CLI_MODEL.
+@test "the agy cli model default is defined in exactly one place" {
+    run bash -c "grep -rhoE 'gemini-[0-9.]+-flash-(low|medium|high)' '$NIVUUS_SHELL_DIR'/config/*.zsh | wc -l"
+    [ "$status" -eq 0 ]
+    [ "$(echo "$output" | tr -d '[:space:]')" -eq 1 ]
+}
+
+@test "daemon, prewarm and ai-daemon all use the same default model" {
+    run zsh -c "$(_preamble)
+export GEMINI_AUTH_MODE=cli
+print -r -- \"DEFAULT=\$GEMINI_CLI_MODEL\"
+ai-daemon status
+"
+    [ "$status" -eq 0 ]
+    default=$(echo "$output" | sed -n 's/^DEFAULT=//p')
+    [ -n "$default" ]
+    [[ "$output" == *"model $default"* ]]
+}

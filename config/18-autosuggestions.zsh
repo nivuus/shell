@@ -5,9 +5,11 @@
 # Inline command suggestions from history
 # =============================================================================
 
-# Only load once
+# Only load once. The guard is deliberately not exported: an exported guard is
+# inherited by every child shell, so `exec zsh` -- or any nested zsh -- would
+# see it already set and silently skip this whole module.
 [[ -n "${NIVUUS_AUTOSUGGESTIONS_LOADED}" ]] && return
-export NIVUUS_AUTOSUGGESTIONS_LOADED=1
+typeset -g NIVUUS_AUTOSUGGESTIONS_LOADED=1
 
 # Skip if explicitly disabled
 [[ "${ENABLE_AUTOSUGGESTIONS:-true}" != "true" ]] && return

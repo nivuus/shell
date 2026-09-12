@@ -17,6 +17,13 @@
 # Set to false to always use the one-shot `agy -p` path.
 typeset -g AGY_DAEMON_ENABLED="${AGY_DAEMON_ENABLED:-true}"
 
+# The agy model slug, and the single place its default is written down.
+# Antigravity retires tiers as it ships new ones: a slug it no longer knows
+# does not fail fast, it burns the full 4-6s startup before answering
+# "invalid model selection", and every AI feature silently returns nothing.
+# Keeping one definition means no copy can be left pointing at a dead model.
+typeset -g GEMINI_CLI_MODEL="${GEMINI_CLI_MODEL:-gemini-3.6-flash-low}"
+
 # Each turn re-sends the whole conversation, so input tokens grow ~6k per turn.
 # Recycle the process regularly to keep prompts small (each of our prompts is
 # self-contained -- the accumulated history is pure overhead).
@@ -206,7 +213,7 @@ _agy_daemon_prewarm() {
     [[ "$AI_BACKEND" == "gemini" || -z "$AI_BACKEND" ]] || return 0
     [[ "$GEMINI_AUTH_MODE" == "cli" ]] || return 0
     command -v agy &>/dev/null || return 0
-    local model="${GEMINI_CLI_MODEL:-gemini-3.5-flash-low}"
+    local model="$GEMINI_CLI_MODEL"
     _agy_daemon_alive "$model" && return 0
     { _agy_daemon_start "$model" &>/dev/null } &!
     return 0
@@ -218,7 +225,7 @@ _agy_daemon_prewarm() {
 
 ai-daemon() {
     local action="${1:-status}"
-    local model="${GEMINI_CLI_MODEL:-gemini-3.5-flash-low}"
+    local model="$GEMINI_CLI_MODEL"
     local dir=$(_agy_daemon_dir "$model")
 
     case "$action" in
