@@ -3,9 +3,11 @@
 # AI Command Suggestions - Compact Interactive Menu
 # =============================================================================
 
-# Only load once
+# Only load once. The guard is deliberately not exported: an exported guard is
+# inherited by every child shell, so `exec zsh` -- or any nested zsh -- would
+# see it already set and silently skip this whole module.
 [[ -n "${NIVUUS_AI_SUGGESTIONS_LOADED}" ]] && return
-export NIVUUS_AI_SUGGESTIONS_LOADED=1
+typeset -g NIVUUS_AI_SUGGESTIONS_LOADED=1
 
 # Skip if explicitly disabled
 [[ "${ENABLE_AI_SUGGESTIONS:-true}" != "true" ]] && return
@@ -32,14 +34,12 @@ typeset -ga _AI_SPINNER_CHARS=(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏)
 typeset -g _AI_ANIM_FD=""
 typeset -g _AI_ANIM_PID=""
 
-# Typewriter animation state via zle -F
-typeset -g _AI_TYPEWRITER_FD=""
-typeset -g _AI_TYPEWRITER_PID=""
-typeset -g _AI_TYPEWRITER_TEXT=""
-typeset -g _AI_TYPEWRITER_POS=0
-
 # Current generation process PID
 typeset -g _AI_GENERATE_PID=""
+
+# Debounce timer state (see the debounce section at the bottom of this file)
+typeset -g _AI_DEBOUNCE_FD=""
+typeset -g _AI_DEBOUNCE_PID=""
 
 # =============================================================================
 # Context Collection
@@ -217,6 +217,9 @@ _ai_spinner_tick() {
     fi
 }
 
+# `zle -F -w` requires its handler to be a registered widget.
+zle -N _ai_spinner_tick
+
 _ai_start_spinner() {
     _ai_cancel_animation
 
@@ -231,7 +234,12 @@ _ai_start_spinner() {
         done
     )
     read _AI_ANIM_PID <&$_AI_ANIM_FD
-    zle -F "$_AI_ANIM_FD" _ai_spinner_tick
+    # -w, so the tick runs in widget context. A plain fd handler gets a
+    # detached view of the ZLE parameters: $BUFFER and $region_highlight read
+    # back empty, the POSTDISPLAY it writes is never rendered (the spinner
+    # looks frozen on its first frame) and the region_highlight it assigns
+    # wipes the syntax highlighting off the command line.
+    zle -F -w "$_AI_ANIM_FD" _ai_spinner_tick
 }
 
 _ai_cancel_animation() {
@@ -244,17 +252,6 @@ _ai_cancel_animation() {
     if [[ -n "$_AI_ANIM_PID" ]]; then
         kill -TERM "$_AI_ANIM_PID" 2>/dev/null
         _AI_ANIM_PID=""
-    fi
-
-    # Close typewriter FD handler and kill background process
-    if [[ -n "$_AI_TYPEWRITER_FD" ]]; then
-        zle -F "$_AI_TYPEWRITER_FD" 2>/dev/null
-        builtin exec {_AI_TYPEWRITER_FD}<&- 2>/dev/null
-        _AI_TYPEWRITER_FD=""
-    fi
-    if [[ -n "$_AI_TYPEWRITER_PID" ]]; then
-        kill -TERM "$_AI_TYPEWRITER_PID" 2>/dev/null
-        _AI_TYPEWRITER_PID=""
     fi
 }
 
@@ -276,20 +273,31 @@ _ai_restore_autosuggest() {
     fi
 }
 
+# Tag on our own region_highlight entries, so they can be removed again
+# without touching the ones zsh-syntax-highlighting (or any other plugin) owns.
+typeset -g _AI_HIGHLIGHT_MEMO="nivuus-ai"
+
+_ai_drop_highlight() {
+    region_highlight=("${(@)region_highlight:#*memo=$_AI_HIGHLIGHT_MEMO*}")
+}
+
 # Helper: set POSTDISPLAY with a color using region_highlight
-# POSTDISPLAY is plain text; color is applied via region_highlight P-prefix
 _ai_set_postdisplay() {
     local text="$1"
     local style="$2"  # e.g., "fg=143" or "fg=110"
 
     POSTDISPLAY="$text"
+    _ai_drop_highlight
 
-    # Remove any previous AI POSTDISPLAY highlight entries (P-prefixed)
-    region_highlight=("${(@)region_highlight:#P*}")
-
-    # Add highlight for the full POSTDISPLAY range
     if [[ -n "$text" && -n "$style" ]]; then
-        region_highlight+=("P0 ${#text} ${style}")
+        # A `P` offset is relative to the whole displayed string --
+        # PREDISPLAY, then BUFFER, then POSTDISPLAY -- and not to POSTDISPLAY
+        # alone. `P0 ${#text}` therefore painted the first ${#text} characters
+        # of the command the user typed instead of the ghost text after it:
+        # with "git sw" completed to "git switch main", "git switc" came out
+        # green and the actual suggestion stayed uncoloured.
+        local -i start=$(( ${#PREDISPLAY} + ${#BUFFER} ))
+        region_highlight+=("P${start} $(( start + ${#text} )) ${style} memo=$_AI_HIGHLIGHT_MEMO")
     fi
 
     zle && zle -R
@@ -298,7 +306,7 @@ _ai_set_postdisplay() {
 # Helper: clear POSTDISPLAY and its highlights
 _ai_clear_postdisplay() {
     POSTDISPLAY=""
-    region_highlight=("${(@)region_highlight:#P*}")
+    _ai_drop_highlight
     zle && zle -R
 }
 
@@ -349,50 +357,6 @@ _ai_show_inline() {
     _AI_GENERATE_PID=$!
 }
 
-# Typewriter animation callback
-_ai_typewriter_tick() {
-    local dummy
-    if [[ -z "$2" || "$2" == "hup" ]]; then
-        read -u $1 dummy 2>/dev/null
-        (( _AI_TYPEWRITER_POS++ ))
-        local visible="${_AI_TYPEWRITER_TEXT[1,$_AI_TYPEWRITER_POS]}"
-        _ai_set_postdisplay "${visible}" "fg=143"
-
-        if (( _AI_TYPEWRITER_POS >= ${#_AI_TYPEWRITER_TEXT} || _AI_TYPEWRITER_POS >= 8 )); then
-            # Show full remaining text instantly and close typewriter
-            _ai_set_postdisplay "${_AI_TYPEWRITER_TEXT}" "fg=143"
-            if [[ -n "$_AI_TYPEWRITER_FD" ]]; then
-                zle -F "$_AI_TYPEWRITER_FD" 2>/dev/null
-                builtin exec {_AI_TYPEWRITER_FD}<&- 2>/dev/null
-                _AI_TYPEWRITER_FD=""
-            fi
-            if [[ -n "$_AI_TYPEWRITER_PID" ]]; then
-                kill -TERM "$_AI_TYPEWRITER_PID" 2>/dev/null
-                _AI_TYPEWRITER_PID=""
-            fi
-        fi
-    fi
-}
-
-_ai_start_typewriter() {
-    local text="$1"
-    _ai_cancel_animation
-    _AI_TYPEWRITER_TEXT="$text"
-    _AI_TYPEWRITER_POS=0
-
-    builtin exec {_AI_TYPEWRITER_FD}< <(
-        echo $sysparams[pid]
-        local count=${#text}
-        (( count > 8 )) && count=8
-        for (( i=1; i<=count; i++ )); do
-            sleep 0.025
-            echo "1"
-        done
-    )
-    read _AI_TYPEWRITER_PID <&$_AI_TYPEWRITER_FD
-    zle -F "$_AI_TYPEWRITER_FD" _ai_typewriter_tick
-}
-
 # Called by TRAPUSR1 when generation completes
 _ai_handle_completion() {
     # Cancel spinner animation first
@@ -423,12 +387,14 @@ _ai_handle_completion() {
             suffix=" → $suggestion"
         fi
 
-        # Start typewriter animation for smooth appearance
-        if (( ${#suffix} > 0 )); then
-            _ai_start_typewriter "$suffix"
-        else
-            _ai_set_postdisplay "${suffix}" "fg=143"
-        fi
+        # Draw the suggestion right here, synchronously. It used to be typed
+        # out character by character from a `zle -F` handler, but that handler
+        # is not serviced when SIGUSR1 lands in the middle of ZLE's own event
+        # processing -- which is exactly what a cache hit does, since it
+        # answers in a couple of milliseconds. The suggestion then never
+        # appeared at all. Eight characters of animation are not worth a
+        # feature that silently renders nothing.
+        _ai_set_postdisplay "$suffix" "fg=143"
     else
         # No suggestion — restore autosuggestions
         _ai_clear_postdisplay
@@ -494,39 +460,50 @@ _ai_cancel_generation() {
 
 
 # =============================================================================
-# Debounce System (using zsh/sched)
+# Debounce System (one-shot timer on a zle -F file descriptor)
 # =============================================================================
-
-# Load scheduling module
-zmodload zsh/sched 2>/dev/null
+# The timer used to be a `sched` event calling `zle ai-show-inline`, which
+# looks equivalent but silently kills the spinner: a `zle -F` handler
+# registered while the widget runs inside a sched callback is never serviced
+# again for that line, so the spinner drew a single frame and then froze for
+# the whole generation. A handler registered from a keypress widget (or from
+# another `zle -F` handler) does fire, so the delay is timed by a `sleep` in a
+# coprocess whose output wakes a handler instead.
+#
+# `-w` on the registration matters: it runs the handler in full widget
+# context. A plain fd handler sees an empty $BUFFER, and _ai_show_inline would
+# read an empty prefix and bail out.
 
 _ai_cancel_debounce() {
-    # Get list of scheduled jobs and their IDs
-    local -a job_ids
-    local line job_num
-
-    # Parse sched output to find our trigger jobs
-    while IFS= read -r line; do
-        if [[ "$line" == *"_ai_debounce_trigger"* ]]; then
-            # Extract job number (first field, strip leading spaces)
-            job_num=$(echo "$line" | awk '{print $1}')
-            if [[ -n "$job_num" ]]; then
-                job_ids+=($job_num)
-            fi
-        fi
-    done < <(sched 2>/dev/null)
-
-    # Cancel all found jobs
-    for job_num in $job_ids; do
-        sched -$job_num 2>/dev/null
-    done
+    if [[ -n "$_AI_DEBOUNCE_FD" ]]; then
+        zle -F "$_AI_DEBOUNCE_FD" 2>/dev/null
+        builtin exec {_AI_DEBOUNCE_FD}<&- 2>/dev/null
+        _AI_DEBOUNCE_FD=""
+    fi
+    if [[ -n "$_AI_DEBOUNCE_PID" ]]; then
+        kill -TERM "$_AI_DEBOUNCE_PID" 2>/dev/null
+        _AI_DEBOUNCE_PID=""
+    fi
 }
 
+# Fires once, when the sleep in the timer coprocess ends (or when it is killed
+# and the fd hangs up -- in which case the debounce was cancelled and there is
+# nothing to do).
 _ai_debounce_trigger() {
-    # This runs after the debounce delay (scheduled via sched)
-    # Call inline widget
-    zle && zle ai-show-inline
+    local fd="$1" event="$2"
+
+    zle -F "$fd" 2>/dev/null
+    builtin exec {fd}<&- 2>/dev/null
+    [[ "$fd" == "$_AI_DEBOUNCE_FD" ]] && _AI_DEBOUNCE_FD=""
+    _AI_DEBOUNCE_PID=""
+
+    # A hangup means the timer was killed on cancel: nothing to do.
+    [[ -z "$event" ]] || return 0
+    _ai_show_inline
 }
+
+# `zle -F -w` requires its handler to be a registered widget.
+zle -N _ai_debounce_trigger
 
 _ai_start_debounce() {
     # Skip if auto-debounce is disabled
@@ -538,8 +515,16 @@ _ai_start_debounce() {
     # Cancel any existing debounce timer
     _ai_cancel_debounce
 
-    # Schedule the trigger function
-    sched "+${AI_DEBOUNCE_DELAY}" _ai_debounce_trigger
+    # The coprocess announces its pid on the first line so the timer can be
+    # killed on cancel; that line is consumed here, before the handler is
+    # registered, so the handler only ever runs for the end-of-delay line.
+    builtin exec {_AI_DEBOUNCE_FD}< <(
+        echo $sysparams[pid]
+        sleep "$AI_DEBOUNCE_DELAY"
+        echo "go"
+    )
+    read _AI_DEBOUNCE_PID <&$_AI_DEBOUNCE_FD
+    zle -F -w "$_AI_DEBOUNCE_FD" _ai_debounce_trigger
 }
 
 # Hook into self-insert to trigger debounce on typing
@@ -620,6 +605,16 @@ _ai_cancel_and_search_forward() {
     zle .history-incremental-search-forward
 }
 
+# zsh-autosuggestions wraps every widget it does not recognise as one that may
+# modify the buffer: it snapshots POSTDISPLAY, runs the widget, and -- when the
+# buffer came back unchanged, which is exactly our case -- puts its own
+# snapshot back, wiping the spinner the widget just drew. Widget names starting
+# with "_" are already on its ignore list; the public ai-* ones have to be
+# declared. It binds its wrappers on the first precmd, so config load time is
+# early enough, and the array exists by then (config/18-autosuggestions.zsh).
+typeset -ga ZSH_AUTOSUGGEST_IGNORE_WIDGETS
+ZSH_AUTOSUGGEST_IGNORE_WIDGETS+=('ai-*')
+
 # Register widgets
 zle -N ai-show-inline _ai_show_inline
 zle -N ai-accept-inline _ai_accept_inline
@@ -698,7 +693,6 @@ Features:
   • Async generation - never blocks your typing
   • ULTRA-RICH context for maximum relevance
   • Automatic cleanup on typing/accepting/canceling
-  • Typewriter animation on suggestion appearance (when supported)
 
 Context provided to AI (ultra-enriched):
   • ALL files in directory (up to 50)

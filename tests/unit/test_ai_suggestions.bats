@@ -57,3 +57,37 @@ setup() {
     run zsh -c "source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh' && source '$NIVUUS_SHELL_DIR/config/19-ai-suggestions.zsh' && bindkey | grep -E '(ai-show-inline|ai-accept-inline|ai-clear-inline)'"
     [ "$status" -eq 0 ]
 }
+
+@test "ghost text highlight covers POSTDISPLAY, not the start of the line" {
+    # A `P` offset counts from the start of PREDISPLAY+BUFFER+POSTDISPLAY, so
+    # the range has to start past the buffer. `P0 <len>` painted the command
+    # the user typed instead of the suggestion after it.
+    run zsh -c "
+        source '$NIVUUS_SHELL_DIR/themes/nord.zsh'
+        source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh'
+        source '$NIVUUS_SHELL_DIR/config/19-ai-suggestions.zsh'
+        PREDISPLAY=''
+        BUFFER='git sw'
+        region_highlight=()
+        _ai_set_postdisplay 'itch main' 'fg=143'
+        print -r -- \"\${region_highlight[1]}\"
+    "
+    [ "$status" -eq 0 ]
+    [[ "$output" == "P6 15 fg=143 memo=nivuus-ai" ]]
+}
+
+@test "clearing the ghost text leaves other plugins' highlights alone" {
+    run zsh -c "
+        source '$NIVUUS_SHELL_DIR/themes/nord.zsh'
+        source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh'
+        source '$NIVUUS_SHELL_DIR/config/19-ai-suggestions.zsh'
+        PREDISPLAY=''
+        BUFFER='git sw'
+        region_highlight=('0 3 fg=110 memo=zsh-syntax-highlighting')
+        _ai_set_postdisplay 'itch main' 'fg=143'
+        _ai_clear_postdisplay
+        print -r -- \"\${#region_highlight[@]}:\${region_highlight[1]}\"
+    "
+    [ "$status" -eq 0 ]
+    [[ "$output" == "1:0 3 fg=110 memo=zsh-syntax-highlighting" ]]
+}
