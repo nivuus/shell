@@ -39,7 +39,7 @@ setup() {
 }
 
 @test "Loading animation uses Nord cyan color (110)" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep '110' config/19-ai-suggestions.zsh"
+    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep '110' config/19-ai-suggestions-render.zsh"
     [ "$status" -eq 0 ]
 }
 
