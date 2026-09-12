@@ -6,9 +6,11 @@
 # Optionally uses Gemini AI for creative titles (exponential backoff)
 # =============================================================================
 
-# Only load once
+# Only load once. The guard is deliberately not exported: an exported guard is
+# inherited by every child shell, so `exec zsh` -- or any nested zsh -- would
+# see it already set and silently skip this whole module.
 [[ -n "${NIVUUS_TERMINAL_TITLE_LOADED}" ]] && return
-export NIVUUS_TERMINAL_TITLE_LOADED=1
+typeset -g NIVUUS_TERMINAL_TITLE_LOADED=1
 
 # =============================================================================
 # Configuration
@@ -47,6 +49,11 @@ if [[ "${ENABLE_AI_TERMINAL_TITLES:-false}" == "true" ]]; then
     # Per-session command buffer (NOT shared history) so the AI title
     # reflects only what happens in this terminal session
     typeset -ga _AI_TITLE_SESSION_HISTORY=()
+    # Handoff for the background generator: it cannot assign to a variable in
+    # this shell, so it drops the title in a per-session file that the next
+    # precmd picks up. See _ai_title_generate_async.
+    typeset -g _AI_TITLE_ASYNC_FILE="$AI_TITLE_CACHE_DIR/.pending-$$"
+    typeset -g _AI_TITLE_ASYNC_PID=""
     typeset -gA _AI_TITLE_TRIGGER_SEQUENCE=(
         1  1    # 1st command
         2  2    # 2nd
@@ -193,8 +200,12 @@ if [[ "${ENABLE_AI_TERMINAL_TITLES:-false}" == "true" ]]; then
         # Build prompt for session context title
         local prompt="Output ONLY a terminal title (emoji + text, max 30 chars). No preamble! Based on the commands run in this terminal session: $recent_history. Create a fun, creative title that captures what I'm working on right now. Be playful!"
 
-        # Call API with timeout
-        local api_result=$(_ai_api_call "$prompt" "$AI_TITLE_MODEL" 25 1.2 3 2>/dev/null)
+        # Call API with timeout. 3s was sized for the REST backend; the agy CLI
+        # needs 5-6s warm and more when it has to start a process, so a 3s
+        # budget meant the title was *always* cut off and always empty. Now
+        # that generation is off the preexec path, waiting costs the user
+        # nothing, so the budget is the one the backend actually needs.
+        local api_result=$(_ai_api_call "$prompt" "$AI_TITLE_MODEL" 25 1.2 20 2>/dev/null)
 
         # Extract title - take last non-empty line (skips any preamble)
         local result=$(print -r -- "$api_result" | \
@@ -213,6 +224,67 @@ if [[ "${ENABLE_AI_TERMINAL_TITLES:-false}" == "true" ]]; then
 
         return 1
     }
+
+    # =========================================================================
+    # Background generation
+    # =========================================================================
+    # _ai_get_terminal_title costs a full backend round trip -- 2s on a good
+    # day, 4-6s when the backend is slow or answering with an error. It is
+    # called from preexec, i.e. before the user's command runs, so waiting on
+    # it inline freezes the terminal for exactly that long. Nothing about a
+    # decorative title justifies that, so the call is fired into the
+    # background and the result is collected by a later precmd.
+
+    _ai_title_generate_async() {
+        local cmd="$1"
+        local dir_name="$2"
+
+        # One generation at a time: back-to-back commands would otherwise
+        # stack up backend calls that all race to write the same file.
+        if [[ -n "$_AI_TITLE_ASYNC_PID" ]] && kill -0 "$_AI_TITLE_ASYNC_PID" 2>/dev/null; then
+            return 0
+        fi
+
+        mkdir -p "$AI_TITLE_CACHE_DIR" 2>/dev/null || return 0
+
+        local out="$_AI_TITLE_ASYNC_FILE"
+        # Write to a temp file and rename, so precmd never reads a half-written
+        # title, and leave nothing behind when the backend fails.
+        {
+            if _ai_get_terminal_title "$cmd" "$dir_name" >| "$out.tmp" 2>/dev/null \
+               && [[ -s "$out.tmp" ]]; then
+                mv -f "$out.tmp" "$out" 2>/dev/null
+            else
+                rm -f "$out.tmp" 2>/dev/null
+            fi
+        } &!
+        _AI_TITLE_ASYNC_PID=$!
+        return 0
+    }
+
+    # Pick up whatever the background generator finished, if anything.
+    _ai_title_collect_async() {
+        [[ -f "$_AI_TITLE_ASYNC_FILE" ]] || return 0
+
+        local title
+        title=$(<"$_AI_TITLE_ASYNC_FILE") 2>/dev/null
+        rm -f "$_AI_TITLE_ASYNC_FILE" 2>/dev/null
+        _AI_TITLE_ASYNC_PID=""
+
+        # A title is a single line by construction; fold anything else so a
+        # stray newline cannot break the escape sequence.
+        title="${title//$'\n'/ }"
+        [[ -n "$title" ]] && _AI_TITLE_CURRENT="$title"
+        return 0
+    }
+
+    # Don't leave a pending file behind for a PID the system will reuse.
+    _ai_title_async_cleanup() {
+        rm -f "$_AI_TITLE_ASYNC_FILE" "$_AI_TITLE_ASYNC_FILE.tmp" 2>/dev/null
+        return 0
+    }
+    autoload -U add-zsh-hook
+    add-zsh-hook zshexit _ai_title_async_cleanup
 
     # User commands
     ai-title-clear-cache() {
@@ -255,6 +327,9 @@ fi
 
 _terminal_title_precmd() {
     if [[ "${ENABLE_AI_TERMINAL_TITLES:-false}" == "true" ]]; then
+        # Adopt a title the background generator finished since last prompt.
+        _ai_title_collect_async
+
         # Show stored AI title (without command)
         if [[ -n "$_AI_TITLE_CURRENT" ]]; then
             _set_terminal_title "$_AI_TITLE_CURRENT"
@@ -286,12 +361,11 @@ _terminal_title_preexec() {
             _AI_TITLE_SESSION_HISTORY=("${_AI_TITLE_SESSION_HISTORY[@]: -AI_TITLE_SESSION_MAX}")
         fi
 
-        # Generate new AI title if backoff says so
+        # Generate a new AI title if backoff says so -- in the background.
+        # This hook runs before the user's command, so it must never wait on
+        # the backend; the result is adopted by a later precmd.
         if _ai_should_generate_title; then
-            local new_title=$(_ai_get_terminal_title "$command" "$dir_path")
-            if [[ -n "$new_title" ]]; then
-                _AI_TITLE_CURRENT="$new_title"
-            fi
+            _ai_title_generate_async "$command" "$dir_path"
         fi
 
         # Show AI title + command, or emoji if no AI title yet

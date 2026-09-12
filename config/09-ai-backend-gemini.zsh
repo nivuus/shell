@@ -37,9 +37,11 @@ _ai_backend_gemini_call() {
     local timeout_secs="${5:-15}"
 
     if [[ "$GEMINI_AUTH_MODE" == "cli" ]]; then
-        # Antigravity CLI uses its own model slugs (e.g. "gemini-3.5-flash-medium"),
+        # Antigravity CLI uses its own model slugs (name plus an effort tier),
         # not the Generative Language API's model IDs (e.g. "gemini-3.5-flash-lite") —
-        # the two are not interchangeable, so cli mode gets its own override var.
+        # the two are not interchangeable, so cli mode gets its own override
+        # var, GEMINI_CLI_MODEL, defaulted in config/09-ai-agy-daemon.zsh.
+        # `agy --help` lists the slugs the installed version actually accepts.
         #
         # "-medium"/"-high" tiers run agy as a full agentic session: it tries to
         # read files and shell out to explore context instead of just answering,
@@ -47,7 +49,7 @@ _ai_backend_gemini_call() {
         # error the moment it attempts a tool call. The "-low" tier answers
         # directly in a single turn, so it's the only tier fit for a synchronous
         # shell helper (inline suggestions, chat, titles, error explain).
-        _ai_gemini_cli_call "$prompt" "${GEMINI_CLI_MODEL:-gemini-3.5-flash-low}" "$timeout_secs"
+        _ai_gemini_cli_call "$prompt" "$GEMINI_CLI_MODEL" "$timeout_secs"
         return $?
     fi
 
