@@ -2,6 +2,8 @@
 
 # Unit tests for general aliases module (config/15-aliases.zsh)
 
+load "${BATS_TEST_DIRNAME}/../helpers/pty"
+
 setup() {
     source "$NIVUUS_SHELL_DIR/config/15-aliases.zsh"
 }
@@ -33,26 +35,26 @@ setup() {
 # Safety Aliases
 # =============================================================================
 
-@test "rm alias includes -i flag in an interactive shell" {
-    run zsh -ic "source '$NIVUUS_SHELL_DIR/config/15-aliases.zsh' && alias rm"
+@test "rm alias includes -i flag when a terminal is attached" {
+    pty_run "source '$NIVUUS_SHELL_DIR/config/00-core.zsh'; source '$NIVUUS_SHELL_DIR/config/15-aliases.zsh' && alias rm"
     [ "$status" -eq 0 ]
     [[ "$output" == *"-i"* ]]
 }
 
-@test "cp alias includes -i flag in an interactive shell" {
-    run zsh -ic "source '$NIVUUS_SHELL_DIR/config/15-aliases.zsh' && alias cp"
+@test "cp alias includes -i flag when a terminal is attached" {
+    pty_run "source '$NIVUUS_SHELL_DIR/config/00-core.zsh'; source '$NIVUUS_SHELL_DIR/config/15-aliases.zsh' && alias cp"
     [ "$status" -eq 0 ]
     [[ "$output" == *"-i"* ]]
 }
 
-@test "mv alias includes -i flag in an interactive shell" {
-    run zsh -ic "source '$NIVUUS_SHELL_DIR/config/15-aliases.zsh' && alias mv"
+@test "mv alias includes -i flag when a terminal is attached" {
+    pty_run "source '$NIVUUS_SHELL_DIR/config/00-core.zsh'; source '$NIVUUS_SHELL_DIR/config/15-aliases.zsh' && alias mv"
     [ "$status" -eq 0 ]
     [[ "$output" == *"-i"* ]]
 }
 
-@test "ln alias includes -i flag in an interactive shell" {
-    run zsh -ic "source '$NIVUUS_SHELL_DIR/config/15-aliases.zsh' && alias ln"
+@test "ln alias includes -i flag when a terminal is attached" {
+    pty_run "source '$NIVUUS_SHELL_DIR/config/00-core.zsh'; source '$NIVUUS_SHELL_DIR/config/15-aliases.zsh' && alias ln"
     [ "$status" -eq 0 ]
     [[ "$output" == *"-i"* ]]
 }
@@ -156,10 +158,12 @@ setup() {
 # Network Aliases
 # =============================================================================
 
-@test "listening alias is defined (ports)" {
-    run zsh -c "source '$NIVUUS_SHELL_DIR/config/15-aliases.zsh' && alias listening"
+@test "listening is defined as a function (ports)" {
+    # A function rather than an alias, so that `listening | grep 443` pipes the
+    # whole fallback chain and not only its last branch.
+    run zsh -c "source '$NIVUUS_SHELL_DIR/config/15-aliases.zsh' && typeset -f listening"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"lsof"* ]] || [[ "$output" == *"ss"* ]] || [[ "$output" == *"netstat"* ]]
+    [[ "$output" == *"lsof"* ]] && [[ "$output" == *"ss"* ]] && [[ "$output" == *"netstat"* ]]
 }
 
 # =============================================================================

@@ -22,15 +22,26 @@ if command -v eza &>/dev/null; then
     # Format: file_type=color_code
     export EZA_COLORS="reset:di=1;36:ln=1;35:so=1;32:pi=1;33:ex=1;31:bd=1;34:cd=1;34:su=37;41:sg=30;43:tw=30;42:ow=30;43"
 
-    # Basic aliases (icons disabled for compatibility)
-    alias ls='eza --color=always --group-directories-first'
-    alias ll='eza -l --color=always --group-directories-first --git'
-    alias la='eza -la --color=always --group-directories-first --git'
-    alias tree='eza --tree --color=always'
+    # These alias standard command names onto eza, whose options are NOT those
+    # of coreutils (`ls -t` means `--time <FIELD>` here, and errors out without
+    # an argument). That trade is only worth making for a human at a terminal;
+    # a script or an agent shell gets the real binaries.
+    #
+    # --color=auto, never always: the decision belongs to each invocation, so
+    # `ls | grep` stops emitting escape sequences into a pipe that cannot
+    # render them. Note that zsh bakes aliases into function bodies at parse
+    # time, so `always` here also leaked into the chpwd hook below.
+    if nivuus_has_terminal; then
+        # Basic aliases (icons disabled for compatibility)
+        alias ls='eza --color=auto --group-directories-first'
+        alias ll='eza -l --color=auto --group-directories-first --git'
+        alias la='eza -la --color=auto --group-directories-first --git'
+        alias tree='eza --tree --color=auto'
 
-    # Extended aliases
-    alias l='eza -lbF --color=always --git'
-    alias lt='eza --tree --level=2 --color=always'
+        # Extended aliases
+        alias l='eza -lbF --color=auto --git'
+        alias lt='eza --tree --level=2 --color=auto'
+    fi
 fi
 
 # =============================================================================
@@ -47,12 +58,17 @@ if command -v bat &>/dev/null; then
     # Customize with: export BAT_STYLE="numbers,grid"
     local bat_style="${BAT_STYLE:-plain}"
 
-    alias cat="bat --theme=${_bat_theme} --style=${bat_style}"
-    alias less="bat --theme=${_bat_theme} --style=${bat_style} --paging=always"
+    # Terminal only, same reason as eza: bat rejects POSIX cat options
+    # (`cat -v`, `-e`, `-b`, `-T`), and a pager set to --paging=always is a
+    # display choice that makes no sense where nothing is displayed.
+    if nivuus_has_terminal; then
+        alias cat="bat --theme=${_bat_theme} --style=${bat_style}"
+        alias less="bat --theme=${_bat_theme} --style=${bat_style} --paging=always"
 
-    # Set bat as default pager
-    export PAGER="bat --theme=${_bat_theme} --style=${bat_style} --paging=always"
-    export MANPAGER="sh -c 'col -bx | bat --theme=${_bat_theme} -l man -p'"
+        # Set bat as default pager
+        export PAGER="bat --theme=${_bat_theme} --style=${bat_style} --paging=always"
+        export MANPAGER="sh -c 'col -bx | bat --theme=${_bat_theme} -l man -p'"
+    fi
 
 elif command -v batcat &>/dev/null; then
     # Debian/Ubuntu uses batcat (conflict with bacula)
@@ -61,11 +77,14 @@ elif command -v batcat &>/dev/null; then
     local bat_style="${BAT_STYLE:-plain}"
 
     alias bat='batcat'
-    alias cat="batcat --theme=${_bat_theme} --style=${bat_style}"
-    alias less="batcat --theme=${_bat_theme} --style=${bat_style} --paging=always"
 
-    export PAGER="batcat --theme=${_bat_theme} --style=${bat_style} --paging=always"
-    export MANPAGER="sh -c 'col -bx | batcat --theme=${_bat_theme} -l man -p'"
+    if nivuus_has_terminal; then
+        alias cat="batcat --theme=${_bat_theme} --style=${bat_style}"
+        alias less="batcat --theme=${_bat_theme} --style=${bat_style} --paging=always"
+
+        export PAGER="batcat --theme=${_bat_theme} --style=${bat_style} --paging=always"
+        export MANPAGER="sh -c 'col -bx | batcat --theme=${_bat_theme} -l man -p'"
+    fi
 fi
 
 # =============================================================================

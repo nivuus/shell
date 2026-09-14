@@ -2,6 +2,8 @@
 
 bats_require_minimum_version 1.5.0
 
+load "${BATS_TEST_DIRNAME}/../helpers/pty"
+
 # Unit tests for the AI command-not-found package suggestion system
 # (config/24-ai-command-not-found.zsh)
 
@@ -20,30 +22,30 @@ teardown() {
 # --- Module Loading & Definitions ---
 
 @test "24-ai-command-not-found.zsh loads without errors" {
-    run zsh -c "source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh'; source '$NIVUUS_SHELL_DIR/config/24-ai-command-not-found.zsh' && echo loaded"
+    run zsh -c "source '$NIVUUS_SHELL_DIR/config/00-core.zsh'; source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh'; source '$NIVUUS_SHELL_DIR/config/24-ai-command-not-found.zsh' && echo loaded"
     [ "$status" -eq 0 ]
     [[ "$output" == *"loaded"* ]]
 }
 
 @test "command_not_found_handler is defined after loading" {
-    run zsh -c "source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh'; source '$NIVUUS_SHELL_DIR/config/24-ai-command-not-found.zsh'; typeset -f command_not_found_handler"
+    pty_run "source '$NIVUUS_SHELL_DIR/config/00-core.zsh'; source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh'; source '$NIVUUS_SHELL_DIR/config/24-ai-command-not-found.zsh'; typeset -f command_not_found_handler"
     [ "$status" -eq 0 ]
 }
 
 @test "User commands (ai-cnf-lookup, ai-cnf-clear-cache, ai-cnf-stats, ai-cnf-help) are defined" {
-    run zsh -c "source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh'; source '$NIVUUS_SHELL_DIR/config/24-ai-command-not-found.zsh'; typeset -f ai-cnf-lookup ai-cnf-clear-cache ai-cnf-stats ai-cnf-help"
+    run zsh -c "source '$NIVUUS_SHELL_DIR/config/00-core.zsh'; source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh'; source '$NIVUUS_SHELL_DIR/config/24-ai-command-not-found.zsh'; typeset -f ai-cnf-lookup ai-cnf-clear-cache ai-cnf-stats ai-cnf-help"
     [ "$status" -eq 0 ]
 }
 
 @test "Module respects ENABLE_AI_COMMAND_NOT_FOUND=false at load time" {
-    run zsh -c "export ENABLE_AI_COMMAND_NOT_FOUND=false; source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh'; source '$NIVUUS_SHELL_DIR/config/24-ai-command-not-found.zsh'; typeset -f command_not_found_handler"
+    run zsh -c "export ENABLE_AI_COMMAND_NOT_FOUND=false; source '$NIVUUS_SHELL_DIR/config/00-core.zsh'; source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh'; source '$NIVUUS_SHELL_DIR/config/24-ai-command-not-found.zsh'; typeset -f command_not_found_handler"
     [ "$status" -eq 1 ]
 }
 
 # --- System Context & Cache ---
 
 @test "_ai_cnf_get_sys_context detects OS and architecture" {
-    run zsh -c "source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh'; source '$NIVUUS_SHELL_DIR/config/24-ai-command-not-found.zsh'; _ai_cnf_get_sys_context"
+    run zsh -c "source '$NIVUUS_SHELL_DIR/config/00-core.zsh'; source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh'; source '$NIVUUS_SHELL_DIR/config/24-ai-command-not-found.zsh'; _ai_cnf_get_sys_context"
     [ "$status" -eq 0 ]
     [[ "$output" == *"OS:"* ]]
     [[ "$output" == *"Available package managers:"* ]]
@@ -52,7 +54,7 @@ teardown() {
 @test "_ai_cnf_cache_set and _ai_cnf_cache_get work with TTL" {
     run zsh -c "
 export AI_COMMAND_NOT_FOUND_CACHE_DIR='$AI_COMMAND_NOT_FOUND_CACHE_DIR'
-source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh'
+source '$NIVUUS_SHELL_DIR/config/00-core.zsh'; source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh'
 source '$NIVUUS_SHELL_DIR/config/24-ai-command-not-found.zsh'
 key=\$(_ai_cnf_cache_key 'spd-say' 'ctx')
 _ai_cnf_cache_set \"\$key\" '{\"found\":true,\"package\":\"speech-dispatcher\"}'
@@ -65,7 +67,7 @@ _ai_cnf_cache_get \"\$key\"
 @test "ai-cnf-clear-cache clears the cache directory" {
     run zsh -c "
 export AI_COMMAND_NOT_FOUND_CACHE_DIR='$AI_COMMAND_NOT_FOUND_CACHE_DIR'
-source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh'
+source '$NIVUUS_SHELL_DIR/config/00-core.zsh'; source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh'
 source '$NIVUUS_SHELL_DIR/config/24-ai-command-not-found.zsh'
 _ai_cnf_cache_set 'k1' 'val1'
 _ai_cnf_cache_set 'k2' 'val2'
@@ -79,7 +81,7 @@ ai-cnf-clear-cache
 
 @test "_ai_cnf_ai_lookup parses mock AI JSON response correctly" {
     run zsh -c "
-source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh'
+source '$NIVUUS_SHELL_DIR/config/00-core.zsh'; source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh'
 source '$NIVUUS_SHELL_DIR/config/24-ai-command-not-found.zsh'
 
 _ai_credentials_ok() { return 0; }
@@ -96,7 +98,7 @@ _ai_cnf_ai_lookup 'cowsay' 'cowsay coucou' 'OS: Linux'
 
 @test "_ai_cnf_ai_lookup handles unrecognized command with found=false" {
     run zsh -c "
-source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh'
+source '$NIVUUS_SHELL_DIR/config/00-core.zsh'; source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh'
 source '$NIVUUS_SHELL_DIR/config/24-ai-command-not-found.zsh'
 
 _ai_credentials_ok() { return 0; }
@@ -113,7 +115,7 @@ echo \"\$res\"
 
 @test "_ai_cnf_ai_lookup handles markdown code blocks around JSON from AI" {
     run zsh -c "
-source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh'
+source '$NIVUUS_SHELL_DIR/config/00-core.zsh'; source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh'
 source '$NIVUUS_SHELL_DIR/config/24-ai-command-not-found.zsh'
 
 _ai_credentials_ok() { return 0; }
@@ -139,10 +141,10 @@ _ai_cnf_ai_lookup 'spd-say' 'spd-say hello' 'OS: Linux'
 # --- Handler Execution & UX ---
 
 @test "command_not_found_handler returns 127 and prints not found error to stderr" {
-    run -127 zsh -c "
+    pty_run "
 export AI_COMMAND_NOT_FOUND_CACHE_DIR='$AI_COMMAND_NOT_FOUND_CACHE_DIR'
 export AI_CNF_AUTO_PROMPT=false
-source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh'
+source '$NIVUUS_SHELL_DIR/config/00-core.zsh'; source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh'
 source '$NIVUUS_SHELL_DIR/config/24-ai-command-not-found.zsh'
 
 _ai_credentials_ok() { return 1; }
@@ -154,10 +156,10 @@ command_not_found_handler 'unknown_cmd_123' 'arg1'
 }
 
 @test "command_not_found_handler displays UI box when package is found" {
-    run -127 zsh -c "
+    pty_run "
 export AI_COMMAND_NOT_FOUND_CACHE_DIR='$AI_COMMAND_NOT_FOUND_CACHE_DIR'
 export AI_CNF_AUTO_PROMPT=false
-source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh'
+source '$NIVUUS_SHELL_DIR/config/00-core.zsh'; source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh'
 source '$NIVUUS_SHELL_DIR/config/24-ai-command-not-found.zsh'
 
 _ai_credentials_ok() { return 0; }
@@ -176,9 +178,9 @@ command_not_found_handler 'cowsay' 'coucou'
 }
 
 @test "command_not_found_handler protects against infinite recursion" {
-    run -127 zsh -c "
+    pty_run "
 export AI_COMMAND_NOT_FOUND_CACHE_DIR='$AI_COMMAND_NOT_FOUND_CACHE_DIR'
-source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh'
+source '$NIVUUS_SHELL_DIR/config/00-core.zsh'; source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh'
 source '$NIVUUS_SHELL_DIR/config/24-ai-command-not-found.zsh'
 
 _AI_CNF_ACTIVE=1 command_not_found_handler 'recurse_cmd'
@@ -190,7 +192,7 @@ _AI_CNF_ACTIVE=1 command_not_found_handler 'recurse_cmd'
 @test "ai-cnf-stats displays statistics" {
     run zsh -c "
 export AI_COMMAND_NOT_FOUND_CACHE_DIR='$AI_COMMAND_NOT_FOUND_CACHE_DIR'
-source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh'
+source '$NIVUUS_SHELL_DIR/config/00-core.zsh'; source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh'
 source '$NIVUUS_SHELL_DIR/config/24-ai-command-not-found.zsh'
 ai-cnf-stats
 "

@@ -359,6 +359,14 @@ _ai_cnf_handle_suggestion() {
 # Zsh command_not_found_handler
 # =============================================================================
 
+# Install the hook only for a terminal. This feature is a prompt-and-install
+# dialogue: off a terminal it can only spend an AI_CNF_TIMEOUT round-trip on a
+# typo and offer an install nobody can accept. Leaving the handler undefined
+# gives back zsh's own `command not found` on stderr, which is what a script
+# or an agent expects. The helpers above stay defined either way — they are
+# inert until called, and `ai-cnf-lookup` remains available on demand.
+if nivuus_has_terminal; then
+
 command_not_found_handler() {
     # Recursion protection
     if [[ -n "$_AI_CNF_ACTIVE" ]]; then
@@ -388,6 +396,8 @@ command_not_found_handler() {
 
     return 127
 }
+
+fi  # nivuus_has_terminal
 
 # =============================================================================
 # User Commands & Cache Management
