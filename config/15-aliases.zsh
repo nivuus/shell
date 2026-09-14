@@ -16,9 +16,10 @@ alias -- -='cd -'                  # Go to previous directory
 # Safety
 # =============================================================================
 
-# Interactive only: -i blocks on a confirmation prompt nothing can answer in a
+# Terminal only: -i blocks on a confirmation prompt nothing can answer in a
 # script, cron job or agent shell, so the command fails or hangs silently.
-if [[ -o interactive ]]; then
+# `[[ -o interactive ]]` does not express that — see nivuus_has_terminal.
+if nivuus_has_terminal; then
     alias rm='rm -i'               # Confirm before removing
     alias cp='cp -i'               # Confirm before overwriting
     alias mv='mv -i'               # Confirm before overwriting
@@ -72,8 +73,18 @@ fi
 # Listing
 # =============================================================================
 
-# List listening ports
-alias listening='lsof -iTCP -sTCP:LISTEN -n -P 2>/dev/null || ss -tulpn 2>/dev/null || netstat -tulpn 2>/dev/null'
+# List listening ports.
+#
+# A function, not an alias: as a `||` chain in an alias, `listening | grep 443`
+# piped only the last branch, and the trailing `2>/dev/null` meant that when
+# none of the three tools was installed the command printed nothing at all and
+# looked like "no ports are listening". The last fallback now reports why it
+# failed.
+listening() {
+    lsof -iTCP -sTCP:LISTEN -n -P 2>/dev/null \
+        || ss -tulpn 2>/dev/null \
+        || netstat -tulpn
+}
 
 # =============================================================================
 # Date/Time

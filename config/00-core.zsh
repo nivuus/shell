@@ -21,6 +21,28 @@ source "$_nivuus_theme_file"
 unset _nivuus_theme_file
 
 # =============================================================================
+# Terminal Detection
+# =============================================================================
+
+# Is there a human behind this shell, watching a terminal?
+#
+# `[[ -o interactive ]]` is NOT that test, and using it for display or prompt
+# decisions is a bug: agent harnesses (Claude Code, and anything else that
+# snapshots an environment) build their shell by running `zsh -i` with the
+# three standard descriptors on pipes. The option is set, no terminal is
+# attached, and every "interactive only" guard lets the feature through into a
+# context that cannot render or answer it.
+#
+# Probe stderr rather than stdout: a human redirects `ls > out.txt` all the
+# time without ceasing to be a human, but fd 2 stays on the terminal.
+#
+# Use `[[ -o interactive ]]` only for things that genuinely need the option
+# itself, such as ZLE widgets.
+nivuus_has_terminal() {
+    [[ -t 2 ]]
+}
+
+# =============================================================================
 # Basic Options
 # =============================================================================
 

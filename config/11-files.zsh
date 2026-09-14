@@ -10,15 +10,49 @@
 # =============================================================================
 
 # Enhanced ls aliases
-alias ll='ls -lAhF --color=auto 2>/dev/null || ls -lAhFG 2>/dev/null || ls -lAhF'
-alias la='ls -A --color=auto 2>/dev/null || ls -AG 2>/dev/null || ls -A'
-alias l='ls -CF --color=auto 2>/dev/null || ls -CFG 2>/dev/null || ls -CF'
+#
+# The colour flag is resolved once, here. These used to carry their own
+# portability fallback in the alias body:
+#
+#     alias la='ls -A --color=auto 2>/dev/null || ls -AG 2>/dev/null || ls -A'
+#
+# which was broken three ways. A `||` chain is a command list, so anything the
+# caller appends binds to the last branch only: `la config` listed the current
+# directory, and `la | wc -l` counted the fallback's output rather than the
+# listing. `2>/dev/null` on the leading branches turned a real error — a path
+# that does not exist, a directory that cannot be read — into a silent fall
+# through to a command that quietly did something else. And the probe re-ran
+# on every single invocation to answer a question whose answer cannot change.
+#
+# `command ls` bypasses whatever `ls` is aliased to (coreutils in 00-core.zsh,
+# eza in 17-colorization.zsh) so the options below always mean what they say.
+if command ls --color=auto /dev/null >/dev/null 2>&1; then
+    _nivuus_ls_color='--color=auto'     # GNU coreutils
+elif command ls -G /dev/null >/dev/null 2>&1; then
+    _nivuus_ls_color='-G'               # BSD, macOS
+else
+    _nivuus_ls_color=''                 # busybox and other minimal ls
+fi
+
+alias ll="command ls -lAhF ${_nivuus_ls_color}"
+alias la="command ls -A ${_nivuus_ls_color}"
+alias l="command ls -CF ${_nivuus_ls_color}"
+
+unset _nivuus_ls_color
 
 # Tree view (use native tree if available, otherwise fallback)
 if command -v tree &>/dev/null; then
-    alias tree='tree -C'
+    # -C forces color even down a pipe, so add it only for a terminal.
+    if nivuus_has_terminal; then
+        alias tree='tree -C'
+    fi
 else
-    alias tree='find . -print | sed -e "s;[^/]*/;|____;g;s;____|; |;g"'
+    # A function, not an alias: an alias ending in a pipe hands the caller's
+    # argument to `sed`, so `tree src` used to draw the current directory and
+    # feed `src` to sed as an extra script file.
+    tree() {
+        find "${1:-.}" -print | sed -e 's;[^/]*/;|____;g;s;____|; |;g'
+    }
 fi
 
 # =============================================================================

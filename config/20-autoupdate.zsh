@@ -352,7 +352,11 @@ _nivuus_check_update_async() {
 
 # Only run if enabled — and never against a git checkout (dev mode), where a
 # destructive release install would delete .git and any uncommitted work.
-if [[ "$ENABLE_AUTOUPDATE" == "true" ]] && ! _nivuus_is_dev_checkout; then
+#
+# Terminal only as well: the check spends a GitHub round-trip and reports to
+# someone, and a self-replacing install is not something to start underneath a
+# script or an agent that is mid-task.
+if [[ "$ENABLE_AUTOUPDATE" == "true" ]] && nivuus_has_terminal && ! _nivuus_is_dev_checkout; then
     # Check if it's time for an update check
     days_since_check=$(_nivuus_days_since_check)
 

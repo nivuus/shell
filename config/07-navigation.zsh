@@ -43,8 +43,18 @@ done
 # Enhanced cd
 # =============================================================================
 
-# Auto-ls after cd
+# Auto-ls after cd.
+#
+# chpwd hooks fire in non-interactive shells too, so a script or an agent that
+# changes directory would get an unasked-for listing on stdout. Show it only
+# when someone is there to read it.
+#
+# `command ls` is deliberate: zsh expands aliases when it parses a function
+# body, so a bare `ls` here used to be frozen into whatever eza alias happened
+# to be defined first — which also made the two fallbacks below unreachable,
+# since all three branches ended up calling the same binary.
 chpwd() {
     emulate -L zsh
-    ls --color=auto 2>/dev/null || ls -G 2>/dev/null || ls
+    nivuus_has_terminal || return
+    command ls --color=auto 2>/dev/null || command ls -G 2>/dev/null || command ls
 }

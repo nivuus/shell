@@ -119,7 +119,9 @@ export NIVUUS_SHELL_VERSION="1.0.0"
 # every later one costs ~1s (see config/09-ai-agy-daemon.zsh). Spawn the shared
 # daemon in the background now so the user's first inline suggestion is fast.
 # No-op when the daemon is disabled, agy is missing, or cli mode is off.
-if [[ -o interactive ]] && (( $+functions[_agy_daemon_prewarm] )); then
+# Terminal only: nothing but a human types the inline suggestion this warms up,
+# so an agent or CI shell would pay for a daemon it never queries.
+if nivuus_has_terminal && (( $+functions[_agy_daemon_prewarm] )); then
     _agy_daemon_prewarm
 fi
 
