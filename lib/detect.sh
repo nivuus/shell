@@ -30,9 +30,9 @@ nivuus_should_minimal() {
 }
 
 # ---------------------------------------------------------------------------
-# Privilèges et installation système.
-# Tout chemin ou identité système est surchargeable par variable d'environnement
-# pour que les tests n'aient jamais besoin d'être root ni de toucher /etc.
+# Privileges and system-wide install.
+# Every system path or identity can be overridden by an environment variable
+# so the tests never need to be root nor touch /etc.
 # ---------------------------------------------------------------------------
 
 : "${NIVUUS_UID:=${EUID:-$(id -u)}}"
@@ -44,7 +44,7 @@ nivuus_is_root() {
     [ "${NIVUUS_UID:-$(id -u)}" -eq 0 ]
 }
 
-# L'utilisateur humain derrière un éventuel sudo (sinon l'utilisateur courant).
+# The human user behind sudo, if any (the current user otherwise).
 nivuus_invoking_user() {
     if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ]; then
         printf '%s\n' "$SUDO_USER"
@@ -53,16 +53,16 @@ nivuus_invoking_user() {
     fi
 }
 
-# sudo est-il utilisable sans rien demander ? (-n : jamais de prompt)
+# Is sudo usable without asking anything? (-n: never prompts)
 nivuus_sudo_available() {
     command -v sudo >/dev/null 2>&1 || return 1
     sudo -n true >/dev/null 2>&1
 }
 
-# Le .zshrc global lu par tous les utilisateurs. Debian, Ubuntu, Arch et
-# Alpine compilent zsh avec /etc/zsh comme répertoire de configuration ;
-# Fedora, openSUSE et macOS lisent /etc/zshrc. La présence du répertoire
-# /etc/zsh tranche. NIVUUS_SYSTEM_ZSHRC force un chemin (tests, cas exotiques).
+# The global zshrc every user reads. Debian, Ubuntu, Arch and Alpine build
+# zsh with /etc/zsh as its configuration directory; Fedora, openSUSE and
+# macOS read /etc/zshrc. The presence of the /etc/zsh directory decides.
+# NIVUUS_SYSTEM_ZSHRC forces a path (tests, exotic setups).
 nivuus_system_zshrc() {
     if [ -n "${NIVUUS_SYSTEM_ZSHRC:-}" ]; then
         printf '%s\n' "$NIVUUS_SYSTEM_ZSHRC"
@@ -73,7 +73,7 @@ nivuus_system_zshrc() {
     fi
 }
 
-# Gestionnaire de paquets de la plateforme, ou chaîne vide.
+# The platform's package manager, or an empty string.
 nivuus_pkg_manager() {
     if [ -n "${NIVUUS_PKG_MANAGER:-}" ]; then
         printf '%s\n' "$NIVUUS_PKG_MANAGER"; return 0

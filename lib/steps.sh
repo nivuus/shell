@@ -32,7 +32,7 @@ nivuus_step_copy_tree() {
     return 0
 }
 
-# $3 (optionnel) : position du bloc, "top" (défaut) ou "bottom" -- voir
+# $3 (optional): block position, "top" (default) or "bottom" -- see
 # nivuus_zshrc_merge.
 nivuus_step_write_zshrc() {
     local target="$1" install_dir="$2" position="${3:-top}" merged
@@ -77,13 +77,12 @@ nivuus_step_check_required_deps() {
 }
 
 # ---------------------------------------------------------------------------
-# Paquets système
+# System packages
 # ---------------------------------------------------------------------------
 
-# Exécute une commande de gestionnaire de paquets ($2, une ligne produite par
-# lib/deps.sh) avec les privilèges qu'elle demande. Jamais de sudo pour brew,
-# qui refuse de tourner en root : si on EST root (sudo), on redescend vers
-# l'utilisateur humain.
+# Run a package manager command ($2, one line produced by lib/deps.sh) with
+# the privileges it needs. Never sudo for brew, which refuses to run as root:
+# when we ARE root (sudo), drop back to the human user.
 _nivuus_pkg_run() {
     local mgr="$1" cmd="$2" who
     if nivuus_pkg_needs_root "$mgr"; then
@@ -104,7 +103,7 @@ _nivuus_pkg_run() {
     fi
 }
 
-# Rafraîchit l'index des paquets, une seule fois par processus.
+# Refresh the package index, once per process.
 _nivuus_pkg_refresh() {
     local mgr="$1" cmd
     [ -z "${_NIVUUS_PKG_REFRESHED:-}" ] || return 0
@@ -119,11 +118,11 @@ _nivuus_pkg_refresh() {
     return 0
 }
 
-# Installe les outils manquants parmi $2... avec le gestionnaire de paquets
-# de la plateforme, et journalise chaque paquet posé (PKG : jamais
-# désinstallé, voir lib/manifest.sh).
-#   $1 = required : tout ou rien, échec = retour 1 avec la commande à lancer.
-#   $1 = optional : paquet par paquet, un paquet indisponible n'arrête rien.
+# Install the missing tools among $2... with the platform's package manager,
+# journaling every package installed (PKG: never uninstalled, see
+# lib/manifest.sh).
+#   $1 = required: all or nothing; failure = return 1 with the command to run.
+#   $1 = optional: package by package; an unavailable package stops nothing.
 nivuus_step_install_packages() {
     local level="$1"; shift
     local missing mgr pkgs='' tool pkg cmd
@@ -141,7 +140,7 @@ nivuus_step_install_packages() {
         return 0
     fi
 
-    # shellcheck disable=SC2086  # $missing est une liste séparée par des espaces
+    # shellcheck disable=SC2086  # $missing is a space-separated list
     for tool in $missing; do
         pkg="$(nivuus_pkg_name "$mgr" "$tool")"
         if [ -n "$pkg" ]; then
@@ -195,12 +194,12 @@ nivuus_step_install_packages() {
 }
 
 # ---------------------------------------------------------------------------
-# Shell de connexion
+# Login shell
 # ---------------------------------------------------------------------------
 
 : "${NIVUUS_LOGIN_DEFS:=/etc/login.defs}"
 
-# Entrées passwd, une par ligne. NIVUUS_PASSWD (tests) > getent > /etc/passwd.
+# passwd entries, one per line. NIVUUS_PASSWD (tests) > getent > /etc/passwd.
 _nivuus_passwd_entries() {
     if [ -n "${NIVUUS_PASSWD:-}" ]; then
         cat "$NIVUUS_PASSWD"
@@ -211,7 +210,7 @@ _nivuus_passwd_entries() {
     fi
 }
 
-# Shell de connexion actuel de l'utilisateur $1 (vide si inconnu).
+# Current login shell of user $1 (empty when unknown).
 nivuus_user_shell() {
     local user="$1"
     if [ -z "${NIVUUS_PASSWD:-}" ] && [ "$(nivuus_detect_os)" = macos ]; then
@@ -221,10 +220,10 @@ nivuus_user_shell() {
     _nivuus_passwd_entries | awk -F: -v u="$user" '$1 == u { print $7; exit }'
 }
 
-# Le zsh à donner comme shell de connexion : doit figurer dans /etc/shells,
-# sinon chsh le refuse (le cas macOS + Homebrew). On préfère le zsh du PATH
-# s'il y est listé, à défaut n'importe quel zsh listé et présent ; sinon, en
-# root, on l'ajoute à /etc/shells (journalisé en MODIFY, donc réversible).
+# The zsh to hand out as login shell: it must be listed in /etc/shells or
+# chsh refuses it (the macOS + Homebrew case). Prefer the zsh on PATH when it
+# is listed, else any listed zsh that exists; otherwise, as root, add it to
+# /etc/shells (journaled as MODIFY, hence reversible).
 nivuus_login_shell_candidate() {
     local zsh_path shells line
     zsh_path="$(command -v zsh)" || return 1
@@ -242,9 +241,9 @@ nivuus_login_shell_candidate() {
     printf '%s\n' "$zsh_path"
 }
 
-# Fait de zsh le shell de connexion de $1, et journalise l'ancien (CHSH).
-# Ne touche à rien si c'est déjà zsh. Jamais bloquant : un échec se résout
-# en un conseil, pas en une installation interrompue.
+# Make zsh the login shell of $1 and journal the previous one (CHSH).
+# Touches nothing when it already is zsh. Never blocking: a failure turns
+# into a hint, not into an aborted install.
 nivuus_step_chsh() {
     local user="$1" target current
     current="$(nivuus_user_shell "$user")"
@@ -278,10 +277,10 @@ nivuus_step_chsh() {
     log_ok "Shell de connexion de $user : zsh"
 }
 
-# Comptes humains de la machine : UID dans [UID_MIN, UID_MAX] de
-# /etc/login.defs (1000..60000 à défaut) plus root, avec un répertoire
-# personnel existant et un shell de connexion réel (listé dans /etc/shells :
-# exclut nologin, false et les comptes de service).
+# The machine's human accounts: UID within [UID_MIN, UID_MAX] from
+# /etc/login.defs (1000..60000 by default) plus root, with an existing home
+# directory and a real login shell (listed in /etc/shells: rules out nologin,
+# false and service accounts).
 nivuus_human_users() {
     local min max user home shell
     min="$(awk '$1 == "UID_MIN" { print $2 }' "$NIVUUS_LOGIN_DEFS" 2>/dev/null)"
@@ -297,7 +296,7 @@ nivuus_human_users() {
     done
 }
 
-# Mode système : zsh pour tous les comptes humains.
+# System mode: zsh for every human account.
 nivuus_step_chsh_all_users() {
     local user
     if [ "$(nivuus_detect_os)" = macos ]; then

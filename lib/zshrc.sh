@@ -50,13 +50,12 @@ nivuus_zshrc_strip() {
     ' "$file"
 }
 
-# $3 (optionnel) : position du bloc dans un fichier qui n'en a pas encore.
-#   top    (défaut) : en tête -- ce qui suit gagne, la config de l'utilisateur
-#                     écrase toujours Nivuus (mode utilisateur, ~/.zshrc).
-#   bottom          : en queue -- après les réglages par défaut de la distro
-#                     (mode système, /etc/zsh/zshrc), que Nivuus doit
-#                     recouvrir ; le ~/.zshrc de chaque utilisateur vient de
-#                     toute façon après.
+# $3 (optional): where the block goes in a file that does not have one yet.
+#   top    (default): at the head -- what follows wins, so the user's own
+#                     config always overrides Nivuus (user mode, ~/.zshrc).
+#   bottom          : at the tail -- after the distro defaults (system mode,
+#                     /etc/zsh/zshrc), which Nivuus must override; every
+#                     user's ~/.zshrc comes after it anyway.
 nivuus_zshrc_merge() {
     local file="$1" install_dir="$2" position="${3:-top}" state
     state="$(nivuus_zshrc_state "$file")"
@@ -70,8 +69,8 @@ nivuus_zshrc_merge() {
             nivuus_zshrc_block "$install_dir"
             ;;
         present)
-            # Remplace le bloc, conserve le reste tel quel -- à la position
-            # demandée, pour qu'une réinstallation ne déplace pas le bloc.
+            # Replace the block, keep the rest as is -- at the requested
+            # position, so a reinstall never moves the block.
             if [ "$position" = "bottom" ]; then
                 nivuus_zshrc_strip "$file"
                 nivuus_zshrc_block "$install_dir"
@@ -83,7 +82,7 @@ nivuus_zshrc_merge() {
         absent)
             if [ "$position" = "bottom" ]; then
                 cat "$file"
-                # Garantit une newline finale si le fichier n'en avait pas.
+                # Guarantee a final newline if the file had none.
                 [ -n "$(tail -c 1 "$file")" ] && printf '\n' || true
                 nivuus_zshrc_block "$install_dir"
             else

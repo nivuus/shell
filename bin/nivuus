@@ -56,13 +56,13 @@ confirm() {
     case "$reply" in [Nn]*) return 1 ;; *) return 0 ;; esac
 }
 
-# Mode d'installation effectif, posé dans NIVUUS_MODE.
-#   $1 = mode explicite (--system / --user) ou vide
-#   $2 = non vide si --prefix a été donné
-# Sans flag : système dès que root ou sudo est disponible -- une seule
-# commande doit équiper toute la machine, même lancée par un utilisateur
-# ordinaire -- sinon utilisateur. Un sudo à mot de passe n'est tenté que si
-# un terminal peut y répondre ; --dry-run ne demande jamais de privilège.
+# Effective install mode, stored in NIVUUS_MODE.
+#   $1 = explicit mode (--system / --user) or empty
+#   $2 = non-empty when --prefix was given
+# Without a flag: system as soon as root or sudo is available -- one command
+# must equip the whole machine, even launched by an ordinary user -- user
+# otherwise. A password-protected sudo is only attempted when a terminal can
+# answer it; --dry-run never asks for privileges.
 _nivuus_resolve_mode() {
     local explicit="$1" prefix_given="$2"
     if [ -n "$explicit" ]; then
@@ -87,10 +87,10 @@ _nivuus_resolve_mode() {
     export NIVUUS_MODE
 }
 
-# Relance la même commande en root via sudo, en transmettant les réglages
-# Nivuus de l'environnement (sudo les effacerait). NIVUUS_UID=0 est posé
-# explicitement : un NIVUUS_UID simulé (tests) ne doit pas survivre à la
-# relance, sinon le processus fils se relancerait à l'infini.
+# Re-run the same command as root through sudo, forwarding the Nivuus
+# settings from the environment (sudo would drop them). NIVUUS_UID=0 is set
+# explicitly: a simulated NIVUUS_UID (tests) must not survive the re-run, or
+# the child process would re-run itself forever.
 _nivuus_reexec_as_root() {
     local v envs=("NIVUUS_UID=0")
     for v in NIVUUS_STATE_DIR NIVUUS_SYSTEM_PREFIX NIVUUS_SYSTEM_STATE_DIR \
@@ -131,8 +131,8 @@ cmd_install() {
 
     _nivuus_resolve_mode "$mode" "$prefix_given"
     if [ "$NIVUUS_MODE" = system ] && ! nivuus_is_root && [ -z "${NIVUUS_DRY_RUN:-}" ]; then
-        # ${arr[@]+"${arr[@]}"} : bash < 4.4 refuse "${arr[@]}" sur un
-        # tableau vide sous set -u.
+        # ${arr[@]+"${arr[@]}"}: bash < 4.4 rejects "${arr[@]}" on an empty
+        # array under set -u.
         _nivuus_reexec_as_root install --system ${orig_args[@]+"${orig_args[@]}"}
         return 1
     fi
@@ -151,7 +151,7 @@ cmd_install() {
     fi
     export NIVUUS_STATE_DIR
 
-    # shellcheck disable=SC2086  # liste séparée par des espaces
+    # shellcheck disable=SC2086  # space-separated list
     missing="$(nivuus_deps_missing $NIVUUS_DEPS_REQUIRED)"
     if [ -n "$missing" ]; then
         if [ -n "$(nivuus_pkg_manager)" ]; then
@@ -179,8 +179,7 @@ cmd_install() {
     # ne le supprimera donc jamais, préexistant ou non. S'il n'existe pas
     # encore, un MKDIR l'autorise à être repris par rmdir plus tard s'il
     # finit vide -- sans jamais toucher à un ~/.cache non vide ou déjà là.
-    # En mode système, ~/.cache appartient à chaque utilisateur : on n'y
-    # touche pas.
+    # In system mode ~/.cache belongs to each user: it is left alone.
     if [ "$NIVUUS_MODE" = user ] && [ ! -d "$HOME/.cache" ]; then
         nivuus_manifest_record MKDIR "$HOME/.cache" '-' '-'
     fi
@@ -198,8 +197,8 @@ cmd_install() {
         return 1
     fi
 
-    # Shell de connexion et outils optionnels : jamais bloquants (chaque
-    # étape se résout en un conseil si elle échoue), sautés en --minimal.
+    # Login shell and optional tools: never blocking (each step turns into a
+    # hint when it fails), skipped with --minimal.
     if [ -z "${NIVUUS_MINIMAL:-}" ] && [ -z "$no_chsh" ]; then
         if [ "$NIVUUS_MODE" = system ]; then
             nivuus_step_chsh_all_users
@@ -224,7 +223,7 @@ cmd_install() {
     fi
 }
 
-# Mode d'un manifeste d'après son en-tête (mode=user|system), "user" à défaut.
+# A manifest's mode from its header (mode=user|system), "user" by default.
 _nivuus_manifest_mode() {
     local m
     m="$(head -n1 "$1" 2>/dev/null | tr '\t' '\n' | sed -n 's/^mode=//p')"
@@ -246,9 +245,8 @@ cmd_uninstall() {
         shift
     done
 
-    # Quel manifeste ? Explicite par --system/--user ; sinon celui de
-    # l'utilisateur s'il existe (son en-tête dit son mode), à défaut celui
-    # du système.
+    # Which manifest? Explicit through --system/--user; otherwise the user's
+    # one when it exists (its header states its mode), else the system's.
     user_state="${NIVUUS_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/nivuus}"
     if [ -z "$mode" ]; then
         if [ -f "$user_state/manifest.tsv" ]; then
@@ -302,8 +300,8 @@ cmd_uninstall() {
 
     if [ -n "$purge" ] && [ -z "${NIVUUS_DRY_RUN:-}" ]; then
         # On ne supprime QUE ce que Nivuus a créé, jamais un répertoire en bloc.
-        # Les artefacts sous $HOME appartiennent à chaque utilisateur : en
-        # mode système on n'y touche pas (ils tiennent dans ~/.cache).
+        # Artifacts under $HOME belong to each user: system mode leaves them
+        # alone (they all live in ~/.cache).
         if [ "$NIVUUS_MODE" = user ] && [ -f "$HOME/.zsh_local" ]; then
             log_info "~/.zsh_local n'a pas été créé par Nivuus : conservé. Supprime-le à la main si tu le souhaites."
         fi

@@ -3,9 +3,9 @@
 # La logique vit dans bin/nivuus et lib/. Ce fichier ne fait que traduire
 # les anciennes options.
 #
-# Sans option de mode, « nivuus install » équipe toute la machine (--system :
-# dépendances, outils, zshrc global, shell de connexion de chaque compte) dès
-# que root ou sudo est disponible, et se rabat sur --user sinon.
+# Without a mode flag, "nivuus install" equips the whole machine (--system:
+# dependencies, tools, global zshrc, every account's login shell) as soon as
+# root or sudo is available, and falls back to --user otherwise.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
