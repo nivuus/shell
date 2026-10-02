@@ -359,6 +359,18 @@ _nivuus_keep_backup_ref() {
     [ -n "$1" ] && [ "$1" != "-" ] && printf '%s\n' "$1" >> "$NIVUUS_KEPT_BACKUP_REFS"
 }
 
+# Are we root for the purpose of restoring a login shell? Goes through
+# lib/detect.sh (nivuus_is_root honours the NIVUUS_UID override the tests
+# use to simulate root in a fake root tree) when it is loaded; this library
+# stays usable alone, with the real uid as fallback.
+_nivuus_restore_as_root() {
+    if command -v nivuus_is_root >/dev/null 2>&1; then
+        nivuus_is_root
+    else
+        [ "$(id -u)" -eq 0 ]
+    fi
+}
+
 nivuus_restore_entry() {
     local action="$1" path="$2" hash="$3" ref="$4" current
 
@@ -474,7 +486,7 @@ nivuus_restore_entry() {
             # command is displayed instead.
             if [ -n "${NIVUUS_DRY_RUN:-}" ]; then
                 log_dry "restaurerait le shell de connexion de $path : $ref"
-            elif [ "${NIVUUS_MODE:-}" = system ] && [ "$(id -u)" -eq 0 ] \
+            elif [ "${NIVUUS_MODE:-}" = system ] && _nivuus_restore_as_root \
                 && [ "$ref" != "-" ] && [ -x "$ref" ]; then
                 if chsh -s "$ref" "$path" >/dev/null 2>&1; then
                     log_info "Shell de connexion de $path restauré : $ref"
