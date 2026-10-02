@@ -342,7 +342,8 @@ Configuration:
   fzf:      \$FZF_DEFAULT_OPTS (override before this file loads to customize)
 
 Install missing tools:
-  cargo install eza bat git-delta ripgrep
-  sudo apt install grc timg glow
+  nivuus install            (installs eza, bat, fd, ripgrep, timg, grc, git-delta, fzf, jq)
+  Debian/Ubuntu: sudo apt-get install -y eza bat fd-find ripgrep timg grc git-delta fzf jq
+  macOS:         brew install eza bat fd ripgrep timg grc git-delta fzf jq glow
 EOF
 }

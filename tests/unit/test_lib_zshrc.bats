@@ -176,3 +176,36 @@ teardown() { rm -rf "$TMP"; }
     run nivuus_zshrc_detect_framework "$TMP/.zshrc"
     [ "$output" = "" ]
 }
+
+@test "merge with position bottom appends the block after existing content" {
+    printf 'bindkey -e\n' > "$TMP/zshrc"
+    run nivuus_zshrc_merge "$TMP/zshrc" /opt/nivuus bottom
+    [ "$status" -eq 0 ]
+    [[ "${lines[0]}" == "bindkey -e" ]]
+    [[ "${lines[1]}" == "$NIVUUS_BLOCK_BEGIN" ]]
+    [[ "${lines[${#lines[@]}-1]}" == "$NIVUUS_BLOCK_END" ]]
+}
+
+@test "merge with position bottom adds the missing final newline before the block" {
+    printf 'no newline' > "$TMP/zshrc"
+    run nivuus_zshrc_merge "$TMP/zshrc" /opt/nivuus bottom
+    [[ "${lines[0]}" == "no newline" ]]
+    [[ "${lines[1]}" == "$NIVUUS_BLOCK_BEGIN" ]]
+}
+
+@test "merge default position is still top" {
+    printf 'bindkey -e\n' > "$TMP/zshrc"
+    run nivuus_zshrc_merge "$TMP/zshrc" /opt/nivuus
+    [[ "${lines[0]}" == "$NIVUUS_BLOCK_BEGIN" ]]
+    [[ "${lines[${#lines[@]}-1]}" == "bindkey -e" ]]
+}
+
+@test "merge with position bottom keeps the block at the bottom on reinstall" {
+    { printf 'bindkey -e\n'; nivuus_zshrc_block /old; } > "$TMP/zshrc"
+    run nivuus_zshrc_merge "$TMP/zshrc" /new bottom
+    [ "$status" -eq 0 ]
+    [[ "${lines[0]}" == "bindkey -e" ]]
+    [[ "${lines[${#lines[@]}-1]}" == "$NIVUUS_BLOCK_END" ]]
+    [[ "$output" == *"/new"* ]]
+    [[ "$output" != *"/old"* ]]
+}

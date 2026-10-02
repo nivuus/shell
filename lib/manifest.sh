@@ -467,11 +467,23 @@ nivuus_restore_entry() {
             fi
             ;;
         CHSH)
+            # $path = utilisateur, $ref = shell d'origine. En mode système
+            # (root, NIVUUS_MODE=system posé par bin/nivuus) on restaure
+            # vraiment : chsh ne demande rien à root. Sinon chsh peut exiger
+            # un mot de passe et bloquer une désinstallation non interactive :
+            # on affiche la commande exacte.
             if [ -n "${NIVUUS_DRY_RUN:-}" ]; then
-                log_dry "restaurerait le shell de connexion : $ref"
+                log_dry "restaurerait le shell de connexion de $path : $ref"
+            elif [ "${NIVUUS_MODE:-}" = system ] && [ "$(id -u)" -eq 0 ] \
+                && [ "$ref" != "-" ] && [ -x "$ref" ]; then
+                if chsh -s "$ref" "$path" >/dev/null 2>&1; then
+                    log_info "Shell de connexion de $path restauré : $ref"
+                else
+                    log_warn "chsh a échoué pour $path. À la main : chsh -s $ref $path"
+                fi
             else
-                log_info "Shell de connexion d'origine : $ref"
-                log_info "Restaure-le avec : chsh -s $ref"
+                log_info "Shell de connexion d'origine de $path : $ref"
+                log_info "Restaure-le avec : chsh -s $ref $path"
             fi
             ;;
         PKG)

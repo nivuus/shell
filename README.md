@@ -26,7 +26,8 @@
 
 ### One-Line Installation
 
-Install Nivuus Shell with a single command:
+Install Nivuus Shell for every user of the machine with a single command, from
+any account (it asks for your `sudo` password once):
 
 ```bash
 git clone https://github.com/nivuus/shell.git /tmp/nivuus-shell && /tmp/nivuus-shell/install.sh --non-interactive && rm -rf /tmp/nivuus-shell && exec zsh
@@ -34,26 +35,38 @@ git clone https://github.com/nivuus/shell.git /tmp/nivuus-shell && /tmp/nivuus-s
 
 This will:
 1. Clone the repository to `/tmp/nivuus-shell`
-2. Run the installation automatically (no prompts)
-3. Clean up the temporary directory
-4. Restart your shell with Nivuus
+2. Install the missing dependencies (`zsh`, `git`, `curl`) with your package manager
+3. Install Nivuus in `/usr/local/share/nivuus-shell` and source it from the global
+   zshrc (`/etc/zsh/zshrc` on Debian/Ubuntu/Arch, `/etc/zshrc` elsewhere), so every
+   account gets it, including the ones created later
+4. Make `zsh` the login shell of every human account (root included)
+5. Install the optional tools when your distribution packages them
+   (`jq`, `fzf`, `eza`, `bat`, `fd`, `ripgrep`, `timg`, `grc`, `git-delta`)
+6. Clean up the temporary directory and restart your shell with Nivuus
+
+Nothing is asked twice: when `sudo` is not available the installer falls back to a
+per-user install (see below). Every change is journaled, so `sudo nivuus uninstall`
+puts the machine back exactly as it was (login shells included).
 
 ### Manual Installation
 
-#### User Installation (Recommended)
+#### System-Wide Installation (default)
 ```bash
 git clone https://github.com/nivuus/shell.git
 cd nivuus-shell
-./install.sh
+./install.sh                 # same as --system: sudo is requested when needed
 ```
 
-#### System-Wide Installation
+#### User Installation
 ```bash
 git clone https://github.com/nivuus/shell.git
 cd nivuus-shell
-sudo ./install.sh --system
+./install.sh --user          # ~/.nivuus-shell and ~/.zshrc only
 ```
-> **Note:** `--system` is temporarily unavailable (it now exits with an error). Per-user installation above is unaffected.
+
+Useful flags (see `bin/nivuus help`): `--minimal` (no login-shell change, no
+optional tools), `--no-chsh` (keep every login shell), `--dry-run` (report only,
+never asks for sudo).
 
 ### Restart Your Terminal
 
@@ -463,10 +476,13 @@ nivuus-shell/
 - **Gemini API key** - For AI commands (get one at https://aistudio.google.com/apikey)
 - **jq** - Robust JSON parsing for AI responses (falls back to grep/sed if absent)
 - **NVM** - For Node.js version management
-- **fd** - Fast file search (`cargo install fd-find`)
-- **ripgrep** - Fast content search (`cargo install ripgrep`)
-- **bat** - Better cat (`cargo install bat`)
-- **eza** - Modern ls (`cargo install eza`)
+- **fd** - Fast file search
+- **ripgrep** - Fast content search
+- **bat** - Better cat
+- **eza** - Modern ls
+
+The installer sets them up with your package manager (`apt-get`, `dnf`, `pacman`,
+`zypper`, `apk` or `brew`) whenever it packages them.
 
 ## Documentation
 

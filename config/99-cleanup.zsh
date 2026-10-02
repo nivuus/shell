@@ -23,8 +23,11 @@ if [[ "${NIVUUS_NO_COMPILE:-0}" != "1" ]]; then
         zcompile "$HOME/.zshrc" &>/dev/null
     fi
 
-    # Compile config files for faster loading
-    if [[ -d "$NIVUUS_SHELL_DIR/config" ]]; then
+    # Compile config files for faster loading. A system-wide install
+    # (/usr/local/share/nivuus-shell) is root-owned: only a shell that can
+    # write next to the sources compiles them, everyone else just reads the
+    # .zwc root's shell left behind, or the plain source.
+    if [[ -d "$NIVUUS_SHELL_DIR/config" && -w "$NIVUUS_SHELL_DIR/config" ]]; then
         for config_file in "$NIVUUS_SHELL_DIR"/config/*.zsh; do
             if [[ (! -f "${config_file}.zwc" || "$config_file" -nt "${config_file}.zwc") ]]; then
                 { zcompile "$config_file" &>/dev/null } &!

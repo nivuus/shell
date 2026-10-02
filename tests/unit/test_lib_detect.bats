@@ -45,3 +45,44 @@ teardown() { rm -rf "$TMP"; }
     run nivuus_should_minimal
     [ "$status" -eq 0 ]
 }
+
+@test "is_root honours a simulated NIVUUS_UID" {
+    NIVUUS_UID=1000 run nivuus_is_root
+    [ "$status" -eq 1 ]
+    NIVUUS_UID=0 run nivuus_is_root
+    [ "$status" -eq 0 ]
+}
+
+@test "system_zshrc is /etc/zsh/zshrc when /etc/zsh exists, /etc/zshrc otherwise" {
+    export NIVUUS_ETC_DIR="$TMP/etc"
+    unset NIVUUS_SYSTEM_ZSHRC
+    mkdir -p "$TMP/etc"
+    [ "$(nivuus_system_zshrc)" = "$TMP/etc/zshrc" ]
+    mkdir -p "$TMP/etc/zsh"
+    [ "$(nivuus_system_zshrc)" = "$TMP/etc/zsh/zshrc" ]
+}
+
+@test "NIVUUS_SYSTEM_ZSHRC overrides the detected global zshrc" {
+    export NIVUUS_ETC_DIR="$TMP/etc"
+    mkdir -p "$TMP/etc/zsh"
+    NIVUUS_SYSTEM_ZSHRC="$TMP/custom" run nivuus_system_zshrc
+    [ "$output" = "$TMP/custom" ]
+}
+
+@test "pkg_manager finds the first manager on PATH and honours an override" {
+    mkdir -p "$TMP/bin"
+    printf '#!/bin/sh\n' > "$TMP/bin/dnf"; chmod +x "$TMP/bin/dnf"
+    run bash -c "PATH='$TMP/bin'; source '$LIB/detect.sh'; nivuus_pkg_manager"
+    [ "$output" = "dnf" ]
+    run bash -c "PATH='$TMP/bin'; NIVUUS_PKG_MANAGER=brew; source '$LIB/detect.sh'; nivuus_pkg_manager"
+    [ "$output" = "brew" ]
+    run bash -c "PATH='$TMP/empty'; source '$LIB/detect.sh'; nivuus_pkg_manager"
+    [ "$output" = "" ]
+}
+
+@test "invoking_user is SUDO_USER under sudo, the current user otherwise" {
+    SUDO_USER=alice run nivuus_invoking_user
+    [ "$output" = "alice" ]
+    SUDO_USER= run nivuus_invoking_user
+    [ "$output" = "$(id -un)" ]
+}

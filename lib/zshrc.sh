@@ -50,8 +50,15 @@ nivuus_zshrc_strip() {
     ' "$file"
 }
 
+# $3 (optionnel) : position du bloc dans un fichier qui n'en a pas encore.
+#   top    (défaut) : en tête -- ce qui suit gagne, la config de l'utilisateur
+#                     écrase toujours Nivuus (mode utilisateur, ~/.zshrc).
+#   bottom          : en queue -- après les réglages par défaut de la distro
+#                     (mode système, /etc/zsh/zshrc), que Nivuus doit
+#                     recouvrir ; le ~/.zshrc de chaque utilisateur vient de
+#                     toute façon après.
 nivuus_zshrc_merge() {
-    local file="$1" install_dir="$2" state
+    local file="$1" install_dir="$2" position="${3:-top}" state
     state="$(nivuus_zshrc_state "$file")"
     case "$state" in
         corrupt)
@@ -63,15 +70,27 @@ nivuus_zshrc_merge() {
             nivuus_zshrc_block "$install_dir"
             ;;
         present)
-            # Remplace le bloc, conserve le reste tel quel.
-            nivuus_zshrc_block "$install_dir"
-            nivuus_zshrc_strip "$file"
+            # Remplace le bloc, conserve le reste tel quel -- à la position
+            # demandée, pour qu'une réinstallation ne déplace pas le bloc.
+            if [ "$position" = "bottom" ]; then
+                nivuus_zshrc_strip "$file"
+                nivuus_zshrc_block "$install_dir"
+            else
+                nivuus_zshrc_block "$install_dir"
+                nivuus_zshrc_strip "$file"
+            fi
             ;;
         absent)
-            nivuus_zshrc_block "$install_dir"
-            cat "$file"
-            # Garantit une newline finale si le fichier n'en avait pas.
-            [ -n "$(tail -c 1 "$file")" ] && printf '\n' || true
+            if [ "$position" = "bottom" ]; then
+                cat "$file"
+                # Garantit une newline finale si le fichier n'en avait pas.
+                [ -n "$(tail -c 1 "$file")" ] && printf '\n' || true
+                nivuus_zshrc_block "$install_dir"
+            else
+                nivuus_zshrc_block "$install_dir"
+                cat "$file"
+                [ -n "$(tail -c 1 "$file")" ] && printf '\n' || true
+            fi
             ;;
     esac
 }

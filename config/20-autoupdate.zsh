@@ -34,6 +34,13 @@ _nivuus_is_dev_checkout() {
     [[ -d "$NIVUUS_SHELL_DIR/.git" ]] || [[ -f "$NIVUUS_SHELL_DIR/.git" ]]
 }
 
+# A system-wide install (see `nivuus install --system`) lives in a root-owned
+# directory: a user shell can neither replace it nor should it try. Updating it
+# is `sudo nivuus install --system` from a fresh checkout.
+_nivuus_install_writable() {
+    [[ -w "$NIVUUS_SHELL_DIR" ]]
+}
+
 # Get current installed version
 _nivuus_current_version() {
     if [[ -f "$NIVUUS_VERSION_FILE" ]]; then
@@ -356,7 +363,7 @@ _nivuus_check_update_async() {
 # Terminal only as well: the check spends a GitHub round-trip and reports to
 # someone, and a self-replacing install is not something to start underneath a
 # script or an agent that is mid-task.
-if [[ "$ENABLE_AUTOUPDATE" == "true" ]] && nivuus_has_terminal && ! _nivuus_is_dev_checkout; then
+if [[ "$ENABLE_AUTOUPDATE" == "true" ]] && nivuus_has_terminal && ! _nivuus_is_dev_checkout && _nivuus_install_writable; then
     # Check if it's time for an update check
     days_since_check=$(_nivuus_days_since_check)
 
@@ -375,6 +382,12 @@ nivuus-update() {
     if _nivuus_is_dev_checkout; then
         echo "ℹ️  Development checkout detected at $NIVUUS_SHELL_DIR"
         echo "   Use 'git pull' here instead of the release updater."
+        return 0
+    fi
+    if ! _nivuus_install_writable; then
+        echo "ℹ️  System-wide install at $NIVUUS_SHELL_DIR (not writable by $USER)"
+        echo "   Update it for everyone with:"
+        echo "   git clone https://github.com/nivuus/shell.git /tmp/nivuus-shell && sudo /tmp/nivuus-shell/install.sh --system --non-interactive && rm -rf /tmp/nivuus-shell"
         return 0
     fi
 

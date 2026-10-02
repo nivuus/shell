@@ -36,11 +36,17 @@ NIVUUS_SHELL_DIR="$(pwd)" zsh   # Run from current directory without installing
 ### Installation Testing
 
 ```bash
-# User installation (in test environment)
+# System-wide installation (default when root or sudo is available): deps,
+# /usr/local/share/nivuus-shell, global zshrc, zsh as every account's login shell
 ./install.sh --non-interactive
 
-# System installation (temporarily unavailable: exits with an error)
-sudo ./install.sh --system --non-interactive
+# User installation (~/.nivuus-shell, ~/.zshrc), never asks for sudo
+./install.sh --user --non-interactive
+
+# Hermetic install for tests: --minimal skips chsh and optional tools; the
+# NIVUUS_* overrides in lib/detect.sh (NIVUUS_ETC_DIR, NIVUUS_SYSTEM_PREFIX,
+# NIVUUS_UID, NIVUUS_PASSWD...) redirect a --system install into a fake root
+./bin/nivuus install --yes --minimal --prefix /tmp/target
 
 # With health check
 ./install.sh --health-check
