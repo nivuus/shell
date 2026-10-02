@@ -80,6 +80,9 @@ _nivuus_resolve_mode() {
         else
             log_warn "sudo refusé : installation pour toi seulement."
             NIVUUS_MODE=user
+            # Remembered by lib/steps.sh: the package steps must not prompt
+            # for a password a second time.
+            export NIVUUS_SUDO_REFUSED=1
         fi
     else
         NIVUUS_MODE=user
@@ -140,7 +143,9 @@ cmd_install() {
     if [ "$NIVUUS_MODE" = system ]; then
         : "${prefix:=$NIVUUS_SYSTEM_PREFIX}"
         : "${NIVUUS_STATE_DIR:=$NIVUUS_SYSTEM_STATE_DIR}"
-        zshrc_target="$(nivuus_system_zshrc)"
+        # zshrc_target is resolved later, once zsh is installed: on a fresh
+        # machine /etc/zsh only appears with the zsh package.
+        zshrc_target=''
         position=bottom
         question="Installer Nivuus Shell pour tous les utilisateurs (dans $prefix) ?"
     else
@@ -185,6 +190,7 @@ cmd_install() {
     fi
     # shellcheck disable=SC2086
     if ! nivuus_step_install_packages required $NIVUUS_DEPS_REQUIRED \
+        || ! zshrc_target="${zshrc_target:-$(nivuus_system_zshrc)}" \
         || ! nivuus_step_copy_tree "$NIVUUS_SRC_ROOT" "$prefix" \
         || ! nivuus_step_write_version "$NIVUUS_SRC_ROOT" "$prefix" \
         || ! nivuus_step_write_zshrc "$zshrc_target" "$prefix" "$position"; then

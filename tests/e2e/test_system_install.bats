@@ -20,9 +20,14 @@ svc:x:999:999::/nonexistent:/usr/sbin/nologin
 alice:x:1000:1000::$R/home/alice:/bin/bash
 EOP
     printf 'UID_MIN 1000\nUID_MAX 60000\n' > "$TMP/login.defs"
+    # Fake chsh: journals the call and, like the real one, updates the
+    # (fake) passwd so a later uninstall sees the shell Nivuus set.
     cat > "$TMP/fakebin/chsh" <<EOP
 #!/bin/sh
 printf '%s\n' "\$*" >> "$TMP/CALLS-chsh"
+[ "\$1" = "-s" ] && [ -n "\$3" ] || exit 0
+awk -F: -v OFS=: -v u="\$3" -v s="\$2" '\$1 == u { \$7 = s } 1' "$TMP/passwd" > "$TMP/passwd.new" \\
+    && mv "$TMP/passwd.new" "$TMP/passwd"
 EOP
     cat > "$TMP/fakebin/sudo" <<EOP
 #!/bin/sh
@@ -209,4 +214,47 @@ teardown() { rm -rf "$TMP"; }
     "$NIVUUS" install --system --yes --minimal
     run "$R/usr/local/share/nivuus-shell/bin/nivuus" uninstall --dry-run --yes
     [ "$status" -eq 0 ]
+}
+
+# A fresh machine has no zsh, hence no /etc/zsh yet: the global zshrc must be
+# chosen AFTER the zsh package is installed, or the block lands in /etc/zshrc,
+# which Debian's zsh never reads. The PATH is rebuilt without zsh and the fake
+# apt-get "installs" it, creating /etc/zsh/zshrc as the package does.
+@test "install --system on a machine without zsh picks the global zshrc the new package creates" {
+    rm -rf "$R/etc/zsh"
+    mkdir -p "$TMP/nozsh"
+    for t in bash sh env cat grep sed awk cut head tail tr mktemp cp mv rm mkdir rmdir dirname \
+             sha256sum shasum id date wc readlink chmod chown find uname getent sort touch ls ln; do
+        p="$(command -v "$t" 2>/dev/null)" || continue
+        ln -sf "$p" "$TMP/nozsh/$t"
+    done
+    cat > "$TMP/nozsh/apt-get" <<EOP
+#!/bin/sh
+printf '%s\n' "\$*" >> "$TMP/CALLS-apt-get"
+case "\$*" in *zsh*)
+    printf '#!/bin/sh\n' > "$TMP/nozsh/zsh"; chmod +x "$TMP/nozsh/zsh"
+    mkdir -p "$R/etc/zsh"; printf '# shipped by the zsh package\n' > "$R/etc/zsh/zshrc" ;;
+esac
+EOP
+    chmod +x "$TMP/nozsh/apt-get"
+    cp "$TMP/fakebin/chsh" "$TMP/nozsh/chsh"
+    PATH="$TMP/nozsh" run "$NIVUUS" install --system --yes --no-chsh
+    [ "$status" -eq 0 ]
+    grep -q "install -y --no-install-recommends zsh" "$TMP/CALLS-apt-get"
+    grep -q "^PKG	zsh	-	apt-get$" "$R/var/lib/nivuus/manifest.tsv"
+    [ "$(head -n1 "$R/etc/zsh/zshrc")" = "# shipped by the zsh package" ]
+    run grep -c ">>> nivuus shell >>>" "$R/etc/zsh/zshrc"
+    [ "$output" = "1" ]
+    [ ! -e "$R/etc/zshrc" ]
+}
+
+@test "install --system gives the copied files to root, whoever made the clone" {
+    [ "$(id -u)" -eq 0 ] || skip "needs real root to create a foreign-owned source tree"
+    cp -r "$ROOT" "$TMP/clone"
+    find "$TMP/clone" -name '*.zwc' -delete
+    chown -R 65534:65534 "$TMP/clone"
+    run "$TMP/clone/bin/nivuus" install --system --yes --minimal
+    [ "$status" -eq 0 ]
+    [ "$(stat -c '%u' "$R/usr/local/share/nivuus-shell/.zshrc")" = "0" ]
+    [ "$(stat -c '%u' "$R/usr/local/share/nivuus-shell/config/00-core.zsh")" = "0" ]
 }

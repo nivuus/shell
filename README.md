@@ -34,8 +34,9 @@ git clone https://github.com/nivuus/shell.git /tmp/nivuus-shell && /tmp/nivuus-s
 ```
 
 This will:
-1. Clone the repository to `/tmp/nivuus-shell`
-2. Install the missing dependencies (`zsh`, `git`, `curl`) with your package manager
+1. Clone the repository to `/tmp/nivuus-shell` (`git` is the one prerequisite of
+   this one-liner itself)
+2. Install the missing dependencies (`zsh`, `curl`) with your package manager
 3. Install Nivuus in `/usr/local/share/nivuus-shell` and source it from the global
    zshrc (`/etc/zsh/zshrc` on Debian/Ubuntu/Arch, `/etc/zshrc` elsewhere), so every
    account gets it, including the ones created later
@@ -45,8 +46,9 @@ This will:
 6. Clean up the temporary directory and restart your shell with Nivuus
 
 Nothing is asked twice: when `sudo` is not available the installer falls back to a
-per-user install (see below). Every change is journaled, so `sudo nivuus uninstall`
-puts the machine back exactly as it was (login shells included).
+per-user install (see below). Every file and login-shell change is journaled, so
+`sudo nivuus uninstall` restores them exactly. The packages it installed are kept:
+Nivuus never assumes they were there only for it.
 
 ### Manual Installation
 

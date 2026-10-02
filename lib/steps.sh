@@ -83,14 +83,23 @@ nivuus_step_check_required_deps() {
 # Run a package manager command ($2, one line produced by lib/deps.sh) with
 # the privileges it needs. Never sudo for brew, which refuses to run as root:
 # when we ARE root (sudo), drop back to the human user.
+#
+# Without root, sudo is interactive at most once: sudo caches the credentials
+# for the following calls. Once sudo was refused (NIVUUS_SUDO_REFUSED, set by
+# bin/nivuus when its single password prompt failed) or without a terminal
+# to answer a prompt, only a non-interactive sudo (-n) is attempted, so the
+# user is never prompted again and a non-interactive run never hangs.
 _nivuus_pkg_run() {
-    local mgr="$1" cmd="$2" who
+    local mgr="$1" cmd="$2" who sudo_opts=''
     if nivuus_pkg_needs_root "$mgr"; then
         if nivuus_is_root; then
             DEBIAN_FRONTEND=noninteractive eval "$cmd"
         else
             command -v sudo >/dev/null 2>&1 || { log_error "sudo introuvable : lance « $cmd » en root."; return 1; }
-            eval "sudo env DEBIAN_FRONTEND=noninteractive $cmd"
+            if [ -n "${NIVUUS_SUDO_REFUSED:-}" ] || ! nivuus_is_tty; then
+                sudo_opts='-n '
+            fi
+            eval "sudo ${sudo_opts}env DEBIAN_FRONTEND=noninteractive $cmd"
         fi
     else
         if nivuus_is_root; then

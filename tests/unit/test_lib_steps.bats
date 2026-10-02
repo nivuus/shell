@@ -194,7 +194,8 @@ EOF
         NIVUUS_STATE_DIR='$TMP/state'; nivuus_manifest_begin user '$TMP/install'
         nivuus_step_install_packages required zsh git curl && nivuus_manifest_commit"
     [ "$status" -eq 0 ]
-    grep -q "^env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends zsh git curl$" "$TMP/CALLS-sudo"
+    # bats has no terminal: the sudo is the non-interactive one (-n).
+    grep -q "^-n env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends zsh git curl$" "$TMP/CALLS-sudo"
     grep -q "^update -qq$" "$TMP/CALLS-apt-get"        # l'index est rafraîchi d'abord
     [ -x "$TMP/fakebin/zsh" ]
     run grep -c "^PKG" "$TMP/state/manifest.tsv"
@@ -403,4 +404,25 @@ bob" ]
     nivuus_step_write_zshrc "$TMP/global" "$TMP/install" bottom
     [ "$(head -n1 "$TMP/global")" = "bindkey -e" ]
     [ "$(tail -n1 "$TMP/global")" = "# <<< nivuus shell <<<" ]
+}
+
+@test "install_packages never prompts again once sudo was refused (sudo -n)" {
+    _fake_pkg_env apt-get
+    export NIVUUS_PKG_MANAGER=apt-get NIVUUS_UID=1000 NIVUUS_SUDO_REFUSED=1
+    run bash -c "PATH='$TMP/fakebin'; source '$LIB/log.sh'; source '$LIB/detect.sh'; source '$LIB/manifest.sh'; source '$LIB/deps.sh'; source '$LIB/steps.sh'
+        NIVUUS_STATE_DIR='$TMP/state'; nivuus_manifest_begin user '$TMP/install'
+        nivuus_step_install_packages optional bat fd"
+    [ "$status" -eq 0 ]
+    ! grep -qv "^-n " "$TMP/CALLS-sudo"              # every sudo call is non-interactive
+}
+
+@test "install_packages uses a non-interactive sudo without a terminal" {
+    _fake_pkg_env apt-get
+    export NIVUUS_PKG_MANAGER=apt-get NIVUUS_UID=1000
+    unset NIVUUS_SUDO_REFUSED
+    run bash -c "PATH='$TMP/fakebin'; source '$LIB/log.sh'; source '$LIB/detect.sh'; source '$LIB/manifest.sh'; source '$LIB/deps.sh'; source '$LIB/steps.sh'
+        NIVUUS_STATE_DIR='$TMP/state'; nivuus_manifest_begin user '$TMP/install'
+        nivuus_step_install_packages required zsh" </dev/null
+    [ "$status" -eq 0 ]
+    grep -q "^-n env DEBIAN_FRONTEND=noninteractive apt-get install" "$TMP/CALLS-sudo"
 }

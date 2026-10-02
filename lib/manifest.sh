@@ -171,10 +171,16 @@ nivuus_manifest_each() {
     # Un chemin peut apparaître plusieurs fois (installations répétées héritées
     # via nivuus_manifest_inherit) : on ne rejoue que l'entrée la plus récente
     # (la première rencontrée une fois le fichier inversé) pour chaque chemin.
+    # PKG (package name) and CHSH (user name) live in their own namespaces:
+    # a user named like a package (fzf, bat...) must not have their CHSH
+    # entry shadowed by the PKG one, nor the other way round. File actions
+    # keep sharing the bare path, since they describe the same object.
+    local key
     { grep -v '^#' "$manifest" || true; } | sed '1!G;h;$!d' | while IFS="$NIVUUS_TAB" read -r a p h r; do
         [ -n "$a" ] || continue
-        if grep -qxF "$p" "$seen" 2>/dev/null; then continue; fi
-        printf '%s\n' "$p" >> "$seen"
+        case "$a" in PKG|CHSH) key="$a:$p" ;; *) key="$p" ;; esac
+        if grep -qxF "$key" "$seen" 2>/dev/null; then continue; fi
+        printf '%s\n' "$key" >> "$seen"
         "$callback" "$a" "$p" "$h" "$r"
     done
     rm -f "$seen"
@@ -313,6 +319,13 @@ _nivuus_place() {
     else
         nivuus_mkdir_p "$(dirname "$dst")"
         cp -p "$src" "$dst" || return 1
+        # cp -p run as root keeps the SOURCE owner: a system-wide install
+        # copied from a clone made by an ordinary user would leave files
+        # sourced by every shell on the machine writable by that user.
+        # System files belong to root.
+        if [ "${NIVUUS_MODE:-}" = system ] && [ "$(id -u)" -eq 0 ]; then
+            chown 0:0 "$dst" 2>/dev/null || true
+        fi
         new_hash="$(nivuus_hash_file "$dst")"
     fi
 
@@ -357,6 +370,19 @@ _nivuus_record_survivor() {
 _nivuus_keep_backup_ref() {
     [ -n "${NIVUUS_KEPT_BACKUP_REFS:-}" ] || return 0
     [ -n "$1" ] && [ "$1" != "-" ] && printf '%s\n' "$1" >> "$NIVUUS_KEPT_BACKUP_REFS"
+}
+
+# Current login shell of user $1. Goes through lib/steps.sh when loaded
+# (it honours the NIVUUS_PASSWD override the tests use); this library stays
+# usable alone, with getent / /etc/passwd as fallback.
+_nivuus_current_login_shell() {
+    if command -v nivuus_user_shell >/dev/null 2>&1; then
+        nivuus_user_shell "$1"
+    elif command -v getent >/dev/null 2>&1; then
+        getent passwd "$1" | cut -d: -f7
+    else
+        awk -F: -v u="$1" '$1 == u { print $7; exit }' /etc/passwd 2>/dev/null
+    fi
 }
 
 # Are we root for the purpose of restoring a login shell? Goes through
@@ -479,11 +505,21 @@ nivuus_restore_entry() {
             fi
             ;;
         CHSH)
-            # $path = user, $ref = original shell. In system mode (root,
-            # NIVUUS_MODE=system set by bin/nivuus) the shell is really
-            # restored: chsh asks root nothing. Otherwise chsh may ask for
-            # a password and block a non-interactive uninstall: the exact
-            # command is displayed instead.
+            # $path = user, $hash = the zsh Nivuus installed, $ref = original
+            # shell. In system mode (root, NIVUUS_MODE=system set by
+            # bin/nivuus) the shell is really restored: chsh asks root
+            # nothing. Otherwise chsh may ask for a password and block a
+            # non-interactive uninstall: the exact command is displayed
+            # instead. Same divergence rule as files: a login shell the user
+            # changed since the install is theirs, it is kept and the entry
+            # survives (as it does when chsh fails) rather than vanishing
+            # from the manifest as if it had been restored.
+            current="$(_nivuus_current_login_shell "$path")"
+            if [ -n "$current" ] && [ "$hash" != "-" ] && [ "$current" != "$hash" ]; then
+                log_warn "Shell de connexion de $path conservé (changé depuis l'installation : $current)"
+                _nivuus_record_survivor "$action" "$path" "$hash" "$ref"
+                return 0
+            fi
             if [ -n "${NIVUUS_DRY_RUN:-}" ]; then
                 log_dry "restaurerait le shell de connexion de $path : $ref"
             elif [ "${NIVUUS_MODE:-}" = system ] && _nivuus_restore_as_root \
@@ -492,6 +528,7 @@ nivuus_restore_entry() {
                     log_info "Shell de connexion de $path restauré : $ref"
                 else
                     log_warn "chsh a échoué pour $path. À la main : chsh -s $ref $path"
+                    _nivuus_record_survivor "$action" "$path" "$hash" "$ref"
                 fi
             else
                 log_info "Shell de connexion d'origine de $path : $ref"

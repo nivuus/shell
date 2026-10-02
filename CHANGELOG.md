@@ -14,7 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   dependencies (zsh, git, curl) and the optional tools (jq, fzf, eza, bat, fd,
   ripgrep, timg, grc, git-delta) with the platform package manager, sources
   Nivuus from the global zshrc and makes zsh the login shell of every human
-  account. Everything is journaled; `nivuus uninstall` restores it all.
+  account. Files and login shells are journaled and restored by
+  `nivuus uninstall`; the packages it installed are kept.
 - `nivuus install --user`, `--no-chsh`; `nivuus uninstall --system`
 - `lib/deps.sh`: package names and install commands per package manager
 - Automated GitHub Actions release workflow
