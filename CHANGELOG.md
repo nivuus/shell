@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- One command installs the whole machine: `install.sh` (and `nivuus install`)
+  defaults to a system-wide install when root or sudo is available, re-running
+  itself through sudo from an ordinary account. It installs the missing
+  dependencies (zsh, git, curl) and the optional tools (jq, fzf, eza, bat, fd,
+  ripgrep, timg, grc, git-delta) with the platform package manager, sources
+  Nivuus from the global zshrc and makes zsh the login shell of every human
+  account. Files and login shells are journaled and restored by
+  `nivuus uninstall`; the packages it installed are kept.
+- `nivuus install --user`, `--no-chsh`; `nivuus uninstall --system`
+- `lib/deps.sh`: package names and install commands per package manager
 - Automated GitHub Actions release workflow
 - Release-based auto-update system with checksum verification
 - Version tracking via `.version` file
@@ -17,6 +27,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Auto-update system now uses GitHub Releases instead of git commits
 - Update mechanism now downloads and verifies release archives
 - Version synchronization between `package.json` and `install.sh`
+
+### Fixed
+- Prompt rendered two spaces between `>` and the path (`# >  /home/x`)
+- `.zshrc` sourced twice in one shell (system-wide + per-user install) no
+  longer loads Nivuus twice
+- Shells that cannot write a system-wide install no longer try to compile or
+  auto-update it
 
 ### Security
 - Added SHA256 checksum verification for release downloads

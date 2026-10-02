@@ -260,7 +260,7 @@ if [[ ! -d "$HOME/.nvm" ]]; then
 fi
 
 if ! command -v fd &>/dev/null || ! command -v rg &>/dev/null; then
-    echo "  • Install modern tools (fd, rg, bat): cargo install fd-find ripgrep bat"
+    echo "  • Install modern tools (fd, rg, bat): re-run the installer (nivuus install), or sudo apt-get install -y fd-find ripgrep bat"
 fi
 
 echo ""

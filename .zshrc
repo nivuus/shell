@@ -7,9 +7,6 @@
 # Last updated: January 2025
 # =============================================================================
 
-# Performance measurement
-typeset -g NIVUUS_START_TIME=$EPOCHREALTIME
-
 # =============================================================================
 # Installation Directory
 # =============================================================================
@@ -20,6 +17,21 @@ export NIVUUS_SHELL_DIR="${NIVUUS_SHELL_DIR:-$HOME/.nivuus-shell}"
 if [[ -f "${0:A:h}/config/00-core.zsh" ]]; then
     NIVUUS_SHELL_DIR="${0:A:h}"
 fi
+
+# Loaded twice in the same shell from two different installs? That happens
+# when a system-wide install (sourced from /etc/zsh/zshrc) coexists with an
+# older per-user one (sourced from ~/.zshrc): the first one wins, the second
+# is skipped and NIVUUS_SHELL_DIR is pointed back at it. Re-sourcing the SAME
+# install (`source ~/.zshrc` after editing ~/.zsh_local) still reloads.
+# `typeset -g`, never `export`: a nested zsh must load Nivuus afresh.
+if [[ -n "${NIVUUS_SHELL_LOADED_FROM:-}" && "$NIVUUS_SHELL_LOADED_FROM" != "$NIVUUS_SHELL_DIR" ]]; then
+    export NIVUUS_SHELL_DIR="$NIVUUS_SHELL_LOADED_FROM"
+    return 0
+fi
+typeset -g NIVUUS_SHELL_LOADED_FROM="$NIVUUS_SHELL_DIR"
+
+# Performance measurement
+typeset -g NIVUUS_START_TIME=$EPOCHREALTIME
 
 # =============================================================================
 # Feature Toggles

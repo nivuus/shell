@@ -2,6 +2,10 @@
 # install.sh — wrapper rétrocompatible autour de « nivuus install ».
 # La logique vit dans bin/nivuus et lib/. Ce fichier ne fait que traduire
 # les anciennes options.
+#
+# Without a mode flag, "nivuus install" equips the whole machine (--system:
+# dependencies, tools, global zshrc, every account's login shell) as soon as
+# root or sudo is available, and falls back to --user otherwise.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -10,11 +14,9 @@ RUN_DOCTOR=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
-        --system)
-            printf '%s\n' "L'installation système (--system) n'est pas encore disponible dans cette version." >&2
-            printf '%s\n' "Utilise l'installation utilisateur (sans --system) en attendant." >&2
-            exit 1
-            ;;
+        --system)          ARGS+=(--system) ;;
+        --user)            ARGS+=(--user) ;;
+        --no-chsh)         ARGS+=(--no-chsh) ;;
         --non-interactive) ARGS+=(--yes) ;;
         --health-check)    RUN_DOCTOR=1 ;;
         --no-backup)       : ;;   # accepté, sans effet : le manifeste sauvegarde toujours

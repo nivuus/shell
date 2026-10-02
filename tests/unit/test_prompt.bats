@@ -299,3 +299,20 @@ run_zsh() {
     run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep '_AZURE_PROMPT_CACHE_TIME' config/05-prompt.zsh"
     [ "$status" -eq 0 ]
 }
+
+# =============================================================================
+# Spacing: the template, not the segment, separates {status} from {path}
+# =============================================================================
+
+@test "prompt_segment_status carries no trailing space" {
+    run zsh -c "source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/05-prompt.zsh' >/dev/null 2>&1 && prompt_segment_status"
+    [ "$status" -eq 0 ]
+    [[ "$output" != *" " ]]
+}
+
+@test "the rendered prompt has exactly one space between > and the path" {
+    run zsh -c "cd /tmp && export NIVUUS_SHELL_DIR='$NIVUUS_SHELL_DIR' && unset NIVUUS_PROMPT_FORMAT && source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/05-prompt.zsh' >/dev/null 2>&1 && print -P -- \"\$(prompt_segment_root)\$(prompt_segment_status) \$(prompt_segment_path)\" | sed 's/\x1b\[[0-9;]*m//g'"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"> /tmp"* ]]
+    [[ "$output" != *">  /tmp"* ]]
+}

@@ -50,8 +50,14 @@ nivuus_zshrc_strip() {
     ' "$file"
 }
 
+# $3 (optional): where the block goes in a file that does not have one yet.
+#   top    (default): at the head -- what follows wins, so the user's own
+#                     config always overrides Nivuus (user mode, ~/.zshrc).
+#   bottom          : at the tail -- after the distro defaults (system mode,
+#                     /etc/zsh/zshrc), which Nivuus must override; every
+#                     user's ~/.zshrc comes after it anyway.
 nivuus_zshrc_merge() {
-    local file="$1" install_dir="$2" state
+    local file="$1" install_dir="$2" position="${3:-top}" state
     state="$(nivuus_zshrc_state "$file")"
     case "$state" in
         corrupt)
@@ -63,15 +69,27 @@ nivuus_zshrc_merge() {
             nivuus_zshrc_block "$install_dir"
             ;;
         present)
-            # Remplace le bloc, conserve le reste tel quel.
-            nivuus_zshrc_block "$install_dir"
-            nivuus_zshrc_strip "$file"
+            # Replace the block, keep the rest as is -- at the requested
+            # position, so a reinstall never moves the block.
+            if [ "$position" = "bottom" ]; then
+                nivuus_zshrc_strip "$file"
+                nivuus_zshrc_block "$install_dir"
+            else
+                nivuus_zshrc_block "$install_dir"
+                nivuus_zshrc_strip "$file"
+            fi
             ;;
         absent)
-            nivuus_zshrc_block "$install_dir"
-            cat "$file"
-            # Garantit une newline finale si le fichier n'en avait pas.
-            [ -n "$(tail -c 1 "$file")" ] && printf '\n' || true
+            if [ "$position" = "bottom" ]; then
+                cat "$file"
+                # Guarantee a final newline if the file had none.
+                [ -n "$(tail -c 1 "$file")" ] && printf '\n' || true
+                nivuus_zshrc_block "$install_dir"
+            else
+                nivuus_zshrc_block "$install_dir"
+                cat "$file"
+                [ -n "$(tail -c 1 "$file")" ] && printf '\n' || true
+            fi
             ;;
     esac
 }

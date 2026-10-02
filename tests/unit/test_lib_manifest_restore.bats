@@ -105,3 +105,70 @@ teardown() { rm -rf "$TMP"; }
     [ "$status" -eq 0 ]
     [[ "$output" == *"inconnue"* ]]
 }
+
+# ---------------------------------------------------------------------------
+# CHSH in system mode: real restoration, with the same divergence rule as
+# files. Fake chsh and passwd: nothing here touches a real account.
+# ---------------------------------------------------------------------------
+
+_chsh_env() {
+    mkdir -p "$TMP/fakebin"
+    printf '#!/bin/sh\nprintf "%%s\\n" "$*" >> "%s/CALLS-chsh"\n' "$TMP" > "$TMP/fakebin/chsh"
+    chmod +x "$TMP/fakebin/chsh"
+    printf 'root:x:0:0::/root:/bin/bash\n%s:x:1000:1000::%s:%s\n' "$1" "$TMP" "$2" > "$TMP/passwd"
+    export PATH="$TMP/fakebin:$PATH" NIVUUS_PASSWD="$TMP/passwd" NIVUUS_MODE=system NIVUUS_UID=0
+    source "$LIB/detect.sh"; source "$LIB/deps.sh"; source "$LIB/zshrc.sh"; source "$LIB/steps.sh"
+    NIVUUS_ROLLBACK_SURVIVORS="$TMP/survivors"; : > "$NIVUUS_ROLLBACK_SURVIVORS"
+}
+
+@test "CHSH is restored in system mode when the shell is still the one Nivuus set" {
+    _chsh_env alice /usr/bin/zsh
+    nivuus_manifest_record CHSH alice /usr/bin/zsh /bin/bash
+    nivuus_manifest_commit
+    nivuus_manifest_rollback
+    grep -q "^-s /bin/bash alice$" "$TMP/CALLS-chsh"
+    [ ! -s "$NIVUUS_ROLLBACK_SURVIVORS" ]
+}
+
+@test "CHSH keeps a shell the user changed after the install, and survives" {
+    _chsh_env alice /usr/bin/fish
+    nivuus_manifest_record CHSH alice /usr/bin/zsh /bin/bash
+    nivuus_manifest_commit
+    run nivuus_manifest_rollback
+    [ "$status" -eq 0 ]
+    [ ! -f "$TMP/CALLS-chsh" ]
+    [[ "$output" == *"conservé"*"/usr/bin/fish"* ]]
+    grep -q "^CHSH	alice	/usr/bin/zsh	/bin/bash$" "$NIVUUS_ROLLBACK_SURVIVORS"
+}
+
+@test "CHSH survives when chsh itself fails" {
+    _chsh_env alice /usr/bin/zsh
+    printf '#!/bin/sh\nexit 1\n' > "$TMP/fakebin/chsh"
+    nivuus_manifest_record CHSH alice /usr/bin/zsh /bin/bash
+    nivuus_manifest_commit
+    run nivuus_manifest_rollback
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"chsh -s /bin/bash alice"* ]]
+    grep -q "^CHSH	alice	" "$NIVUUS_ROLLBACK_SURVIVORS"
+}
+
+@test "a user named like a package still gets their shell restored (PKG and CHSH namespaces)" {
+    _chsh_env fzf /usr/bin/zsh
+    nivuus_manifest_record CHSH fzf /usr/bin/zsh /bin/bash
+    nivuus_manifest_record PKG fzf - apt-get     # recorded after, as the installer does
+    nivuus_manifest_commit
+    nivuus_manifest_rollback
+    grep -q "^-s /bin/bash fzf$" "$TMP/CALLS-chsh"
+}
+
+@test "manifest_each still replays only the latest entry per file path" {
+    printf 'x' > "$TMP/src"
+    nivuus_install_file "$TMP/src" "$TMP/created"
+    nivuus_manifest_commit
+    nivuus_manifest_begin user "$TMP/install"; nivuus_manifest_inherit
+    nivuus_manifest_record CREATE "$TMP/created" deadbeef -
+    nivuus_manifest_commit
+    _print_path() { printf '%s\n' "$2"; }
+    calls="$(nivuus_manifest_each _print_path | grep -c "$TMP/created")"
+    [ "$calls" = "1" ]
+}

@@ -258,8 +258,10 @@ prompt_segment_root() {
     is_root && echo "%{${THEME_ROOT}%}#%{%f%} "
 }
 
+# No trailing space here: the template ('{status} {path}') supplies the
+# separator. Carrying one as well rendered as `>  /path` (two spaces).
 prompt_segment_status() {
-    echo "%(?:%{%B${THEME_SUCCESS}%}>:%{%B${THEME_ERROR}%}>) "
+    echo "%(?:%{%B${THEME_SUCCESS}%}>:%{%B${THEME_ERROR}%}>)"
 }
 
 prompt_segment_path() {

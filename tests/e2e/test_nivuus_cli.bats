@@ -6,6 +6,10 @@ setup() {
     TMP="$(mktemp -d)"
     export HOME="$TMP/home"
     mkdir -p "$HOME"
+    # Installation utilisateur hermétique : sans --minimal, nivuus install
+    # changerait le shell de connexion du compte qui lance les tests et
+    # installerait les outils optionnels avec le vrai gestionnaire de paquets.
+    export NIVUUS_MINIMAL=1
     export NIVUUS_STATE_DIR="$TMP/state"
 }
 

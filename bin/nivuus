@@ -8,6 +8,7 @@ NIVUUS_SRC_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 . "$NIVUUS_SRC_ROOT/lib/detect.sh"
 . "$NIVUUS_SRC_ROOT/lib/manifest.sh"
 . "$NIVUUS_SRC_ROOT/lib/zshrc.sh"
+. "$NIVUUS_SRC_ROOT/lib/deps.sh"
 . "$NIVUUS_SRC_ROOT/lib/steps.sh"
 
 usage() {
@@ -15,17 +16,32 @@ usage() {
 nivuus — gestion de Nivuus Shell
 
 Usage :
-  nivuus install   [--dry-run] [--yes] [--prefix DIR] [--minimal]
-  nivuus uninstall [--dry-run] [--yes] [--purge]
+  nivuus install   [--system|--user] [--dry-run] [--yes] [--prefix DIR] [--minimal] [--no-chsh]
+  nivuus uninstall [--system|--user] [--dry-run] [--yes] [--purge]
   nivuus update
   nivuus doctor
   nivuus help
 
+Modes :
+  --system    Pour tous les utilisateurs de la machine : fichiers dans
+              /usr/local/share/nivuus-shell, bloc Nivuus dans le zshrc global
+              (/etc/zsh/zshrc ou /etc/zshrc), zsh comme shell de connexion de
+              chaque compte. Relance via sudo si besoin. C'est le mode par
+              défaut dès que root ou sudo est disponible.
+  --user      Pour toi seulement : ~/.nivuus-shell et ~/.zshrc. Mode par
+              défaut sans sudo, ou dès que --prefix est donné.
+
+Dans les deux modes, les dépendances manquantes (zsh, git, curl) sont
+installées avec le gestionnaire de paquets de la plateforme (via sudo hors
+root), puis les outils optionnels (jq, fzf, eza, bat, fd, ripgrep, timg,
+grc, git-delta) quand ils sont packagés.
+
 Options :
-  --dry-run   N'écrit rien ; affiche ce qui serait fait.
+  --dry-run   N'écrit rien ; affiche ce qui serait fait. Ne demande jamais sudo.
   --yes       Ne pose aucune question.
   --prefix    Répertoire d'installation (défaut : ~/.nivuus-shell).
-  --minimal   Mode serveur/container : pas de chsh, pas d'extras.
+  --minimal   Mode serveur/container : pas de chsh, pas d'outils optionnels.
+  --no-chsh   Ne change aucun shell de connexion.
   --purge     (uninstall) supprime aussi l'état Nivuus (manifeste, sauvegardes).
               Ne supprime que ce que Nivuus a créé : ~/.zsh_local (si présent
               mais non créé par Nivuus) et ~/.zsh_history ne sont JAMAIS supprimés.
@@ -40,27 +56,119 @@ confirm() {
     case "$reply" in [Nn]*) return 1 ;; *) return 0 ;; esac
 }
 
+# Effective install mode, stored in NIVUUS_MODE.
+#   $1 = explicit mode (--system / --user) or empty
+#   $2 = non-empty when --prefix was given
+# Without a flag: system as soon as root or sudo is available -- one command
+# must equip the whole machine, even launched by an ordinary user -- user
+# otherwise. A password-protected sudo is only attempted when a terminal can
+# answer it; --dry-run never asks for privileges.
+_nivuus_resolve_mode() {
+    local explicit="$1" prefix_given="$2"
+    if [ -n "$explicit" ]; then
+        NIVUUS_MODE="$explicit"
+    elif [ -n "$prefix_given" ]; then
+        NIVUUS_MODE=user
+    elif [ -n "${NIVUUS_DRY_RUN:-}" ] && ! nivuus_is_root; then
+        NIVUUS_MODE=user
+    elif nivuus_is_root || nivuus_sudo_available; then
+        NIVUUS_MODE=system
+    elif command -v sudo >/dev/null 2>&1 && nivuus_is_tty; then
+        log_info "Installation pour tous les utilisateurs : sudo va demander ton mot de passe (--user pour n'installer que pour toi)."
+        if sudo -v; then
+            NIVUUS_MODE=system
+        else
+            log_warn "sudo refusé : installation pour toi seulement."
+            NIVUUS_MODE=user
+            # Remembered by lib/steps.sh: the package steps must not prompt
+            # for a password a second time.
+            export NIVUUS_SUDO_REFUSED=1
+        fi
+    else
+        NIVUUS_MODE=user
+    fi
+    export NIVUUS_MODE
+}
+
+# Re-run the same command as root through sudo, forwarding the Nivuus
+# settings from the environment (sudo would drop them). NIVUUS_UID=0 is set
+# explicitly: a simulated NIVUUS_UID (tests) must not survive the re-run, or
+# the child process would re-run itself forever.
+_nivuus_reexec_as_root() {
+    local v envs=("NIVUUS_UID=0")
+    for v in NIVUUS_STATE_DIR NIVUUS_SYSTEM_PREFIX NIVUUS_SYSTEM_STATE_DIR \
+             NIVUUS_SYSTEM_ZSHRC NIVUUS_ETC_DIR NIVUUS_PKG_MANAGER NIVUUS_PASSWD \
+             NIVUUS_LOGIN_DEFS NIVUUS_DRY_RUN NIVUUS_MINIMAL NIVUUS_QUIET \
+             NIVUUS_CHARTE_MODE COLORFGBG; do
+        [ -n "${!v:-}" ] && envs+=("$v=${!v}")
+    done
+    if ! command -v sudo >/dev/null 2>&1; then
+        log_error "Privilèges root nécessaires et sudo introuvable. Relance en root : $NIVUUS_SRC_ROOT/bin/nivuus $*"
+        return 1
+    fi
+    log_info "Privilèges root nécessaires : relance via sudo."
+    exec sudo env "${envs[@]}" "$NIVUUS_SRC_ROOT/bin/nivuus" "$@"
+}
+
 cmd_install() {
-    local prefix="$HOME/.nivuus-shell"
+    local prefix='' mode='' prefix_given='' no_chsh='' zshrc_target position \
+          missing question
+    local orig_args=("$@")
     while [ $# -gt 0 ]; do
         case "$1" in
             --dry-run) export NIVUUS_DRY_RUN=1 ;;
             --yes|-y)  ASSUME_YES=1 ;;
             --minimal) export NIVUUS_MINIMAL=1 ;;
+            --system)  mode=system ;;
+            --user)    mode=user ;;
+            --no-chsh) no_chsh=1 ;;
             --prefix)
                 shift
                 [ $# -gt 0 ] || { log_error "L'option --prefix attend un chemin."; return 2; }
-                prefix="$1"
+                prefix="$1"; prefix_given=1
                 ;;
             *) log_error "Option inconnue : $1"; return 2 ;;
         esac
         shift
     done
 
-    nivuus_step_check_required_deps || return 1
-    confirm "Installer Nivuus Shell dans $prefix ?" || { log_info "Annulé."; return 0; }
+    _nivuus_resolve_mode "$mode" "$prefix_given"
+    if [ "$NIVUUS_MODE" = system ] && ! nivuus_is_root && [ -z "${NIVUUS_DRY_RUN:-}" ]; then
+        # ${arr[@]+"${arr[@]}"}: bash < 4.4 rejects "${arr[@]}" on an empty
+        # array under set -u.
+        _nivuus_reexec_as_root install --system ${orig_args[@]+"${orig_args[@]}"}
+        return 1
+    fi
 
-    nivuus_manifest_begin user "$prefix"
+    if [ "$NIVUUS_MODE" = system ]; then
+        : "${prefix:=$NIVUUS_SYSTEM_PREFIX}"
+        : "${NIVUUS_STATE_DIR:=$NIVUUS_SYSTEM_STATE_DIR}"
+        # zshrc_target is resolved later, once zsh is installed: on a fresh
+        # machine /etc/zsh only appears with the zsh package.
+        zshrc_target=''
+        position=bottom
+        question="Installer Nivuus Shell pour tous les utilisateurs (dans $prefix) ?"
+    else
+        : "${prefix:=$HOME/.nivuus-shell}"
+        zshrc_target="$HOME/.zshrc"
+        position=top
+        question="Installer Nivuus Shell dans $prefix ?"
+    fi
+    export NIVUUS_STATE_DIR
+
+    # shellcheck disable=SC2086  # space-separated list
+    missing="$(nivuus_deps_missing $NIVUUS_DEPS_REQUIRED)"
+    if [ -n "$missing" ]; then
+        if [ -n "$(nivuus_pkg_manager)" ]; then
+            question="$question Dépendances à installer d'abord : $missing."
+        else
+            # Pas de gestionnaire de paquets : inutile d'aller plus loin.
+            nivuus_step_check_required_deps || return 1
+        fi
+    fi
+    confirm "$question" || { log_info "Annulé."; return 0; }
+
+    nivuus_manifest_begin "$NIVUUS_MODE" "$prefix"
     # Hérite les entrées d'une installation précédente ET pose elle-même la
     # marque post-inherit dont nivuus_manifest_abort a besoin pour ne
     # défaire que sa propre part si CETTE installation échoue, jamais une
@@ -76,10 +184,16 @@ cmd_install() {
     # ne le supprimera donc jamais, préexistant ou non. S'il n'existe pas
     # encore, un MKDIR l'autorise à être repris par rmdir plus tard s'il
     # finit vide -- sans jamais toucher à un ~/.cache non vide ou déjà là.
-    [ -d "$HOME/.cache" ] || nivuus_manifest_record MKDIR "$HOME/.cache" '-' '-'
-    if ! nivuus_step_copy_tree "$NIVUUS_SRC_ROOT" "$prefix" \
+    # In system mode ~/.cache belongs to each user: it is left alone.
+    if [ "$NIVUUS_MODE" = user ] && [ ! -d "$HOME/.cache" ]; then
+        nivuus_manifest_record MKDIR "$HOME/.cache" '-' '-'
+    fi
+    # shellcheck disable=SC2086
+    if ! nivuus_step_install_packages required $NIVUUS_DEPS_REQUIRED \
+        || ! zshrc_target="${zshrc_target:-$(nivuus_system_zshrc)}" \
+        || ! nivuus_step_copy_tree "$NIVUUS_SRC_ROOT" "$prefix" \
         || ! nivuus_step_write_version "$NIVUUS_SRC_ROOT" "$prefix" \
-        || ! nivuus_step_write_zshrc "$HOME/.zshrc" "$prefix"; then
+        || ! nivuus_step_write_zshrc "$zshrc_target" "$prefix" "$position"; then
         log_error "Installation interrompue."
         # Le manifeste n'a jamais été committé (voir nivuus_manifest_commit
         # plus bas) : sans ceci, tout ce que les étapes précédentes ont déjà
@@ -88,29 +202,75 @@ cmd_install() {
         nivuus_manifest_abort
         return 1
     fi
+
+    # Login shell and optional tools: never blocking (each step turns into a
+    # hint when it fails), skipped with --minimal.
+    if [ -z "${NIVUUS_MINIMAL:-}" ] && [ -z "$no_chsh" ]; then
+        if [ "$NIVUUS_MODE" = system ]; then
+            nivuus_step_chsh_all_users
+        else
+            nivuus_step_chsh "$(id -un)"
+        fi
+    fi
+    if [ -z "${NIVUUS_MINIMAL:-}" ]; then
+        # shellcheck disable=SC2086
+        nivuus_step_install_packages optional $NIVUUS_DEPS_OPTIONAL
+    fi
     nivuus_manifest_commit
 
     if [ -n "${NIVUUS_DRY_RUN:-}" ]; then
         log_info "Aucune modification effectuée (--dry-run)."
+    elif [ "$NIVUUS_MODE" = system ]; then
+        log_ok "Nivuus Shell installé pour tous les utilisateurs dans $prefix"
+        log_info "Ouvre un nouveau terminal, ou lance « exec zsh » pour démarrer."
     else
         log_ok "Nivuus Shell installé dans $prefix"
         log_info "Lance « exec zsh » pour démarrer."
     fi
 }
 
+# A manifest's mode from its header (mode=user|system), "user" by default.
+_nivuus_manifest_mode() {
+    local m
+    m="$(head -n1 "$1" 2>/dev/null | tr '\t' '\n' | sed -n 's/^mode=//p')"
+    printf '%s\n' "${m:-user}"
+}
+
 cmd_uninstall() {
-    local purge='' f name mkdir_levels level header kept_refs
+    local purge='' mode='' f name mkdir_levels level header kept_refs user_state
+    local orig_args=("$@")
     while [ $# -gt 0 ]; do
         case "$1" in
             --dry-run) export NIVUUS_DRY_RUN=1 ;;
             --yes|-y)  ASSUME_YES=1 ;;
             --purge)   purge=1 ;;
+            --system)  mode=system ;;
+            --user)    mode=user ;;
             *) log_error "Option inconnue : $1"; return 2 ;;
         esac
         shift
     done
 
-    : "${NIVUUS_STATE_DIR:=${XDG_STATE_HOME:-$HOME/.local/state}/nivuus}"
+    # Which manifest? Explicit through --system/--user; otherwise the user's
+    # one when it exists (its header states its mode), else the system's.
+    user_state="${NIVUUS_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/nivuus}"
+    if [ -z "$mode" ]; then
+        if [ -f "$user_state/manifest.tsv" ]; then
+            mode="$(_nivuus_manifest_mode "$user_state/manifest.tsv")"
+        elif [ -f "$NIVUUS_SYSTEM_STATE_DIR/manifest.tsv" ]; then
+            mode=system
+        else
+            mode=user
+        fi
+    fi
+    NIVUUS_MODE="$mode"; export NIVUUS_MODE
+
+    if [ "$NIVUUS_MODE" = system ]; then
+        : "${NIVUUS_STATE_DIR:=$NIVUUS_SYSTEM_STATE_DIR}"
+    else
+        NIVUUS_STATE_DIR="$user_state"
+    fi
+    export NIVUUS_STATE_DIR
     NIVUUS_MANIFEST="$NIVUUS_STATE_DIR/manifest.tsv"
     NIVUUS_BACKUP_DIR="$NIVUUS_STATE_DIR/backups"
 
@@ -119,8 +279,18 @@ cmd_uninstall() {
         return 0
     fi
 
-    confirm "Désinstaller Nivuus Shell et restaurer la configuration d'origine ?" \
-        || { log_info "Annulé."; return 0; }
+    if [ "$NIVUUS_MODE" = system ] && ! nivuus_is_root && [ -z "${NIVUUS_DRY_RUN:-}" ]; then
+        _nivuus_reexec_as_root uninstall --system ${orig_args[@]+"${orig_args[@]}"}
+        return 1
+    fi
+
+    if [ "$NIVUUS_MODE" = system ]; then
+        confirm "Désinstaller Nivuus Shell pour tous les utilisateurs et restaurer la configuration d'origine ?" \
+            || { log_info "Annulé."; return 0; }
+    else
+        confirm "Désinstaller Nivuus Shell et restaurer la configuration d'origine ?" \
+            || { log_info "Annulé."; return 0; }
+    fi
 
     # Ligne d'en-tête, gardée au cas où le manifeste doive être réécrit
     # (entrées non appliquées : voir NIVUUS_ROLLBACK_SURVIVORS ci-dessous).
@@ -136,7 +306,9 @@ cmd_uninstall() {
 
     if [ -n "$purge" ] && [ -z "${NIVUUS_DRY_RUN:-}" ]; then
         # On ne supprime QUE ce que Nivuus a créé, jamais un répertoire en bloc.
-        if [ -f "$HOME/.zsh_local" ]; then
+        # Artifacts under $HOME belong to each user: system mode leaves them
+        # alone (they all live in ~/.cache).
+        if [ "$NIVUUS_MODE" = user ] && [ -f "$HOME/.zsh_local" ]; then
             log_info "~/.zsh_local n'a pas été créé par Nivuus : conservé. Supprime-le à la main si tu le souhaites."
         fi
         # Artefacts d'exécution écrits par le shell une fois la session
@@ -144,8 +316,8 @@ cmd_uninstall() {
         # donc jamais journalisés au moment de l'installation. Reconnus par
         # leur nom exact -- propre à Nivuus -- jamais par un motif large :
         # aucun rm -rf sur un répertoire qui pourrait contenir autre chose.
-        [ -f "$HOME/.nivuus-shell-last-update-check" ] && rm -f "$HOME/.nivuus-shell-last-update-check"
-        if [ -d "$HOME/.cache/nivuus-shell" ]; then
+        [ "$NIVUUS_MODE" = user ] && [ -f "$HOME/.nivuus-shell-last-update-check" ] && rm -f "$HOME/.nivuus-shell-last-update-check"
+        if [ "$NIVUUS_MODE" = user ] && [ -d "$HOME/.cache/nivuus-shell" ]; then
             find "$HOME/.cache/nivuus-shell" -type f -exec rm -f {} + 2>/dev/null || true
             find "$HOME/.cache/nivuus-shell" -depth -type d -exec rmdir {} + 2>/dev/null || true
             # ~/.cache lui-même n'est PAS supprimé ici : on ne sait pas, à cet
@@ -214,6 +386,8 @@ cmd_uninstall() {
 
     if [ -n "${NIVUUS_DRY_RUN:-}" ]; then
         log_info "Aucune modification effectuée (--dry-run)."
+    elif [ "$NIVUUS_MODE" = system ]; then
+        log_ok "Nivuus Shell désinstallé pour tous les utilisateurs."
     else
         log_ok "Nivuus Shell désinstallé."
     fi
