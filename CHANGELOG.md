@@ -37,6 +37,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `nivuus update` reported "Could not fetch latest version" since the repo
   moved to `nivuus/shell`: the updater now targets the new name and follows
   GitHub redirects
+- `nivuus update` failed with a 404 on every release since 3.1.0: it asked for
+  `nivuus-shell-v<version>.tar.gz`, while the shared release workflow
+  publishes `<repo>-<version>.tar.gz` (`shell-3.2.1.tar.gz`)
 
 ### Security
 - Added SHA256 checksum verification for release downloads

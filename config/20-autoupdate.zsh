@@ -175,7 +175,10 @@ _nivuus_create_update_backup() {
 _nivuus_download_release() {
     local version=$1
     local temp_dir=$(mktemp -d)
-    local archive_url="https://github.com/$NIVUUS_GITHUB_REPO/releases/download/v${version}/nivuus-shell-v${version}.tar.gz"
+    # The shared nivuus/.github release workflow names the archive after the
+    # repository: <repo-name>-<version>.tar.gz (e.g. shell-3.2.1.tar.gz).
+    local archive_name="${NIVUUS_GITHUB_REPO##*/}-${version}.tar.gz"
+    local archive_url="https://github.com/$NIVUUS_GITHUB_REPO/releases/download/v${version}/${archive_name}"
     local checksums_url="https://github.com/$NIVUUS_GITHUB_REPO/releases/download/v${version}/SHA256SUMS"
 
     # Download archive
@@ -201,10 +204,10 @@ _nivuus_download_release() {
         fi
 
         # Extract the checksum for our archive
-        local expected_sum=$(grep "nivuus-shell-v${version}.tar.gz" "$temp_dir/SHA256SUMS" | awk '{print $1}')
+        local expected_sum=$(awk -v name="$archive_name" '$2 == name {print $1}' "$temp_dir/SHA256SUMS")
 
         if [[ -z "$expected_sum" ]]; then
-            echo "❌ No checksum found for nivuus-shell-v${version}.tar.gz (aborting)"
+            echo "❌ No checksum found for ${archive_name} (aborting)"
             rm -rf "$temp_dir"
             return 1
         fi
