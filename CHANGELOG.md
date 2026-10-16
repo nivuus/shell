@@ -40,6 +40,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `nivuus update` failed with a 404 on every release since 3.1.0: it asked for
   `nivuus-shell-v<version>.tar.gz`, while the shared release workflow
   publishes `<repo>-<version>.tar.gz` (`shell-3.2.1.tar.gz`)
+- `nivuus update` then stopped on "Download failed" after a good download:
+  the progress messages shared stdout with the temporary directory the caller
+  captures, which also hid them and leaked that directory
 
 ### Security
 - Added SHA256 checksum verification for release downloads
