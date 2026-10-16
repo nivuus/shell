@@ -12,7 +12,7 @@
 # Configuration variables (can be overridden in .zsh_local)
 : ${ENABLE_AUTOUPDATE:=true}
 : ${AUTOUPDATE_CHECK_FREQUENCY_DAYS:=7}
-: ${NIVUUS_GITHUB_REPO:=maximeallanic/nivuus-shell}
+: ${NIVUUS_GITHUB_REPO:=nivuus/shell}
 : ${NIVUUS_GITHUB_API:=https://api.github.com}
 : ${NIVUUS_VERIFY_CHECKSUMS:=true}
 
@@ -55,7 +55,7 @@ _nivuus_current_version() {
 
 # Get latest release version from GitHub
 _nivuus_latest_version() {
-    local response=$(curl -sS -f \
+    local response=$(curl -fsSL \
         -H "Accept: application/vnd.github.v3+json" \
         "$NIVUUS_GITHUB_API/repos/$NIVUUS_GITHUB_REPO/releases/latest" 2>/dev/null)
 
