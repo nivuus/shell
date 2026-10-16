@@ -34,6 +34,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   longer loads Nivuus twice
 - Shells that cannot write a system-wide install no longer try to compile or
   auto-update it
+- `nivuus update` reported "Could not fetch latest version" since the repo
+  moved to `nivuus/shell`: the updater now targets the new name and follows
+  GitHub redirects
 
 ### Security
 - Added SHA256 checksum verification for release downloads
