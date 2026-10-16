@@ -171,7 +171,9 @@ _nivuus_create_update_backup() {
     echo "$backup_dir"
 }
 
-# Download and verify release archive
+# Download and verify release archive.
+# Prints ONLY the temporary directory on stdout - the caller captures it with
+# $(...) - so every progress or error message goes to stderr.
 _nivuus_download_release() {
     local version=$1
     local temp_dir=$(mktemp -d)
@@ -182,9 +184,9 @@ _nivuus_download_release() {
     local checksums_url="https://github.com/$NIVUUS_GITHUB_REPO/releases/download/v${version}/SHA256SUMS"
 
     # Download archive
-    echo "📥 Downloading release v${version}..."
+    echo "📥 Downloading release v${version}..." >&2
     if ! curl -fsSL -o "$temp_dir/nivuus-shell.tar.gz" "$archive_url"; then
-        echo "❌ Failed to download release archive"
+        echo "❌ Failed to download release archive" >&2
         rm -rf "$temp_dir"
         return 1
     fi
@@ -194,11 +196,11 @@ _nivuus_download_release() {
     # match a checksum aborts the install, so a network/MITM failure cannot be
     # used to silently skip verification.
     if [[ "$NIVUUS_VERIFY_CHECKSUMS" == "true" ]]; then
-        echo "🔐 Verifying checksums..."
+        echo "🔐 Verifying checksums..." >&2
 
         if ! curl -fsSL -o "$temp_dir/SHA256SUMS" "$checksums_url"; then
-            echo "❌ Could not download checksums (verification required, aborting)"
-            echo "   Set NIVUUS_VERIFY_CHECKSUMS=false to bypass at your own risk."
+            echo "❌ Could not download checksums (verification required, aborting)" >&2
+            echo "   Set NIVUUS_VERIFY_CHECKSUMS=false to bypass at your own risk." >&2
             rm -rf "$temp_dir"
             return 1
         fi
@@ -207,7 +209,7 @@ _nivuus_download_release() {
         local expected_sum=$(awk -v name="$archive_name" '$2 == name {print $1}' "$temp_dir/SHA256SUMS")
 
         if [[ -z "$expected_sum" ]]; then
-            echo "❌ No checksum found for ${archive_name} (aborting)"
+            echo "❌ No checksum found for ${archive_name} (aborting)" >&2
             rm -rf "$temp_dir"
             return 1
         fi
@@ -215,14 +217,14 @@ _nivuus_download_release() {
         local actual_sum=$(sha256sum "$temp_dir/nivuus-shell.tar.gz" | awk '{print $1}')
 
         if [[ "$expected_sum" != "$actual_sum" ]]; then
-            echo "❌ Checksum verification failed!"
-            echo "   Expected: $expected_sum"
-            echo "   Got:      $actual_sum"
+            echo "❌ Checksum verification failed!" >&2
+            echo "   Expected: $expected_sum" >&2
+            echo "   Got:      $actual_sum" >&2
             rm -rf "$temp_dir"
             return 1
         fi
 
-        echo "✅ Checksum verified"
+        echo "✅ Checksum verified" >&2
     fi
 
     echo "$temp_dir"
