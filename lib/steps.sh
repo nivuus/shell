@@ -54,24 +54,21 @@ nivuus_step_write_version() {
     nivuus_install_file "$src/.version" "$dst/.version"
 }
 
+# Reports the missing required deps with the command installing them
+# (lib/deps.sh), and runs nothing. Needs lib/detect.sh and lib/deps.sh.
 nivuus_step_check_required_deps() {
-    local missing='' c
-    for c in zsh git curl; do
-        command -v "$c" >/dev/null 2>&1 || missing="$missing $c"
-    done
+    local missing cmd
+    # shellcheck disable=SC2086  # space-separated list
+    missing="$(nivuus_deps_missing $NIVUUS_DEPS_REQUIRED)"
     [ -n "$missing" ] || return 0
 
-    log_error "Dépendances requises manquantes :$missing"
-    if command -v apt-get >/dev/null 2>&1; then
-        log_error "Installe-les avec : sudo apt-get install$missing"
-    elif command -v dnf >/dev/null 2>&1; then
-        log_error "Installe-les avec : sudo dnf install$missing"
-    elif command -v pacman >/dev/null 2>&1; then
-        log_error "Installe-les avec : sudo pacman -S$missing"
-    elif command -v brew >/dev/null 2>&1; then
-        log_error "Installe-les avec : brew install$missing"
+    log_error "Missing required dependencies: $missing"
+    # shellcheck disable=SC2086
+    cmd="$(nivuus_pkg_hint_cmd "$(nivuus_pkg_manager)" $missing)"
+    if [ -n "$cmd" ]; then
+        log_error "Install them with: $cmd"
     else
-        log_error "Installe-les avec ton gestionnaire de paquets :$missing"
+        log_error "Install them with your package manager: $missing"
     fi
     return 1
 }

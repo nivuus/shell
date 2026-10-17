@@ -259,8 +259,17 @@ if [[ ! -d "$HOME/.nvm" ]]; then
     echo "  • Install NVM for Node.js management: nvm-install"
 fi
 
-if ! command -v fd &>/dev/null || ! command -v rg &>/dev/null; then
-    echo "  • Install modern tools (fd, rg, bat): re-run the installer (nivuus install), or sudo apt-get install -y fd-find ripgrep bat"
+# Missing tools and their install command come from lib/deps.sh, the table
+# the installer uses.
+if [ -f "$_HERE/../lib/deps.sh" ]; then
+    . "$_HERE/../lib/detect.sh"
+    . "$_HERE/../lib/deps.sh"
+    missing_tools="$(nivuus_deps_missing fd ripgrep bat zsh-autosuggestions zsh-syntax-highlighting)"
+    if [ -n "$missing_tools" ]; then
+        # shellcheck disable=SC2086  # space-separated list
+        install_cmd="$(nivuus_pkg_hint_cmd "$(nivuus_pkg_manager)" $missing_tools)"
+        echo "  • Install the missing tools ($missing_tools): re-run the installer (nivuus install)${install_cmd:+, or $install_cmd}"
+    fi
 fi
 
 echo ""

@@ -3,7 +3,7 @@
 
 setup() {
     LIB="${BATS_TEST_DIRNAME}/../../lib"
-    source "$LIB/deps.sh"
+    source "$LIB/detect.sh"; source "$LIB/deps.sh"
     TMP="$(mktemp -d)"
 }
 
@@ -17,6 +17,46 @@ teardown() { rm -rf "$TMP"; }
     for t in jq fzf eza bat fd ripgrep timg; do
         [[ " $NIVUUS_DEPS_OPTIONAL " == *" $t "* ]]
     done
+}
+
+@test "optional deps include the zsh plugins the config modules load" {
+    for t in zsh-autosuggestions zsh-syntax-highlighting; do
+        [[ " $NIVUUS_DEPS_OPTIONAL " == *" $t "* ]]
+    done
+}
+
+@test "plugin_find locates a plugin under the root and sets REPLY" {
+    export NIVUUS_PLUGIN_ROOT="$TMP/plugins"
+    mkdir -p "$TMP/plugins/zsh-autosuggestions"
+    : > "$TMP/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh"
+    nivuus_plugin_find zsh-autosuggestions
+    [ "$REPLY" = "$TMP/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh" ]
+    run nivuus_plugin_find zsh-syntax-highlighting
+    [ "$status" -eq 1 ]
+}
+
+@test "dep_present looks for a zsh plugin where the modules load it, not on PATH" {
+    export NIVUUS_PLUGIN_ROOT="$TMP/plugins"
+    mkdir -p "$TMP/bin" "$TMP/plugins/zsh-syntax-highlighting"
+    : > "$TMP/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"
+    printf '#!/bin/sh\n' > "$TMP/bin/zsh-autosuggestions"; chmod +x "$TMP/bin/zsh-autosuggestions"
+    run bash -c "PATH='$TMP/bin'; source '$LIB/deps.sh'
+        nivuus_deps_missing zsh-autosuggestions zsh-syntax-highlighting"
+    [ "$output" = "zsh-autosuggestions" ]
+}
+
+@test "deps.sh works under zsh, as the config modules source it" {
+    command -v zsh >/dev/null || skip "zsh absent"
+    mkdir -p "$TMP/plugins/zsh-autosuggestions"
+    : > "$TMP/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh"
+    run zsh -fc "NIVUUS_PLUGIN_ROOT='$TMP/plugins' NIVUUS_UID=1000
+        source '$LIB/detect.sh'; source '$LIB/deps.sh'
+        nivuus_plugin_find zsh-autosuggestions && print -r -- \$REPLY
+        missing=\$(nivuus_deps_missing zsh-autosuggestions zsh-syntax-highlighting)
+        nivuus_pkg_hint_cmd apt-get \${=missing} fd"
+    [ "$status" -eq 0 ]
+    [ "${lines[0]}" = "$TMP/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh" ]
+    [ "${lines[1]}" = "sudo apt-get install -y --no-install-recommends zsh-syntax-highlighting fd-find" ]
 }
 
 @test "dep_present accepts the Debian names batcat and fdfind" {
@@ -57,6 +97,13 @@ teardown() { rm -rf "$TMP"; }
     [ "$(nivuus_pkg_name brew ripgrep)" = "ripgrep" ]
 }
 
+@test "pkg_name keeps the zsh plugin names on every manager" {
+    for m in apt-get dnf yum pacman zypper apk brew; do
+        [ "$(nivuus_pkg_name "$m" zsh-autosuggestions)" = "zsh-autosuggestions" ]
+        [ "$(nivuus_pkg_name "$m" zsh-syntax-highlighting)" = "zsh-syntax-highlighting" ]
+    done
+}
+
 @test "pkg_install_cmd is non-interactive for every manager" {
     [ "$(nivuus_pkg_install_cmd apt-get zsh git)" = "apt-get install -y --no-install-recommends zsh git" ]
     [ "$(nivuus_pkg_install_cmd dnf zsh)" = "dnf install -y zsh" ]
@@ -84,4 +131,19 @@ teardown() { rm -rf "$TMP"; }
         run nivuus_pkg_needs_root "$m"
         [ "$status" -eq 0 ]
     done
+}
+
+@test "pkg_hint_cmd maps the names and prefixes sudo only when needed" {
+    NIVUUS_UID=1000
+    [ "$(nivuus_pkg_hint_cmd apt-get fd ripgrep)" = "sudo apt-get install -y --no-install-recommends fd-find ripgrep" ]
+    [ "$(nivuus_pkg_hint_cmd brew fd)" = "brew install fd" ]
+    NIVUUS_UID=0
+    [ "$(nivuus_pkg_hint_cmd pacman fd)" = "pacman -S --noconfirm --needed fd" ]
+}
+
+@test "pkg_hint_cmd leaves out what the manager does not ship, empty when nothing is left" {
+    NIVUUS_UID=0
+    [ "$(nivuus_pkg_hint_cmd zypper timg jq)" = "zypper --non-interactive install jq" ]
+    [ "$(nivuus_pkg_hint_cmd zypper timg)" = "" ]
+    [ "$(nivuus_pkg_hint_cmd '' jq)" = "" ]
 }

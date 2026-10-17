@@ -117,7 +117,7 @@ teardown() { rm -rf "$TMP"; }
     mkdir -p "$TMP/emptybin"
     run bash -c "
         PATH='$TMP/emptybin'
-        source '$LIB/log.sh'
+        source '$LIB/log.sh'; source '$LIB/detect.sh'; source '$LIB/deps.sh'
         source '$LIB/steps.sh'
         nivuus_step_check_required_deps
     "
@@ -137,7 +137,7 @@ teardown() { rm -rf "$TMP"; }
         done
         run bash -c "
             PATH='$TMP/fakebin'
-            source '$LIB/log.sh'
+            source '$LIB/log.sh'; source '$LIB/detect.sh'; source '$LIB/deps.sh'
             source '$LIB/steps.sh'
             nivuus_step_check_required_deps
         "
@@ -146,6 +146,19 @@ teardown() { rm -rf "$TMP"; }
         run ls "$TMP"
         [[ "$output" != *"EXECUTED-"* ]]     # ...mais jamais exécutée
     done
+}
+
+@test "check_required_deps suggests the lib/deps.sh command, with sudo when not root" {
+    mkdir -p "$TMP/fakebin"
+    printf '#!/bin/sh\n' > "$TMP/fakebin/apt-get"; chmod +x "$TMP/fakebin/apt-get"
+    run bash -c "
+        PATH='$TMP/fakebin'; NIVUUS_UID=1000
+        source '$LIB/log.sh'; source '$LIB/detect.sh'; source '$LIB/deps.sh'
+        source '$LIB/steps.sh'
+        nivuus_step_check_required_deps
+    "
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"sudo apt-get install -y --no-install-recommends zsh git curl"* ]]
 }
 
 # ---------------------------------------------------------------------------
@@ -257,6 +270,20 @@ EOF
     ! grep -q "^PKG	eza" "$TMP/state/manifest.tsv"      # ...mais pas journalisé
     grep -q "^PKG	bat	-	apt-get$" "$TMP/state/manifest.tsv"
     grep -q "^PKG	fd-find	-	apt-get$" "$TMP/state/manifest.tsv"
+}
+
+@test "install_packages optional installs only the zsh plugins the modules would miss" {
+    _fake_pkg_env apt-get
+    export NIVUUS_PKG_MANAGER=apt-get NIVUUS_UID=0 NIVUUS_PLUGIN_ROOT="$TMP/plugins"
+    mkdir -p "$TMP/plugins/zsh-autosuggestions"
+    : > "$TMP/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh"
+    run bash -c "PATH='$TMP/fakebin'; source '$LIB/log.sh'; source '$LIB/detect.sh'; source '$LIB/manifest.sh'; source '$LIB/deps.sh'; source '$LIB/steps.sh'
+        NIVUUS_STATE_DIR='$TMP/state'; nivuus_manifest_begin user '$TMP/install'
+        nivuus_step_install_packages optional zsh-autosuggestions zsh-syntax-highlighting && nivuus_manifest_commit"
+    [ "$status" -eq 0 ]
+    grep -q "install -y --no-install-recommends zsh-syntax-highlighting$" "$TMP/CALLS-apt-get"
+    ! grep -q "zsh-autosuggestions" "$TMP/CALLS-apt-get"
+    grep -q "^PKG	zsh-syntax-highlighting	-	apt-get$" "$TMP/state/manifest.tsv"
 }
 
 @test "install_packages skips a tool the manager does not package instead of failing" {

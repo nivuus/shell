@@ -84,3 +84,19 @@ l '$LISTING_DIR'"
     run grep -c "^    tree() {" "$NIVUUS_SHELL_DIR/config/11-files.zsh"
     [ "$output" -eq 1 ]
 }
+
+@test "the modern tools hint takes its install command from lib/deps.sh" {
+    # A dnf-only PATH, no plugin installed anywhere. HOME has already seen
+    # today's hint, so the background run started at load time stays quiet.
+    local bin="$BATS_TEST_TMPDIR/bin" home="$BATS_TEST_TMPDIR/home"
+    mkdir -p "$bin" "$home/.cache/nivuus-shell"
+    printf '#!/bin/sh\n' > "$bin/dnf"; chmod +x "$bin/dnf"
+    date +%Y%m%d > "$home/.cache/nivuus-shell/last-tool-suggestion"
+    run env -u NIVUUS_PKG_MANAGER HOME="$home" NIVUUS_UID=1000 \
+        NIVUUS_PLUGIN_ROOT="$BATS_TEST_TMPDIR/no-plugins" \
+        zsh -fc "source '$NIVUUS_SHELL_DIR/config/11-files.zsh'
+            path=('$bin'); _suggest_modern_tools"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"missing: eza bat fd ripgrep timg zsh-autosuggestions zsh-syntax-highlighting"* ]]
+    [[ "$output" == *"sudo dnf install -y eza bat fd-find ripgrep timg zsh-autosuggestions zsh-syntax-highlighting"* ]]
+}
