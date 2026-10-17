@@ -13,21 +13,10 @@
 # Load zsh-syntax-highlighting
 # =============================================================================
 
-# Try common installation paths
-typeset -a highlighting_paths
-highlighting_paths=(
-    /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
-    /usr/local/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
-    /opt/homebrew/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
-    ~/.local/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
-)
-
-for highlighting_path in $highlighting_paths; do
-    if [[ -f "$highlighting_path" ]]; then
-        source "$highlighting_path"
-        break
-    fi
-done
+# Installation locations are shared with the installer (lib/deps.sh), so
+# `nivuus install` installs the plugin exactly when this module would miss it
+source "$NIVUUS_SHELL_DIR/lib/deps.sh"
+nivuus_plugin_find zsh-syntax-highlighting && source "$REPLY"
 
 # Exit if not loaded
 [[ -z "$ZSH_HIGHLIGHT_HIGHLIGHTERS" ]] && return

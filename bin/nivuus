@@ -34,7 +34,8 @@ Modes :
 Dans les deux modes, les dépendances manquantes (zsh, git, curl) sont
 installées avec le gestionnaire de paquets de la plateforme (via sudo hors
 root), puis les outils optionnels (jq, fzf, eza, bat, fd, ripgrep, timg,
-grc, git-delta) quand ils sont packagés.
+grc, git-delta, zsh-autosuggestions, zsh-syntax-highlighting) quand ils
+sont packagés.
 
 Options :
   --dry-run   N'écrit rien ; affiche ce qui serait fait. Ne demande jamais sudo.

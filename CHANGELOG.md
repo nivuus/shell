@@ -18,12 +18,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `nivuus uninstall`; the packages it installed are kept.
 - `nivuus install --user`, `--no-chsh`; `nivuus uninstall --system`
 - `lib/deps.sh`: package names and install commands per package manager
+- The installer also installs the missing zsh plugins (zsh-autosuggestions,
+  zsh-syntax-highlighting), as optional deps of `lib/deps.sh`: same package
+  manager step, same journal, skipped with `--minimal`
 - Automated GitHub Actions release workflow
 - Release-based auto-update system with checksum verification
 - Version tracking via `.version` file
 - `nivuus-version` command to check current version
 
 ### Changed
+- zsh plugins are also found in `/usr/share/zsh/plugins` (Arch, Alpine); the
+  config modules and the installer share one lookup (`nivuus_plugin_find`),
+  so the installer installs a plugin exactly when the shell would miss it
 - Auto-update system now uses GitHub Releases instead of git commits
 - Update mechanism now downloads and verifies release archives
 - Version synchronization between `package.json` and `install.sh`

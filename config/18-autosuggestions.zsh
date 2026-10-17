@@ -18,22 +18,10 @@ typeset -g NIVUUS_AUTOSUGGESTIONS_LOADED=1
 # Load zsh-autosuggestions
 # =============================================================================
 
-# Try common installation paths
-typeset -a autosuggestions_paths
-autosuggestions_paths=(
-    /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh
-    /usr/local/share/zsh-autosuggestions/zsh-autosuggestions.zsh
-    /opt/homebrew/share/zsh-autosuggestions/zsh-autosuggestions.zsh
-    ~/.local/share/zsh-autosuggestions/zsh-autosuggestions.zsh
-    ~/.zsh/zsh-autosuggestions/zsh-autosuggestions.zsh
-)
-
-for autosuggestions_path in $autosuggestions_paths; do
-    if [[ -f "$autosuggestions_path" ]]; then
-        source "$autosuggestions_path"
-        break
-    fi
-done
+# Installation locations are shared with the installer (lib/deps.sh), so
+# `nivuus install` installs the plugin exactly when this module would miss it
+source "$NIVUUS_SHELL_DIR/lib/deps.sh"
+nivuus_plugin_find zsh-autosuggestions && source "$REPLY"
 
 # Exit if not loaded
 [[ -z "$ZSH_AUTOSUGGEST_STRATEGY" ]] && return

@@ -231,7 +231,8 @@ teardown() { rm -rf "$TMP"; }
     cat > "$TMP/nozsh/apt-get" <<EOP
 #!/bin/sh
 printf '%s\n' "\$*" >> "$TMP/CALLS-apt-get"
-case "\$*" in *zsh*)
+# The zsh package itself, not zsh-autosuggestions or zsh-syntax-highlighting.
+case " \$* " in *" zsh "*)
     printf '#!/bin/sh\n' > "$TMP/nozsh/zsh"; chmod +x "$TMP/nozsh/zsh"
     mkdir -p "$R/etc/zsh"; printf '# shipped by the zsh package\n' > "$R/etc/zsh/zshrc" ;;
 esac

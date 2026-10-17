@@ -43,6 +43,7 @@ This will:
 4. Make `zsh` the login shell of every human account (root included)
 5. Install the optional tools when your distribution packages them
    (`jq`, `fzf`, `eza`, `bat`, `fd`, `ripgrep`, `timg`, `grc`, `git-delta`)
+   and the zsh plugins (`zsh-autosuggestions`, `zsh-syntax-highlighting`)
 6. Clean up the temporary directory and restart your shell with Nivuus
 
 Nothing is asked twice: when `sudo` is not available the installer falls back to a
