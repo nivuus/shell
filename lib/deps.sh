@@ -6,7 +6,7 @@
 # Sourced by the bash installer and by zsh (config/18-autosuggestions.zsh,
 # config/98-syntax.zsh at every startup, config/11-files.zsh for its hint):
 # it stays within the syntax both shells share and forks nothing when
-# sourced.
+# sourced. nivuus_pkg_hint_cmd needs lib/detect.sh.
 
 # Required: Nivuus does not start without them.
 # shellcheck disable=SC2034  # read by lib/steps.sh and bin/nivuus
@@ -124,3 +124,22 @@ nivuus_pkg_needs_root() {
     [ "$1" != "brew" ]
 }
 
+# The command a person runs to install tools $2... with package manager $1,
+# for hints: their package names, prefixed with sudo when the manager needs
+# root and we are not root. Tools the manager does not ship are left out;
+# empty when none is left or the manager is unknown.
+nivuus_pkg_hint_cmd() {
+    local mgr="$1" tool pkg pkgs='' cmd
+    shift
+    for tool in "$@"; do
+        pkg="$(nivuus_pkg_name "$mgr" "$tool")"
+        [ -z "$pkg" ] || pkgs="$pkgs $pkg"
+    done
+    # One argument holding every name: nivuus_pkg_install_cmd joins with
+    # "$*", and zsh would not word-split an unquoted $pkgs.
+    [ -n "$pkgs" ] && cmd="$(nivuus_pkg_install_cmd "$mgr" "${pkgs# }")"
+    if [ -n "${cmd:-}" ] && nivuus_pkg_needs_root "$mgr" && ! nivuus_is_root; then
+        cmd="sudo $cmd"
+    fi
+    printf '%s\n' "${cmd:-}"
+}

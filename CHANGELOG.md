@@ -30,6 +30,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - zsh plugins are also found in `/usr/share/zsh/plugins` (Arch, Alpine); the
   config modules and the installer share one lookup (`nivuus_plugin_find`),
   so the installer installs a plugin exactly when the shell would miss it
+- The daily modern-tools hint, `nivuus doctor` and the missing-dependency
+  error build their install command from `lib/deps.sh` instead of their own
+  package tables, and the hint now mentions missing zsh plugins
 - Auto-update system now uses GitHub Releases instead of git commits
 - Update mechanism now downloads and verifies release archives
 - Version synchronization between `package.json` and `install.sh`

@@ -52,10 +52,11 @@ teardown() { rm -rf "$TMP"; }
     run zsh -fc "NIVUUS_PLUGIN_ROOT='$TMP/plugins' NIVUUS_UID=1000
         source '$LIB/detect.sh'; source '$LIB/deps.sh'
         nivuus_plugin_find zsh-autosuggestions && print -r -- \$REPLY
-        nivuus_deps_missing zsh-autosuggestions zsh-syntax-highlighting"
+        missing=\$(nivuus_deps_missing zsh-autosuggestions zsh-syntax-highlighting)
+        nivuus_pkg_hint_cmd apt-get \${=missing} fd"
     [ "$status" -eq 0 ]
     [ "${lines[0]}" = "$TMP/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh" ]
-    [ "${lines[1]}" = "zsh-syntax-highlighting" ]
+    [ "${lines[1]}" = "sudo apt-get install -y --no-install-recommends zsh-syntax-highlighting fd-find" ]
 }
 
 @test "dep_present accepts the Debian names batcat and fdfind" {
@@ -132,3 +133,17 @@ teardown() { rm -rf "$TMP"; }
     done
 }
 
+@test "pkg_hint_cmd maps the names and prefixes sudo only when needed" {
+    NIVUUS_UID=1000
+    [ "$(nivuus_pkg_hint_cmd apt-get fd ripgrep)" = "sudo apt-get install -y --no-install-recommends fd-find ripgrep" ]
+    [ "$(nivuus_pkg_hint_cmd brew fd)" = "brew install fd" ]
+    NIVUUS_UID=0
+    [ "$(nivuus_pkg_hint_cmd pacman fd)" = "pacman -S --noconfirm --needed fd" ]
+}
+
+@test "pkg_hint_cmd leaves out what the manager does not ship, empty when nothing is left" {
+    NIVUUS_UID=0
+    [ "$(nivuus_pkg_hint_cmd zypper timg jq)" = "zypper --non-interactive install jq" ]
+    [ "$(nivuus_pkg_hint_cmd zypper timg)" = "" ]
+    [ "$(nivuus_pkg_hint_cmd '' jq)" = "" ]
+}

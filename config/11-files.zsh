@@ -156,56 +156,21 @@ size() {
 # Modern Tool Suggestions
 # =============================================================================
 
-# One install line for the missing tools, with the platform's own package
-# manager (same package names as lib/deps.sh, which the installer uses).
-_nivuus_tools_install_hint() {
-    local mgr='' pkgs=() tool
-    for mgr in apt-get dnf pacman zypper apk brew; do
-        command -v "$mgr" &>/dev/null && break
-        mgr=''
-    done
-    [[ -n "$mgr" ]] || { echo "install: ${(j: :)@}"; return 0; }
-    for tool in "$@"; do
-        case "$tool:$mgr" in
-            fd:apt-get|fd:dnf) pkgs+=(fd-find) ;;
-            rg:*)              pkgs+=(ripgrep) ;;
-            *)                 pkgs+=("$tool") ;;
-        esac
-    done
-    case "$mgr" in
-        apt-get) echo "sudo apt-get install -y ${pkgs[*]}" ;;
-        dnf)     echo "sudo dnf install -y ${pkgs[*]}" ;;
-        pacman)  echo "sudo pacman -S --needed ${pkgs[*]}" ;;
-        zypper)  echo "sudo zypper install ${pkgs[*]}" ;;
-        apk)     echo "sudo apk add ${pkgs[*]}" ;;
-        brew)    echo "brew install ${pkgs[*]}" ;;
-    esac
-}
-
-# Check for modern alternatives and suggest
+# Names, presence checks, package names and the install command all come from
+# lib/deps.sh, the table the installer uses: the hint never suggests a
+# package the installer would not install. Sourced here, not at load time:
+# this only runs in the background subshell started below.
 _suggest_modern_tools() {
-    local missing=()
-
-    command -v eza &>/dev/null || missing+=(eza)
-
-    # Check for bat or batcat (Debian/Ubuntu uses batcat)
-    if ! command -v bat &>/dev/null && ! command -v batcat &>/dev/null; then
-        missing+=(bat)
-    fi
-
-    # Check for fd or fdfind (Debian/Ubuntu uses fdfind)
-    if ! command -v fd &>/dev/null && ! command -v fdfind &>/dev/null; then
-        missing+=(fd)
-    fi
-
-    command -v rg &>/dev/null || missing+=(rg)
-    command -v timg &>/dev/null || missing+=(timg)
-
-    if [[ ${#missing[@]} -gt 0 ]]; then
-        echo "💡 Optional modern tools missing: ${missing[*]}"
-        echo "   $(_nivuus_tools_install_hint "${missing[@]}")"
-        echo "   (nivuus install installs them for you)"
-    fi
+    source "$NIVUUS_SHELL_DIR/lib/detect.sh"
+    source "$NIVUUS_SHELL_DIR/lib/deps.sh"
+    local missing cmd
+    missing=$(nivuus_deps_missing eza bat fd ripgrep timg \
+        zsh-autosuggestions zsh-syntax-highlighting)
+    [[ -n "$missing" ]] || return 0
+    cmd=$(nivuus_pkg_hint_cmd "$(nivuus_pkg_manager)" ${=missing})
+    echo "💡 Optional tools missing: $missing"
+    [[ -n "$cmd" ]] && echo "   $cmd"
+    echo "   (nivuus install installs them for you)"
 }
 
 # Show suggestions on first shell load (once per day)

@@ -117,7 +117,7 @@ teardown() { rm -rf "$TMP"; }
     mkdir -p "$TMP/emptybin"
     run bash -c "
         PATH='$TMP/emptybin'
-        source '$LIB/log.sh'
+        source '$LIB/log.sh'; source '$LIB/detect.sh'; source '$LIB/deps.sh'
         source '$LIB/steps.sh'
         nivuus_step_check_required_deps
     "
@@ -137,7 +137,7 @@ teardown() { rm -rf "$TMP"; }
         done
         run bash -c "
             PATH='$TMP/fakebin'
-            source '$LIB/log.sh'
+            source '$LIB/log.sh'; source '$LIB/detect.sh'; source '$LIB/deps.sh'
             source '$LIB/steps.sh'
             nivuus_step_check_required_deps
         "
@@ -146,6 +146,19 @@ teardown() { rm -rf "$TMP"; }
         run ls "$TMP"
         [[ "$output" != *"EXECUTED-"* ]]     # ...mais jamais exécutée
     done
+}
+
+@test "check_required_deps suggests the lib/deps.sh command, with sudo when not root" {
+    mkdir -p "$TMP/fakebin"
+    printf '#!/bin/sh\n' > "$TMP/fakebin/apt-get"; chmod +x "$TMP/fakebin/apt-get"
+    run bash -c "
+        PATH='$TMP/fakebin'; NIVUUS_UID=1000
+        source '$LIB/log.sh'; source '$LIB/detect.sh'; source '$LIB/deps.sh'
+        source '$LIB/steps.sh'
+        nivuus_step_check_required_deps
+    "
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"sudo apt-get install -y --no-install-recommends zsh git curl"* ]]
 }
 
 # ---------------------------------------------------------------------------
