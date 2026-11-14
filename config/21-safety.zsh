@@ -88,6 +88,15 @@ _nivuus_match_warning() {
     return 1
 }
 
+# Print the command under confirmation. Only the theme's own colour variables
+# go through prompt expansion; the command is text the user has not approved
+# yet, so it is printed literally (prompt expansion would evaluate the
+# substitutions it holds while PROMPT_SUBST is on) with control characters
+# made visible, so what is shown is exactly what would run.
+_nivuus_safety_show_command() {
+    print -r -- "Command: ${(%)THEME_PATH}${(V)1}${(%)THEME_RESET}"
+}
+
 # Interactive check. Returns 0 to allow the command, 1 to block it.
 # Reads confirmation from the terminal, so it works from within a ZLE widget.
 _nivuus_safety_confirm() {
@@ -95,8 +104,8 @@ _nivuus_safety_confirm() {
 
     if msg=$(_nivuus_match_danger "$cmd"); then
         print -r ""
-        print -rP "⚠️  ${THEME_ERROR}DANGER:${THEME_RESET} $msg"
-        print -rP "Command: ${THEME_PATH}$cmd${THEME_RESET}"
+        print -r -- "⚠️  ${(%)THEME_ERROR}DANGER:${(%)THEME_RESET} $msg"
+        _nivuus_safety_show_command "$cmd"
         print -rn "Type 'yes' to run this command (anything else cancels): "
         local response
         read -r response </dev/tty 2>/dev/null || read -r response
@@ -106,8 +115,8 @@ _nivuus_safety_confirm() {
 
     if msg=$(_nivuus_match_warning "$cmd"); then
         print -r ""
-        print -rP "⚠️  ${THEME_ACCENT}WARNING:${THEME_RESET} $msg"
-        print -rP "Command: ${THEME_PATH}$cmd${THEME_RESET}"
+        print -r -- "⚠️  ${(%)THEME_ACCENT}WARNING:${(%)THEME_RESET} $msg"
+        _nivuus_safety_show_command "$cmd"
         print -rn "Press Enter to run, or Ctrl-C to cancel... "
         read -r </dev/tty 2>/dev/null || read -r
         return 0
@@ -128,7 +137,7 @@ _nivuus_safety_accept_line() {
         # Take over the display to prompt interactively.
         zle -I
         if ! _nivuus_safety_confirm "$BUFFER"; then
-            print -rP "${THEME_ERROR}✗ Command cancelled${THEME_RESET}"
+            print -r -- "${(%)THEME_ERROR}✗ Command cancelled${(%)THEME_RESET}"
             BUFFER=""
             zle reset-prompt
             return 0

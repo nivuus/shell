@@ -106,3 +106,61 @@ _ai_get_terminal_title 'make build' 'shell' >/dev/null
     [ -n "$timeout_arg" ]
     [ "$timeout_arg" -ge 10 ]
 }
+
+# =============================================================================
+# Untrusted text in the title
+# =============================================================================
+# The title carries text the shell does not control: the directory name, the
+# command line, the model's reply. With PROMPT_SUBST on (config/05-prompt.zsh),
+# passing it through prompt expansion would evaluate any substitution it holds.
+# These tests run behind a real pseudo-terminal and keep the raw bytes, so the
+# title escape itself is what gets inspected.
+
+_title_raw() {
+    script -qec "zsh --no-rcs -ic $(printf '%q' "$1")" /dev/null 2>/dev/null | tr -d '\r'
+}
+
+_title_preamble() {
+    echo "
+export TERM=xterm-256color ENABLE_AI_TERMINAL_TITLES=false
+export NIVUUS_SHELL_DIR='$NIVUUS_SHELL_DIR'
+source '$NIVUUS_SHELL_DIR/config/00-core.zsh'
+source '$NIVUUS_SHELL_DIR/config/05-prompt.zsh'
+source '$NIVUUS_SHELL_DIR/config/20-terminal-title.zsh'
+"
+}
+
+@test "a directory name is shown literally in the title, never evaluated" {
+    local dir="$BATS_TEST_TMPDIR/"'d$(touch DIR_MARKER)'
+    mkdir -p "$dir"
+    run _title_raw "$(_title_preamble)
+cd ${dir@Q}
+_terminal_title_precmd
+"
+    [ ! -e "$dir/DIR_MARKER" ]
+    [ ! -e "$BATS_TEST_TMPDIR/DIR_MARKER" ]
+    [[ "$output" == *$'\e]0;'*'d$(touch DIR_MARKER)'*$'\a'* ]]
+}
+
+@test "the command line passed to preexec is shown literally, never evaluated" {
+    cd "$BATS_TEST_TMPDIR"
+    run _title_raw "$(_title_preamble)
+cd ${BATS_TEST_TMPDIR@Q}
+_terminal_title_preexec 'x \$(touch CMD_MARKER)'
+"
+    [ ! -e "$BATS_TEST_TMPDIR/CMD_MARKER" ]
+    [[ "$output" == *'x $(touch CMD_MARKER)'$'\a'* ]]
+}
+
+@test "an AI title is shown literally and stripped of control characters" {
+    run _title_raw "$(_title_preamble)
+cd ${BATS_TEST_TMPDIR@Q}
+ENABLE_AI_TERMINAL_TITLES=true
+_ai_title_collect_async() { : }
+_AI_TITLE_CURRENT=\$'T \$(touch AI_MARKER) %F{red}\e]0;evil\a end'
+_terminal_title_precmd
+"
+    [ ! -e "$BATS_TEST_TMPDIR/AI_MARKER" ]
+    [[ "$output" == *$'\e]0;T $(touch AI_MARKER) %F{red}]0;evil end\a'* ]]
+    [[ "$output" != *"evil"$'\a'* ]]
+}

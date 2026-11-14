@@ -48,6 +48,14 @@ is_root() {
     [[ "$EUID" -eq 0 || "$(whoami)" == "root" ]]
 }
 
+# Segment output is rendered as prompt escapes. A value the shell does not
+# control (branch name, venv directory, profile or project name, job text)
+# goes through this first so that its `%` reaches the screen as a literal
+# character instead of becoming a prompt escape.
+_nivuus_prompt_literal() {
+    print -r -- "${1//\%/%%}"
+}
+
 # =============================================================================
 # Git Prompt with Cache
 # =============================================================================
@@ -81,6 +89,7 @@ git_prompt_info() {
 
     # Build git prompt with theme colors
     # git:( in prefix color bold, branch in branch color, ) in prefix color bold, space, status icon
+    branch=$(_nivuus_prompt_literal "$branch")
     local git_prompt=" %{%B${THEME_GIT_PREFIX}%}git:(%{${THEME_GIT_BRANCH}%}${branch}%{%B${THEME_GIT_PREFIX}%})%{%f%b%} ${status_icon}"
 
     # Update cache
@@ -161,7 +170,7 @@ prompt_firebase() {
 
     # Build Firebase prompt (or empty if no project)
     local firebase_prompt=""
-    [[ -n "$project" ]] && firebase_prompt=" %{%F{${THEME_COLORS[orange]}}%}[${project}]%{%f%}"
+    [[ -n "$project" ]] && firebase_prompt=" %{%F{${THEME_COLORS[orange]}}%}[$(_nivuus_prompt_literal "$project")]%{%f%}"
 
     # Update cache
     _FIREBASE_PROMPT_CACHE_DIR="$current_dir"
@@ -196,7 +205,7 @@ prompt_python_venv() {
     fi
 
     # Python venv in purple/magenta brackets
-    [[ -n "$venv_name" ]] && echo " %{%F{${THEME_COLORS[magenta]}}%}(${venv_name})%{%f%}"
+    [[ -n "$venv_name" ]] && echo " %{%F{${THEME_COLORS[magenta]}}%}($(_nivuus_prompt_literal "$venv_name"))%{%f%}"
 }
 
 # =============================================================================
@@ -210,13 +219,13 @@ prompt_cloud_context() {
 
     # AWS Profile
     if [[ -n "$AWS_PROFILE" ]] && [[ "$AWS_PROFILE" != "default" ]]; then
-        cloud_info+=" %{%F{${THEME_COLORS[orange]}}%}aws:${AWS_PROFILE}%{%f%}"
+        cloud_info+=" %{%F{${THEME_COLORS[orange]}}%}aws:$(_nivuus_prompt_literal "$AWS_PROFILE")%{%f%}"
     fi
 
     # GCP Project (if not already shown by Firebase)
     if [[ -n "$CLOUDSDK_CORE_PROJECT" ]] && [[ "${ENABLE_FIREBASE_PROMPT:-true}" != "true" ]]; then
         [[ -n "$cloud_info" ]] && cloud_info+=" "
-        cloud_info+="%{${THEME_GIT_PREFIX}%}gcp:${CLOUDSDK_CORE_PROJECT}%{%f%}"
+        cloud_info+="%{${THEME_GIT_PREFIX}%}gcp:$(_nivuus_prompt_literal "$CLOUDSDK_CORE_PROJECT")%{%f%}"
     fi
 
     # Azure Subscription (with caching to avoid blocking prompt)
@@ -240,7 +249,7 @@ prompt_cloud_context() {
         fi
 
         [[ -n "$cloud_info" ]] && cloud_info+=" "
-        cloud_info+="%{${THEME_SSH}%}az:${az_sub_name}%{%f%}"
+        cloud_info+="%{${THEME_SSH}%}az:$(_nivuus_prompt_literal "$az_sub_name")%{%f%}"
     fi
 
     echo "$cloud_info"
@@ -366,14 +375,14 @@ background_jobs_info() {
                 local names="${(j: :)running_names}"
                 # Truncate if too long
                 [[ ${#names} -gt 20 ]] && names="${names:0:17}..."
-                output+="%{${THEME_SUCCESS}%}▶ %{%f%}%{${THEME_MUTED}%}${names}%{%f%}"
+                output+="%{${THEME_SUCCESS}%}▶ %{%f%}%{${THEME_MUTED}%}$(_nivuus_prompt_literal "$names")%{%f%}"
             fi
 
             if (( stopped > 0 )); then
                 [[ -n "$output" ]] && output+=" "
                 local names="${(j: :)stopped_names}"
                 [[ ${#names} -gt 20 ]] && names="${names:0:17}..."
-                output+="%{${THEME_ERROR}%}⏸ %{%f%}%{${THEME_MUTED}%}${names}%{%f%}"
+                output+="%{${THEME_ERROR}%}⏸ %{%f%}%{${THEME_MUTED}%}$(_nivuus_prompt_literal "$names")%{%f%}"
             fi
         else
             # Show counts

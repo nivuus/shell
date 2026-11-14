@@ -72,11 +72,16 @@ fi
 # Helper Functions
 # =============================================================================
 
-# Set terminal title using escape sequences
+# Set terminal title using escape sequences.
+# The title is made of text this shell does not control (directory name,
+# command line, model reply), so it is emitted literally: never through prompt
+# expansion, which evaluates substitutions while PROMPT_SUBST is on. Control
+# characters are removed so the text cannot end the escape sequence early or
+# start another one.
 _set_terminal_title() {
-    local title="$1"
+    local title="${1//[[:cntrl:]]/}"
     # OSC 0 ; title BEL
-    print -Pn "\033]0;${title}\007"
+    print -rn -- $'\e]0;'"${title}"$'\a'
 }
 
 # Get shortened directory path for display

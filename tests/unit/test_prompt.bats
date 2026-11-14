@@ -316,3 +316,40 @@ run_zsh() {
     [[ "$output" == *"> /tmp"* ]]
     [[ "$output" != *">  /tmp"* ]]
 }
+
+# =============================================================================
+# Untrusted values in prompt segments
+# =============================================================================
+# Segment output is rendered as prompt escapes, so a value the user does not
+# control (a branch name chosen by whoever published the repository, a venv
+# directory, a profile name) must reach the screen literally: its `%` must not
+# become a prompt escape, and nothing in it may be evaluated.
+
+_render_prompt_in() {
+    run zsh -c "
+export NIVUUS_SHELL_DIR='$NIVUUS_SHELL_DIR'
+source '$NIVUUS_SHELL_DIR/themes/nord.zsh'
+source '$NIVUUS_SHELL_DIR/config/05-prompt.zsh'
+cd ${1@Q}
+$2
+print -rP -- \"\$PROMPT\"
+"
+}
+
+@test "a git branch name is rendered literally in the prompt" {
+    local repo="$BATS_TEST_TMPDIR/repo"
+    git init -q -b 'fix%F{red}x$(touch${IFS}BRANCH_MARKER)' "$repo"
+    _render_prompt_in "$repo" ""
+    [ "$status" -eq 0 ]
+    [ ! -e "$repo/BRANCH_MARKER" ]
+    [[ "$output" == *'fix%F{red}x$(touch${IFS}BRANCH_MARKER)'* ]]
+}
+
+@test "venv and cloud profile names are rendered literally in the prompt" {
+    _render_prompt_in "$BATS_TEST_TMPDIR" "
+export VIRTUAL_ENV='/opt/env%Bvenv' AWS_PROFILE='prof%F{red}ile'
+"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *'(env%Bvenv)'* ]]
+    [[ "$output" == *'aws:prof%F{red}ile'* ]]
+}
