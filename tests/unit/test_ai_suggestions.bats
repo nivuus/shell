@@ -3,6 +3,10 @@
 # Unit tests for AI suggestions module (config/19-ai-suggestions.zsh)
 
 setup() {
+    # Test the tree this file belongs to, never whatever NIVUUS_SHELL_DIR the
+    # environment happens to point at.
+    NIVUUS_SHELL_DIR="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
+    export NIVUUS_SHELL_DIR
     # Load dependencies in ZSH context
     export NIVUUS_AI_SUGGESTIONS_LOADED=""
 }

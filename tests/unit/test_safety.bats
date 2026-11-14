@@ -3,6 +3,10 @@
 # Unit tests for safety module (config/21-safety.zsh)
 
 setup() {
+    # Test the tree this file belongs to, never whatever NIVUUS_SHELL_DIR the
+    # environment happens to point at.
+    NIVUUS_SHELL_DIR="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
+    export NIVUUS_SHELL_DIR
     # Load dependencies
     source "$NIVUUS_SHELL_DIR/themes/nord.zsh"
 }
@@ -228,4 +232,43 @@ _warn() {
 @test "Safety module uses theme colors for messages" {
     run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -E '(THEME_PATH|THEME_ACCENT|THEME_RESET)' config/21-safety.zsh"
     [ "$status" -eq 0 ]
+}
+
+# =============================================================================
+# The confirmation shows the command, it never evaluates it
+# =============================================================================
+# The buffer under confirmation is text the user has not approved yet. With
+# PROMPT_SUBST on (config/05-prompt.zsh), printing it through prompt expansion
+# would run any substitution it holds before the question is even answered.
+# setsid: no controlling terminal, so the answer comes from stdin.
+
+_confirm() {
+    run setsid -w zsh -c "
+cd ${BATS_TEST_TMPDIR@Q}
+source '$NIVUUS_SHELL_DIR/themes/nord.zsh'
+source '$NIVUUS_SHELL_DIR/config/05-prompt.zsh'
+source '$NIVUUS_SHELL_DIR/config/21-safety.zsh'
+_nivuus_safety_confirm ${1@Q} <<< 'no'
+"
+}
+
+@test "danger confirmation prints the command literally without evaluating it" {
+    _confirm 'rm -rf / $(touch DANGER_MARKER)'
+    [ ! -e "$BATS_TEST_TMPDIR/DANGER_MARKER" ]
+    [[ "$output" == *'rm -rf / $(touch DANGER_MARKER)'* ]]
+    # The theme colours still apply to the frame around the command.
+    [[ "$output" == *$'\e['*'DANGER:'* ]]
+    [ "$status" -ne 0 ]
+}
+
+@test "warning confirmation prints the command literally without evaluating it" {
+    _confirm 'chmod 777 f $(touch WARN_MARKER) %F{red}'
+    [ ! -e "$BATS_TEST_TMPDIR/WARN_MARKER" ]
+    [[ "$output" == *'chmod 777 f $(touch WARN_MARKER) %F{red}'* ]]
+}
+
+@test "control characters in the confirmed command are made visible" {
+    _confirm $'rm -rf / \e[2Jhidden'
+    [[ "$output" != *$'\e[2J'* ]]
+    [[ "$output" == *'^[[2Jhidden'* ]]
 }

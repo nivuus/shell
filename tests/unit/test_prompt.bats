@@ -3,6 +3,13 @@
 # Unit tests for prompt module (config/05-prompt.zsh)
 
 # Helper to run zsh with correct NIVUUS_SHELL_DIR
+setup() {
+    # Test the tree this file belongs to, never whatever NIVUUS_SHELL_DIR the
+    # environment happens to point at.
+    NIVUUS_SHELL_DIR="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
+    export NIVUUS_SHELL_DIR
+}
+
 run_zsh() {
     run zsh -c "export NIVUUS_SHELL_DIR='$NIVUUS_SHELL_DIR' && $1"
 }
@@ -291,8 +298,24 @@ run_zsh() {
 }
 
 @test "Firebase cache has TTL" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep '_FIREBASE_PROMPT_CACHE_TIME' config/05-prompt.zsh | head -3"
+    local proj="$BATS_TEST_TMPDIR/fb"
+    mkdir -p "$proj"
+    printf '{"projects":{"staging":"first-project"}}\n' > "$proj/.firebaserc"
+    run env HOME="$BATS_TEST_TMPDIR" zsh -c "
+source '$NIVUUS_SHELL_DIR/themes/nord.zsh'; source '$NIVUUS_SHELL_DIR/config/05-prompt.zsh'
+zmodload zsh/datetime
+cd '$proj'
+prompt_firebase >/dev/null
+print -r -- \"A=\$_FIREBASE_PROMPT_CACHE_VALUE\"
+printf '{\"projects\":{\"staging\":\"second-project\"}}\\n' > .firebaserc
+prompt_firebase >/dev/null
+print -r -- \"B=\$_FIREBASE_PROMPT_CACHE_VALUE\"
+FIREBASE_PROMPT_CACHE_TTL=0 prompt_firebase >/dev/null
+print -r -- \"C=\$_FIREBASE_PROMPT_CACHE_VALUE\""
     [ "$status" -eq 0 ]
+    [[ "${lines[0]}" == *"first-project"* ]]
+    [[ "${lines[1]}" == *"first-project"* ]]   # within the TTL: cached
+    [[ "${lines[2]}" == *"second-project"* ]]  # TTL elapsed: re-read
 }
 
 @test "Azure cache has TTL" {
@@ -315,4 +338,41 @@ run_zsh() {
     [ "$status" -eq 0 ]
     [[ "$output" == *"> /tmp"* ]]
     [[ "$output" != *">  /tmp"* ]]
+}
+
+# =============================================================================
+# Untrusted values in prompt segments
+# =============================================================================
+# Segment output is rendered as prompt escapes, so a value the user does not
+# control (a branch name chosen by whoever published the repository, a venv
+# directory, a profile name) must reach the screen literally: its `%` must not
+# become a prompt escape, and nothing in it may be evaluated.
+
+_render_prompt_in() {
+    run zsh -c "
+export NIVUUS_SHELL_DIR='$NIVUUS_SHELL_DIR'
+source '$NIVUUS_SHELL_DIR/themes/nord.zsh'
+source '$NIVUUS_SHELL_DIR/config/05-prompt.zsh'
+cd ${1@Q}
+$2
+print -rP -- \"\$PROMPT\"
+"
+}
+
+@test "a git branch name is rendered literally in the prompt" {
+    local repo="$BATS_TEST_TMPDIR/repo"
+    git init -q -b 'fix%F{red}x$(touch${IFS}BRANCH_MARKER)' "$repo"
+    _render_prompt_in "$repo" ""
+    [ "$status" -eq 0 ]
+    [ ! -e "$repo/BRANCH_MARKER" ]
+    [[ "$output" == *'fix%F{red}x$(touch${IFS}BRANCH_MARKER)'* ]]
+}
+
+@test "venv and cloud profile names are rendered literally in the prompt" {
+    _render_prompt_in "$BATS_TEST_TMPDIR" "
+export VIRTUAL_ENV='/opt/env%Bvenv' AWS_PROFILE='prof%F{red}ile'
+"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *'(env%Bvenv)'* ]]
+    [[ "$output" == *'aws:prof%F{red}ile'* ]]
 }

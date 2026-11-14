@@ -9,6 +9,13 @@
 # Module Loading Tests
 # =============================================================================
 
+setup() {
+    # Test the tree this file belongs to, never whatever NIVUUS_SHELL_DIR the
+    # environment happens to point at.
+    NIVUUS_SHELL_DIR="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
+    export NIVUUS_SHELL_DIR
+}
+
 @test "Node.js module loads without errors" {
     run zsh -c "source '$NIVUUS_SHELL_DIR/config/09-nodejs.zsh' && echo 'loaded'"
     [ "$status" -eq 0 ]
@@ -16,8 +23,12 @@
 }
 
 @test "Module checks for NVM directory" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep '~/.nvm' config/09-nodejs.zsh | head -3"
+    mkdir -p "$BATS_TEST_TMPDIR/without" "$BATS_TEST_TMPDIR/with/.nvm"
+    run env HOME="$BATS_TEST_TMPDIR/without" zsh -c "source '$NIVUUS_SHELL_DIR/config/09-nodejs.zsh'; whence -w nvm"
+    [[ "$output" != *"nvm: function"* ]]
+    run env HOME="$BATS_TEST_TMPDIR/with" zsh -c "source '$NIVUUS_SHELL_DIR/config/09-nodejs.zsh'; whence -w nvm"
     [ "$status" -eq 0 ]
+    [[ "$output" == *"nvm: function"* ]]
 }
 
 # =============================================================================
@@ -47,8 +58,12 @@
 }
 
 @test "Lazy load sets NVM_DIR" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep 'export NVM_DIR=' config/09-nodejs.zsh | head -3"
+    local home="$BATS_TEST_TMPDIR/home"
+    mkdir -p "$home/.nvm"
+    printf 'nvm() { print -r -- "real nvm, NVM_DIR=$NVM_DIR" }\n' > "$home/.nvm/nvm.sh"
+    run env -u NVM_DIR HOME="$home" zsh -c "source '$NIVUUS_SHELL_DIR/config/09-nodejs.zsh'; nvm"
     [ "$status" -eq 0 ]
+    [ "$output" = "real nvm, NVM_DIR=$home/.nvm" ]
 }
 
 @test "Lazy load sources nvm.sh" {
@@ -76,12 +91,12 @@
 }
 
 @test "load-nvmrc uses nvm_find_nvmrc" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -A 10 'load-nvmrc()' config/09-nodejs.zsh | grep 'nvm_find_nvmrc'"
+    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -A 15 'load-nvmrc()' config/09-nodejs.zsh | grep 'nvm_find_nvmrc'"
     [ "$status" -eq 0 ]
 }
 
 @test "load-nvmrc installs missing versions" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -A 10 'load-nvmrc()' config/09-nodejs.zsh | grep 'nvm install'"
+    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -A 15 'load-nvmrc()' config/09-nodejs.zsh | grep 'nvm install'"
     [ "$status" -eq 0 ]
 }
 
@@ -134,8 +149,11 @@
 }
 
 @test "detect-project detects package.json (Node.js)" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep 'package.json' config/09-nodejs.zsh | head -3"
+    mkdir -p "$BATS_TEST_TMPDIR/proj"
+    printf '{}\n' > "$BATS_TEST_TMPDIR/proj/package.json"
+    run zsh -c "cd '$BATS_TEST_TMPDIR/proj'; source '$NIVUUS_SHELL_DIR/config/09-nodejs.zsh'; detect-project"
     [ "$status" -eq 0 ]
+    [[ "$output" == *"Node.js project detected"* ]]
 }
 
 @test "detect-project detects requirements.txt (Python)" {

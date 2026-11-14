@@ -62,10 +62,68 @@ _ai_get_api_key() {
     esac
 }
 
-# Call the active backend and print the response text.
+# =============================================================================
+# What leaves the machine
+# =============================================================================
+
+# Redact secrets from stdin before any of it is sent to an AI provider.
+# Two kinds of rule:
+#   - known shapes: a key=value / key: value whose key names a credential,
+#     Authorization headers, and the fixed prefixes of common providers;
+#   - any run of 32+ characters from [A-Za-z0-9_+-] holding both a digit and
+#     a letter, which is what generated tokens look like. This one depends on
+#     the value only, never on the words around it, so a secret is masked
+#     whatever language the command line or its comments are written in.
+# Text in any script (accented, CJK, RTL...) is left untouched: the shape rule
+# only ever matches ASCII token characters.
+_ai_redact() {
+    setopt localoptions extendedglob
+    local text MATCH MBEGIN MEND
+    text=$(sed -E \
+        -e 's/((api[_-]?key|token|secret|password|passwd|pwd|access[_-]?key|client[_-]?secret|authorization)[[:space:]]*[:=][[:space:]]*)[^[:space:]"'"'"']+/\1***REDACTED***/gI' \
+        -e 's/(Bearer[[:space:]]+)[A-Za-z0-9._-]+/\1***REDACTED***/g' \
+        -e 's/(gh[pousr]_)[A-Za-z0-9]+/\1***REDACTED***/g' \
+        -e 's/(AKIA)[0-9A-Z]{12,}/\1***REDACTED***/g' \
+        -e 's/(sk-)[A-Za-z0-9]{16,}/\1***REDACTED***/g')
+    text=${text//(#m)[A-Za-z0-9_+-](#c32,)/${${${MATCH//[^0-9]/}:+${${MATCH//[^A-Za-z]/}:+***REDACTED***}}:-$MATCH}}
+    print -r -- "$text"
+}
+
+# Quote $1 as a parameter of a curl configuration file (curl -K): inside
+# double quotes, curl unescapes \\, \", \n, \r and \t.
+_ai_curl_config_quote() {
+    local v="${1//\\/\\\\}"
+    v="${v//\"/\\\"}"
+    v="${v//$'\n'/\\n}"
+    v="${v//$'\r'/\\r}"
+    v="${v//$'\t'/\\t}"
+    print -r -- "\"$v\""
+}
+
+# POST JSON body $2 to URL $1 within $3 seconds, with extra headers $4...,
+# and print the response. URL, headers and body reach curl as a
+# configuration read from its standard input (-K -), never as arguments:
+# the process table, readable by every local user, shows neither the API key
+# nor the prompt.
+_ai_http_post_json() {
+    local url="$1" body="$2" timeout_secs="$3" header
+    shift 3
+    {
+        print -r -- "url = $(_ai_curl_config_quote "$url")"
+        for header in "$@" 'Content-Type: application/json'; do
+            print -r -- "header = $(_ai_curl_config_quote "$header")"
+        done
+        print -r -- "data-binary = $(_ai_curl_config_quote "$body")"
+    } | timeout "$timeout_secs" curl -s -X POST -K - 2>/dev/null
+}
+
+# Call the active backend and print the response text. Every backend call
+# goes through here, so the prompt is redacted here and nowhere else can skip
+# it.
 # Usage: _ai_api_call PROMPT [MODEL] [MAX_TOKENS] [TEMPERATURE] [TIMEOUT_SECS]
 _ai_api_call() {
-    local prompt="$1"
+    local prompt
+    prompt=$(print -r -- "$1" | _ai_redact)
     local model="${2:-$(_ai_resolve_model)}"
     local max_tokens="${3:-1024}"
     local temperature="${4:-0.3}"

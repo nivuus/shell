@@ -14,6 +14,8 @@
 [[ "${ENABLE_TERMINAL_SANITY_RESET:-true}" != "true" ]] && return
 
 _nivuus_terminal_sanity_reset() {
+    # Escape sequences are for a terminal, never for a caller's stdout.
+    nivuus_has_terminal || return 0
     # Disable mouse tracking (normal, button-event, any-event, SGR extended)
     # and bracketed paste mode. Harmless no-ops if the terminal never turned
     # them on.

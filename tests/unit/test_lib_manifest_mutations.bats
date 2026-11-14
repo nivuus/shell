@@ -123,3 +123,22 @@ teardown() { rm -rf "$TMP"; }
     [[ "$output" == *"$TMP/real-target"* ]]
     [ "$(cat "$TMP/real-target")" = "new" ]
 }
+
+# File modes. nivuus_write_file goes through a mktemp file (0600): the
+# rewritten file must not inherit that mode.
+_mode() { stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1"; }
+
+@test "write_file keeps the mode of the file it rewrites" {
+    printf 'old\n' > "$TMP/zshrc"; chmod 0644 "$TMP/zshrc"
+    printf 'old\n' > "$TMP/private"; chmod 0640 "$TMP/private"
+    printf 'new\n' | nivuus_write_file "$TMP/zshrc"
+    printf 'new\n' | nivuus_write_file "$TMP/private"
+    [ "$(cat "$TMP/zshrc")" = "new" ]
+    [ "$(_mode "$TMP/zshrc")" = "644" ]
+    [ "$(_mode "$TMP/private")" = "640" ]
+}
+
+@test "write_file creates a new file with mode 0644" {
+    printf 'new\n' | nivuus_write_file "$TMP/fresh"
+    [ "$(_mode "$TMP/fresh")" = "644" ]
+}

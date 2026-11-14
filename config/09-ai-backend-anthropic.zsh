@@ -23,11 +23,8 @@ _ai_backend_anthropic_call() {
     local escaped_prompt=$(_ai_json_escape "$prompt")
     local json_payload="{\"model\":\"${model}\",\"max_tokens\":${max_tokens},\"temperature\":${temperature},\"messages\":[{\"role\":\"user\",\"content\":\"$escaped_prompt\"}]}"
 
-    local api_response=$(timeout "$timeout_secs" curl -s -X POST "https://api.anthropic.com/v1/messages" \
-        -H "x-api-key: ${api_key}" \
-        -H "anthropic-version: 2023-06-01" \
-        -H 'Content-Type: application/json' \
-        -d "$json_payload" 2>/dev/null)
+    local api_response=$(_ai_http_post_json "https://api.anthropic.com/v1/messages" \
+        "$json_payload" "$timeout_secs" "x-api-key: ${api_key}" "anthropic-version: 2023-06-01")
 
     [[ -z "$api_response" ]] && return 1
 

@@ -3,6 +3,10 @@
 # Unit tests for Python module (config/09-python.zsh)
 
 setup() {
+    # Test the tree this file belongs to, never whatever NIVUUS_SHELL_DIR the
+    # environment happens to point at.
+    NIVUUS_SHELL_DIR="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
+    export NIVUUS_SHELL_DIR
     source "$NIVUUS_SHELL_DIR/config/09-python.zsh"
 }
 
@@ -36,13 +40,17 @@ setup() {
 }
 
 @test "get_python_venv detects CONDA_DEFAULT_ENV" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep 'CONDA_DEFAULT_ENV' config/09-python.zsh | head -3"
+    run env -u VIRTUAL_ENV CONDA_DEFAULT_ENV=data CONDA_PREFIX=/opt/conda/envs/data \
+        zsh -c "source '$NIVUUS_SHELL_DIR/config/09-python.zsh'; get_python_venv"
     [ "$status" -eq 0 ]
+    [ "$output" = "conda:data" ]
 }
 
 @test "get_python_venv detects VIRTUAL_ENV" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep 'VIRTUAL_ENV' config/09-python.zsh | head -3"
+    run env -u CONDA_DEFAULT_ENV VIRTUAL_ENV=/srv/app/.venv-api \
+        zsh -c "source '$NIVUUS_SHELL_DIR/config/09-python.zsh'; get_python_venv"
     [ "$status" -eq 0 ]
+    [ "$output" = ".venv-api" ]
 }
 
 @test "get_python_venv detects POETRY_ACTIVE" {
@@ -81,13 +89,21 @@ setup() {
 }
 
 @test "Auto-activation looks for common venv directories" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -A 5 '_python_auto_activate()' config/09-python.zsh | grep -E '(venv|.venv|env|.env)'"
+    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -A 10 '_python_auto_activate()' config/09-python.zsh | grep -E '(venv|.venv|env|.env)'"
     [ "$status" -eq 0 ]
 }
 
 @test "Auto-activation checks for activate script" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep 'bin/activate' config/09-python.zsh | head -3"
+    local proj="$BATS_TEST_TMPDIR/proj"
+    mkdir -p "$proj/.venv/bin"
+    printf 'export VIRTUAL_ENV=%s/.venv\n' "$proj" > "$proj/.venv/bin/activate"
+    run env -u VIRTUAL_ENV ENABLE_PYTHON_AUTO_ACTIVATE=true zsh -c "
+nivuus_has_terminal() { return 0 }
+source '$NIVUUS_SHELL_DIR/config/09-python.zsh'
+cd '$proj'
+print -r -- \"VENV=\$VIRTUAL_ENV\""
     [ "$status" -eq 0 ]
+    [[ "$output" == *"VENV=$proj/.venv"* ]]
 }
 
 @test "Auto-activation uses chpwd hook when enabled" {

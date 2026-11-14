@@ -353,6 +353,7 @@ Quick access to network information and utilities.
 ```bash
 myip                    # Show your public IP address
 localip                 # Show local network addresses
+myips                   # Public and local addresses
 ports                   # List open ports and processes
 weather [city]          # Get weather forecast
 ```

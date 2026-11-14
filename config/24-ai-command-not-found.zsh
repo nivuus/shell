@@ -105,132 +105,26 @@ _ai_cnf_cache_set() {
 }
 
 # =============================================================================
-# Native Tool Lookup (Fast-path)
+# Package Lookup Sources
 # =============================================================================
 
-_ai_cnf_native_lookup() {
-    local cmd="$1"
-
-    # Debian / Ubuntu command-not-found
-    if [[ -x /usr/lib/command-not-found ]]; then
-        local out
-        out=$(/usr/lib/command-not-found -- "$cmd" 2>/dev/null)
-        if [[ -n "$out" ]]; then
-            # Extract install line (e.g. "sudo apt install <pkg>")
-            local install_line=$(print -r -- "$out" | grep -E '(sudo apt install|apt install|sudo apt-get install)' | head -1 | sed 's/^[[:space:]]*//')
-            if [[ -n "$install_line" ]]; then
-                local pkg=$(print -r -- "$install_line" | awk '{print $NF}')
-                if command -v jq &>/dev/null; then
-                    jq -n \
-                        --arg cmd "$cmd" \
-                        --arg pkg "$pkg" \
-                        --arg inst "$install_line" \
-                        '{found: true, command: $cmd, description: ("Package " + $pkg + " via apt"), package: $pkg, install_command: $inst, alternative_install: ""}'
-                    return 0
-                else
-                    print -r -- "{\"found\":true,\"command\":\"$cmd\",\"description\":\"Package $pkg via apt\",\"package\":\"$pkg\",\"install_command\":\"$install_line\",\"alternative_install\":\"\"}"
-                    return 0
-                fi
-            fi
-        fi
-    fi
-
-    # Arch Linux pkgfile
-    if command -v pkgfile &>/dev/null; then
-        local arch_pkg=$(pkgfile -b "$cmd" 2>/dev/null | head -1)
-        if [[ -n "$arch_pkg" ]]; then
-            local inst="sudo pacman -S $arch_pkg"
-            if command -v jq &>/dev/null; then
-                jq -n \
-                    --arg cmd "$cmd" \
-                    --arg pkg "$arch_pkg" \
-                    --arg inst "$inst" \
-                    '{found: true, command: $cmd, description: ("Package " + $pkg + " via pacman"), package: $pkg, install_command: $inst, alternative_install: ""}'
-                return 0
-            else
-                print -r -- "{\"found\":true,\"command\":\"$cmd\",\"description\":\"Package $arch_pkg via pacman\",\"package\":\"$arch_pkg\",\"install_command\":\"$inst\",\"alternative_install\":\"\"}"
-                return 0
-            fi
-        fi
-    fi
-
-    return 1
-}
-
-# =============================================================================
-# AI Package Lookup
-# =============================================================================
-
-_ai_cnf_ai_lookup() {
-    local cmd="$1"
-    local full_cmd="$2"
-    local sys_context="$3"
-
-    _ai_credentials_ok || return 1
-
-    local prompt="You are a command-line assistant helping a user find the right package to install for a missing shell command.
-Missing command: \"$cmd\"
-Full command line attempted: \"$full_cmd\"
-System context: $sys_context
-
-Determine if this missing command corresponds to a known software package or tool.
-If it is a typo, random characters, or not a real command/package, respond with ONLY:
-{\"found\": false}
-
-If it is a known tool, respond with ONLY valid JSON (no markdown fences, no explanation, just raw JSON) matching this exact format:
-{
-  \"found\": true,
-  \"command\": \"$cmd\",
-  \"description\": \"<brief 1-sentence description of what this command does>\",
-  \"package\": \"<exact package name>\",
-  \"install_command\": \"<exact installation command for the active OS and package manager, e.g. sudo apt install speech-dispatcher or brew install cowsay or pipx install ruff>\",
-  \"alternative_install\": \"<optional secondary install command, or empty string>\"
-}"
-
-    local raw_response
-    raw_response=$(_ai_api_call "$prompt" "$AI_COMMAND_NOT_FOUND_MODEL" 200 0.1 "$AI_CNF_TIMEOUT" 2>/dev/null)
-
-    [[ -z "$raw_response" ]] && return 1
-
-    # Extract JSON object (in case the model output wraps with backticks or text)
-    local json_response=""
-    if command -v jq &>/dev/null; then
-        json_response=$(print -r -- "$raw_response" | jq -c '.' 2>/dev/null)
-        if [[ -z "$json_response" ]]; then
-            # Attempt to extract json block
-            json_response=$(print -r -- "$raw_response" | sed -n '/{/,/}/p' | jq -c '.' 2>/dev/null)
-        fi
-    fi
-
-    if [[ -z "$json_response" ]]; then
-        # Fallback regex extraction if jq failed or is absent
-        if [[ "$raw_response" == *"\"found\": false"* || "$raw_response" == *"\"found\":false"* ]]; then
-            json_response='{"found":false}'
-        elif [[ "$raw_response" == *"\"found\": true"* || "$raw_response" == *"\"found\":true"* ]]; then
-            local p_desc=$(print -r -- "$raw_response" | grep -o '"description"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
-            local p_pkg=$(print -r -- "$raw_response" | grep -o '"package"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
-            local p_inst=$(print -r -- "$raw_response" | grep -o '"install_command"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
-            local p_alt=$(print -r -- "$raw_response" | grep -o '"alternative_install"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
-            json_response="{\"found\":true,\"command\":\"$cmd\",\"description\":\"$p_desc\",\"package\":\"$p_pkg\",\"install_command\":\"$p_inst\",\"alternative_install\":\"$p_alt\"}"
-        fi
-    fi
-
-    [[ -z "$json_response" ]] && return 1
-
-    print -r -- "$json_response"
-    return 0
-}
+# The module is split across files to keep each one readable; the lookup
+# sources are sourced here rather than listed in .zshrc, so the module keeps
+# a single entry point.
+source "${${(%):-%x}:A:h}/24-ai-command-not-found-lookup.zsh"
 
 # =============================================================================
 # UI Box Rendering — charte Nivuus (doc/CHARTE.md)
 # =============================================================================
 
+# Every string but the install command comes from the typed command line or
+# a lookup result: control characters are made visible (${(V)...}), so an
+# escape sequence in a reply cannot redraw the screen or hide text.
 _ai_cnf_render_box() {
-    local cmd="$1"
-    local desc="$2"
-    local pkg="$3"
+    local cmd="${(V)1}"
+    local desc="${(V)2}"
+    local pkg="${(V)3}"
     local install_cmd="$4"
-    local alt_cmd="$5"
 
     _ai_charte_load
 
@@ -245,9 +139,6 @@ _ai_cnf_render_box() {
         print -u2 -r -- "│  ${NIVUUS_C_STRONG:-}Package:${NIVUUS_C_OFF:-}  ${pkg}"
     fi
     print -u2 -r -- "│  ${NIVUUS_C_STRONG:-}Install:${NIVUUS_C_OFF:-}  ${install_cmd}"
-    if [[ -n "$alt_cmd" ]]; then
-        print -u2 -r -- "│  ${NIVUUS_C_STRONG:-}Alternative:${NIVUUS_C_OFF:-} ${alt_cmd}"
-    fi
     print -u2 -r -- "╰─────────────────────────────────────────────────────────────────────"
     print -u2 ""
 }
@@ -297,32 +188,30 @@ _ai_cnf_handle_suggestion() {
     shift 2
     local -a original_args=("$@")
 
-    local found=""
-    local desc=""
-    local pkg=""
-    local install_cmd=""
-    local alt_cmd=""
+    local found="" desc="" pkg="" mgr=""
 
     if command -v jq &>/dev/null; then
         found=$(print -r -- "$json_data" | jq -r '.found // empty' 2>/dev/null)
         desc=$(print -r -- "$json_data" | jq -r '.description // empty' 2>/dev/null)
         pkg=$(print -r -- "$json_data" | jq -r '.package // empty' 2>/dev/null)
-        install_cmd=$(print -r -- "$json_data" | jq -r '.install_command // empty' 2>/dev/null)
-        alt_cmd=$(print -r -- "$json_data" | jq -r '.alternative_install // empty' 2>/dev/null)
+        mgr=$(print -r -- "$json_data" | jq -r '.manager // empty' 2>/dev/null)
     else
         found=$(print -r -- "$json_data" | grep -o '"found"[[:space:]]*:[[:space:]]*true' | head -1)
         [[ -n "$found" ]] && found="true"
-        desc=$(print -r -- "$json_data" | grep -o '"description"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
-        pkg=$(print -r -- "$json_data" | grep -o '"package"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
-        install_cmd=$(print -r -- "$json_data" | grep -o '"install_command"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
-        alt_cmd=$(print -r -- "$json_data" | grep -o '"alternative_install"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
+        desc=$(_ai_cnf_json_field description "$json_data")
+        pkg=$(_ai_cnf_json_field package "$json_data")
+        mgr=$(_ai_cnf_json_field manager "$json_data")
     fi
 
-    if [[ "$found" != "true" || -z "$install_cmd" ]]; then
-        return 127
-    fi
+    [[ "$found" == "true" ]] || return 127
 
-    _ai_cnf_render_box "$cmd" "$desc" "$pkg" "$install_cmd" "$alt_cmd"
+    # A result that does not validate offers no install at all.
+    local -a install_argv
+    _ai_cnf_install_argv "$mgr" "$pkg" || return 127
+    install_argv=("${reply[@]}")
+    local install_cmd="${(j: :)install_argv}"
+
+    _ai_cnf_render_box "$cmd" "$desc" "$pkg" "$install_cmd"
 
     # Only offer interactive confirmation if stdin is a terminal and shell is interactive
     if [[ -t 0 && -o interactive && "${AI_CNF_AUTO_PROMPT:-true}" == "true" ]]; then
@@ -332,14 +221,14 @@ _ai_cnf_handle_suggestion() {
         print -u2 ""
 
         if [[ "$user_choice" =~ ^[yY]([eE][sS])?$ ]]; then
-            print -u2 -r -- "${NIVUUS_C_BUSY:-}⚙ Installing ${pkg:-$cmd}...${NIVUUS_C_OFF:-}"
-            eval "$install_cmd"
+            print -u2 -r -- "${NIVUUS_C_BUSY:-}⚙ Installing ${pkg}...${NIVUUS_C_OFF:-}"
+            "${install_argv[@]}"
             local install_status=$?
 
             if (( install_status == 0 )); then
-                print -u2 -r -- "${NIVUUS_C_OK:-}✓ Successfully installed ${pkg:-$cmd}!${NIVUUS_C_OFF:-}"
+                print -u2 -r -- "${NIVUUS_C_OK:-}✓ Successfully installed ${pkg}!${NIVUUS_C_OFF:-}"
                 if [[ "${AI_CNF_RE_EXECUTE:-true}" == "true" ]]; then
-                    print -u2 -r -- "${NIVUUS_C_BUSY:-}▶ Running: ${cmd} ${original_args[*]}${NIVUUS_C_OFF:-}"
+                    print -u2 -r -- "${NIVUUS_C_BUSY:-}▶ Running: ${(V)cmd} ${(V)original_args[*]}${NIVUUS_C_OFF:-}"
                     print -u2 ""
                     "$cmd" "${original_args[@]}"
                     return $?
@@ -457,7 +346,8 @@ the package and re-run your original command.
 FEATURES:
   • Fast-path native lookup (0ms) when system tools exist (Ubuntu/Debian/Arch)
   • Multi-backend AI resolution (Gemini / Anthropic / OpenAI)
-  • Automatically adapts to OS & installed package managers (apt, brew, dnf, pipx, npm, cargo...)
+  • Installs with the system package manager (apt-get, dnf, yum, pacman, zypper, apk, brew);
+    the command is built locally, never taken from the AI reply
   • Interactive [y/N] install confirmation with zero friction
   • Automatic re-execution of the initial command upon successful installation
   • 24h caching to prevent redundant API calls
@@ -470,10 +360,10 @@ USAGE:
     ╭─ 🤖 Nivuus AI Package Assistant ────────────────────────────────────
     │  Command:  cowsay — Configurable talking cow in ASCII art
     │  Package:  cowsay
-    │  Install:  sudo apt install -y cowsay
+    │  Install:  sudo apt-get install -y --no-install-recommends cowsay
     ╰─────────────────────────────────────────────────────────────────────
 
-    Install package now with 'sudo apt install -y cowsay'? [y/N]
+    Install package now with 'sudo apt-get install -y --no-install-recommends cowsay'? [y/N]
 
 COMMANDS:
   ai-cnf-lookup <cmd>    Manually look up the package for a command

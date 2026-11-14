@@ -6,6 +6,13 @@
 # CRITICAL: Startup Time Test (<300ms requirement)
 # =============================================================================
 
+setup() {
+    # Test the tree this file belongs to, never whatever NIVUUS_SHELL_DIR the
+    # environment happens to point at.
+    NIVUUS_SHELL_DIR="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
+    export NIVUUS_SHELL_DIR
+}
+
 @test "CRITICAL: Full shell startup time is under 300ms (average of 5 runs)" {
     # Skip in CI environments - bats adds significant overhead
     if [[ "${CI:-false}" == "true" ]] || [[ -n "${GITHUB_ACTIONS:-}" ]]; then

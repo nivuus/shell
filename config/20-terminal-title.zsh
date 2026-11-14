@@ -72,11 +72,17 @@ fi
 # Helper Functions
 # =============================================================================
 
-# Set terminal title using escape sequences
+# Set terminal title using escape sequences.
+# The title is made of text this shell does not control (directory name,
+# command line, model reply), so it is emitted literally: never through prompt
+# expansion, which evaluates substitutions while PROMPT_SUBST is on. Control
+# characters are removed so the text cannot end the escape sequence early or
+# start another one.
 _set_terminal_title() {
-    local title="$1"
-    # OSC 0 ; title BEL
-    print -Pn "\033]0;${title}\007"
+    local title="${1//[[:cntrl:]]/}"
+    # OSC 0 ; title BEL -- to the terminal device, never to standard output,
+    # where it would mix with what a command prints.
+    print -rn -- $'\e]0;'"${title}"$'\a' >/dev/tty
 }
 
 # Get shortened directory path for display
@@ -388,10 +394,16 @@ _terminal_title_chpwd() {
 # Register Hooks
 # =============================================================================
 
-autoload -U add-zsh-hook
-add-zsh-hook precmd _terminal_title_precmd
-add-zsh-hook preexec _terminal_title_preexec
-add-zsh-hook chpwd _terminal_title_chpwd
+# Only with a terminal that can be opened: chpwd hooks fire in
+# non-interactive shells too, and a TERM value alone says nothing about who
+# is reading. Probing /dev/tty once here decides whether titles are possible
+# at all, so the hooks never have to.
+if nivuus_has_terminal && { : >/dev/tty } 2>/dev/null; then
+    autoload -U add-zsh-hook
+    add-zsh-hook precmd _terminal_title_precmd
+    add-zsh-hook preexec _terminal_title_preexec
+    add-zsh-hook chpwd _terminal_title_chpwd
 
-# Set initial title
-_terminal_title_precmd
+    # Set initial title
+    _terminal_title_precmd
+fi

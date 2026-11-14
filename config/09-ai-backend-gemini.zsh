@@ -56,13 +56,13 @@ _ai_backend_gemini_call() {
     local api_key
     api_key=$(_ai_gemini_get_api_key) || return 1
 
-    local api_url="https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${api_key}"
+    # The key travels in the x-goog-api-key header, not in the URL.
+    local api_url="https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent"
     local escaped_prompt=$(_ai_json_escape "$prompt")
     local json_payload="{\"contents\":[{\"parts\":[{\"text\":\"$escaped_prompt\"}]}],\"generationConfig\":{\"temperature\":${temperature},\"maxOutputTokens\":${max_tokens}}}"
 
-    local api_response=$(timeout "$timeout_secs" curl -s -X POST "$api_url" \
-        -H 'Content-Type: application/json' \
-        -d "$json_payload" 2>/dev/null)
+    local api_response=$(_ai_http_post_json "$api_url" "$json_payload" "$timeout_secs" \
+        "x-goog-api-key: ${api_key}")
 
     [[ -z "$api_response" ]] && return 1
 

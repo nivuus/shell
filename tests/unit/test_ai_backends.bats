@@ -4,8 +4,18 @@
 # (config/09-ai-core.zsh, config/09-ai-backend-*.zsh)
 
 setup() {
+    # Test the tree this file belongs to, never whatever NIVUUS_SHELL_DIR the
+    # environment happens to point at.
+    NIVUUS_SHELL_DIR="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
+    export NIVUUS_SHELL_DIR
     unset AI_BACKEND GEMINI_MODEL OPENAI_MODEL ANTHROPIC_MODEL
     unset GOOGLE_API_KEY OPENAI_API_KEY ANTHROPIC_API_KEY GEMINI_AUTH_MODE
+}
+
+# The JSON body from the curl configuration a backend writes on curl's stdin
+# (`data-binary = "<body>"`, with curl's \\ and \" escapes undone).
+_payload_from_config() {
+    sed -n 's/^data-binary = "\(.*\)"$/\1/p' "$1" | sed 's/\\\(.\)/\1/g'
 }
 
 # --- Dispatcher ---
@@ -94,6 +104,7 @@ EOF
     cat > "$mock_bin/curl" <<MOCK
 #!/usr/bin/env bash
 printf '%s\n' "\$*" >> "$arg_log"
+cat >> "$arg_log.stdin"
 printf '%s' '{"candidates":[{"content":{"parts":[{"text":"mocked gemini response"}]}}]}'
 MOCK
     chmod +x "$mock_bin/curl"
@@ -109,11 +120,12 @@ _ai_backend_gemini_call "hello" "gemini-3.5-flash-lite" 100 0.3 5
     [ "$output" = "mocked gemini response" ]
 
     # Assert URL/payload construction
-    grep -q "generateContent" "$arg_log"
-    grep -q "key=test-key" "$arg_log"
-    local payload
-    payload=$(grep -o "\-d {.*}" "$arg_log" | sed 's/^-d //')
-    echo "$payload" | jq . >/dev/null
+    # URL, key header and body come through curl's config on stdin; the key
+    # is a header, never in the URL or the argument list.
+    grep -q "generateContent\"$" "$arg_log.stdin"
+    grep -qF 'header = "x-goog-api-key: test-key"' "$arg_log.stdin"
+    ! grep -q "test-key" "$arg_log"
+    _payload_from_config "$arg_log.stdin" | jq . >/dev/null
 }
 
 @test "gemini backend fails when no API key is configured" {
@@ -140,6 +152,7 @@ _ai_backend_gemini_call "hello"
     cat > "$mock_bin/curl" <<MOCK
 #!/usr/bin/env bash
 printf '%s\n' "\$*" >> "$arg_log"
+cat >> "$arg_log.stdin"
 printf '%s' '{"choices":[{"message":{"content":"mocked openai response"}}]}'
 MOCK
     chmod +x "$mock_bin/curl"
@@ -155,11 +168,10 @@ _ai_backend_openai_call "hello" "gpt-5.6-luna" 100 0.3 5
     [ "$output" = "mocked openai response" ]
 
     # Assert URL/headers/payload construction
-    grep -q "https://api.openai.com/v1/chat/completions" "$arg_log"
-    grep -q "Authorization: Bearer test-key" "$arg_log"
-    local payload
-    payload=$(grep -o "\-d {.*}" "$arg_log" | sed 's/^-d //')
-    echo "$payload" | jq . >/dev/null
+    grep -q "https://api.openai.com/v1/chat/completions" "$arg_log.stdin"
+    grep -q "Authorization: Bearer test-key" "$arg_log.stdin"
+    ! grep -q "test-key" "$arg_log"
+    _payload_from_config "$arg_log.stdin" | jq . >/dev/null
 }
 
 @test "openai backend fails when no API key is configured" {
@@ -204,6 +216,7 @@ _ai_backend_openai_call "hello"
     cat > "$mock_bin/curl" <<MOCK
 #!/usr/bin/env bash
 printf '%s\n' "\$*" >> "$arg_log"
+cat >> "$arg_log.stdin"
 printf '%s' '{"content":[{"type":"text","text":"mocked anthropic response"}]}'
 MOCK
     chmod +x "$mock_bin/curl"
@@ -219,12 +232,11 @@ _ai_backend_anthropic_call "hello" "claude-haiku-4-5" 100 0.3 5
     [ "$output" = "mocked anthropic response" ]
 
     # Assert URL/headers/payload construction
-    grep -q "https://api.anthropic.com/v1/messages" "$arg_log"
-    grep -q "x-api-key: test-key" "$arg_log"
-    grep -q "anthropic-version: 2023-06-01" "$arg_log"
-    local payload
-    payload=$(grep -o "\-d {.*}" "$arg_log" | sed 's/^-d //')
-    echo "$payload" | jq . >/dev/null
+    grep -q "https://api.anthropic.com/v1/messages" "$arg_log.stdin"
+    grep -q "x-api-key: test-key" "$arg_log.stdin"
+    grep -q "anthropic-version: 2023-06-01" "$arg_log.stdin"
+    ! grep -q "test-key" "$arg_log"
+    _payload_from_config "$arg_log.stdin" | jq . >/dev/null
 }
 
 @test "anthropic backend fails when no API key is configured" {

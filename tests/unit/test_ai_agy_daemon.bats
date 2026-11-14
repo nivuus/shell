@@ -9,6 +9,10 @@
 # call but the first.
 
 setup() {
+    # Test the tree this file belongs to, never whatever NIVUUS_SHELL_DIR the
+    # environment happens to point at.
+    NIVUUS_SHELL_DIR="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
+    export NIVUUS_SHELL_DIR
     unset AI_BACKEND GEMINI_AUTH_MODE GEMINI_CLI_MODEL
     export AGY_DAEMON_RUNTIME_DIR="$BATS_TEST_TMPDIR/rt"
     export AGY_FAKE_LOG="$BATS_TEST_TMPDIR/agy-starts.log"

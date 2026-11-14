@@ -23,10 +23,8 @@ _ai_backend_openai_call() {
     local escaped_prompt=$(_ai_json_escape "$prompt")
     local json_payload="{\"model\":\"${model}\",\"messages\":[{\"role\":\"user\",\"content\":\"$escaped_prompt\"}],\"max_tokens\":${max_tokens},\"temperature\":${temperature}}"
 
-    local api_response=$(timeout "$timeout_secs" curl -s -X POST "https://api.openai.com/v1/chat/completions" \
-        -H "Authorization: Bearer ${api_key}" \
-        -H 'Content-Type: application/json' \
-        -d "$json_payload" 2>/dev/null)
+    local api_response=$(_ai_http_post_json "https://api.openai.com/v1/chat/completions" \
+        "$json_payload" "$timeout_secs" "Authorization: Bearer ${api_key}")
 
     [[ -z "$api_response" ]] && return 1
 

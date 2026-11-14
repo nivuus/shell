@@ -89,11 +89,14 @@ EOF
 # Default Vim Alias
 # =============================================================================
 
-# Use Nord theme by default
-if [[ $(detect_vim_env) == "ssh" ]]; then
-    alias vim='vim -u $NIVUUS_SHELL_DIR/.vimrc.nord --noplugin'
-else
-    alias vim='vim -u $NIVUUS_SHELL_DIR/.vimrc.nord'
+# Use Nord theme by default -- at a terminal only: `vim -u` replaces the
+# user's vimrc, which a script or an agent shell calling `vim` did not ask for.
+if nivuus_has_terminal; then
+    if [[ $(detect_vim_env) == "ssh" ]]; then
+        alias vim='vim -u $NIVUUS_SHELL_DIR/.vimrc.nord --noplugin'
+    else
+        alias vim='vim -u $NIVUUS_SHELL_DIR/.vimrc.nord'
+    fi
 fi
 
 # Set EDITOR

@@ -14,6 +14,10 @@ bats_require_minimum_version 1.5.0
 # Each test below is one of the three symptoms.
 
 setup() {
+    # Test the tree this file belongs to, never whatever NIVUUS_SHELL_DIR the
+    # environment happens to point at.
+    NIVUUS_SHELL_DIR="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
+    export NIVUUS_SHELL_DIR
     LISTING_DIR="$BATS_TEST_TMPDIR/listing"
     mkdir -p "$LISTING_DIR"
     touch "$LISTING_DIR/alpha.txt" "$LISTING_DIR/beta.txt" "$LISTING_DIR/gamma.txt"

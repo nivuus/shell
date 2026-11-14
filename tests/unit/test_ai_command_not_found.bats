@@ -8,6 +8,10 @@ load "${BATS_TEST_DIRNAME}/../helpers/pty"
 # (config/24-ai-command-not-found.zsh)
 
 setup() {
+    # Test the tree this file belongs to, never whatever NIVUUS_SHELL_DIR the
+    # environment happens to point at.
+    NIVUUS_SHELL_DIR="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
+    export NIVUUS_SHELL_DIR
     export AI_COMMAND_NOT_FOUND_CACHE_DIR="$BATS_TEST_TMPDIR/ai-cnf-cache"
     mkdir -p "$AI_COMMAND_NOT_FOUND_CACHE_DIR"
     unset ENABLE_AI_COMMAND_NOT_FOUND
@@ -86,14 +90,15 @@ source '$NIVUUS_SHELL_DIR/config/24-ai-command-not-found.zsh'
 
 _ai_credentials_ok() { return 0; }
 _ai_api_call() {
-    print -r -- '{\"found\":true,\"command\":\"cowsay\",\"description\":\"Configurable talking cow\",\"package\":\"cowsay\",\"install_command\":\"sudo apt install cowsay\",\"alternative_install\":\"\"}'
+    print -r -- '{\"found\":true,\"description\":\"Configurable talking cow\",\"package\":\"cowsay\",\"manager\":\"apt-get\"}'
 }
+_ai_cnf_supported_managers() { print -r -- apt-get }
 
 _ai_cnf_ai_lookup 'cowsay' 'cowsay coucou' 'OS: Linux'
 "
     [ "$status" -eq 0 ]
     [[ "$output" == *"\"package\":\"cowsay\""* ]]
-    [[ "$output" == *"sudo apt install cowsay"* ]]
+    [[ "$output" == *"\"manager\":\"apt-get\""* ]]
 }
 
 @test "_ai_cnf_ai_lookup handles unrecognized command with found=false" {
@@ -164,8 +169,10 @@ source '$NIVUUS_SHELL_DIR/config/24-ai-command-not-found.zsh'
 
 _ai_credentials_ok() { return 0; }
 _ai_api_call() {
-    print -r -- '{\"found\":true,\"command\":\"cowsay\",\"description\":\"Configurable cow\",\"package\":\"cowsay\",\"install_command\":\"sudo apt install cowsay\",\"alternative_install\":\"\"}'
+    print -r -- '{\"found\":true,\"description\":\"Configurable cow\",\"package\":\"cowsay\",\"manager\":\"apt-get\"}'
 }
+_ai_cnf_native_lookup() { return 1 }
+_ai_cnf_install_argv() { reply=(apt-get install -y --no-install-recommends \"\$2\") }
 
 command_not_found_handler 'cowsay' 'coucou'
 "
@@ -174,7 +181,7 @@ command_not_found_handler 'cowsay' 'coucou'
     [[ "$output" == *"Nivuus AI Package Assistant"* ]]
     [[ "$output" == *"Package:"* ]]
     [[ "$output" == *"cowsay"* ]]
-    [[ "$output" == *"sudo apt install cowsay"* ]]
+    [[ "$output" == *"apt-get install -y --no-install-recommends cowsay"* ]]
 }
 
 @test "command_not_found_handler protects against infinite recursion" {
@@ -200,4 +207,58 @@ ai-cnf-stats
     [[ "$output" == *"AI Command Not Found Statistics"* ]]
     [[ "$output" == *"Cached suggestions:"* ]]
     [[ "$output" == *"System context:"* ]]
+}
+
+# --- The model names a package, never a command ---
+# The reply is model output: nothing guarantees that a free-form install
+# command shown is the one executed, so only a package manager name and a
+# package name are accepted, and the command is built from lib/deps.sh.
+# A fake apt-get records what would be executed; NIVUUS_UID=0 keeps sudo out.
+
+_cnf_preamble() {
+    local reply="$1"
+    mkdir -p "$BATS_TEST_TMPDIR/bin"
+    printf '#!/bin/sh\nprintf "%%s\\n" "$*" >> "%s/CALLS-apt-get"\n' "$BATS_TEST_TMPDIR" > "$BATS_TEST_TMPDIR/bin/apt-get"
+    chmod +x "$BATS_TEST_TMPDIR/bin/apt-get"
+    echo "
+cd ${BATS_TEST_TMPDIR@Q}
+export PATH=${BATS_TEST_TMPDIR@Q}/bin:\$PATH NIVUUS_UID=0 AI_CNF_RE_EXECUTE=false
+export AI_COMMAND_NOT_FOUND_CACHE_DIR='$AI_COMMAND_NOT_FOUND_CACHE_DIR'
+source '$NIVUUS_SHELL_DIR/config/00-core.zsh'; source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh'
+source '$NIVUUS_SHELL_DIR/config/24-ai-command-not-found.zsh'
+_ai_cnf_native_lookup() { return 1 }
+_ai_credentials_ok() { return 0 }
+_ai_api_call() { print -r -- ${reply@Q} }
+command_not_found_handler zzqtool arg
+"
+}
+
+@test "a reply carrying a free-form install command offers nothing and runs nothing" {
+    pty_run "$(_cnf_preamble '{"found":true,"description":"d","package":"zzqtool","install_command":"apt-get install zzqtool; touch CNF_MARKER"}')" <<< 'y'
+    [ "$status" -eq 127 ]
+    [[ "$output" != *"Install package now"* ]]
+    [ ! -e "$BATS_TEST_TMPDIR/CNF_MARKER" ]
+    [ ! -e "$BATS_TEST_TMPDIR/CALLS-apt-get" ]
+}
+
+@test "a package name holding a command separator offers nothing and runs nothing" {
+    pty_run "$(_cnf_preamble '{"found":true,"description":"d","package":"zzqtool;touch CNF_MARKER","manager":"apt-get"}')" <<< 'y'
+    [ "$status" -eq 127 ]
+    [[ "$output" != *"Install package now"* ]]
+    [ ! -e "$BATS_TEST_TMPDIR/CNF_MARKER" ]
+    [ ! -e "$BATS_TEST_TMPDIR/CALLS-apt-get" ]
+}
+
+@test "escape sequences in the model's description are shown, not interpreted" {
+    AI_CNF_AUTO_PROMPT=false pty_run "export AI_CNF_AUTO_PROMPT=false
+$(_cnf_preamble '{"found":true,"description":"cow \u001b[2J\u001b]0;evil\u0007 end","package":"zzqtool","manager":"apt-get","install_command":"apt-get install zzqtool"}')"
+    [[ "$output" == *"Nivuus AI Package Assistant"* ]]
+    [[ "$output" == *'cow ^[[2J^[]0;evil^G end'* ]]
+    [[ "$output" != *$'\e[2J'* ]]
+}
+
+@test "a valid reply offers and runs the command built by lib/deps.sh" {
+    pty_run "$(_cnf_preamble '{"found":true,"description":"d","package":"zzqtool","manager":"apt-get"}')" <<< 'y'
+    [[ "$output" == *"Install package now with 'apt-get install -y --no-install-recommends zzqtool'"* ]]
+    [ "$(cat "$BATS_TEST_TMPDIR/CALLS-apt-get")" = "install -y --no-install-recommends zzqtool" ]
 }

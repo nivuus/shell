@@ -4,6 +4,10 @@
 # (config/09-ai-core.zsh, config/10-ai.zsh, config/17-colorization.zsh)
 
 setup() {
+    # Test the tree this file belongs to, never whatever NIVUUS_SHELL_DIR the
+    # environment happens to point at.
+    NIVUUS_SHELL_DIR="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
+    export NIVUUS_SHELL_DIR
     unset NIVUUS_MARKDOWN_RENDERER _NIVUUS_CACHED_MD_RENDERER ENABLE_MARKDOWN_RENDERING FORCE_MARKDOWN_COLOR NIVUUS_COLORIZATION_LOADED
 }
 

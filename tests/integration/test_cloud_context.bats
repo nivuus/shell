@@ -6,6 +6,13 @@
 # AWS Context Tests
 # =============================================================================
 
+setup() {
+    # Test the tree this file belongs to, never whatever NIVUUS_SHELL_DIR the
+    # environment happens to point at.
+    NIVUUS_SHELL_DIR="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
+    export NIVUUS_SHELL_DIR
+}
+
 @test "AWS profile shows in prompt" {
     run zsh -c "export AWS_PROFILE=production && source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/05-prompt.zsh' && prompt_cloud_context"
     [ "$status" -eq 0 ]
@@ -108,8 +115,13 @@
 # =============================================================================
 
 @test "Cloud context is called from build_prompt" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep 'prompt_cloud_context' config/05-prompt.zsh | grep -v '^#' | head -5"
+    run env AWS_PROFILE=staging zsh -c "
+export NIVUUS_SHELL_DIR='$NIVUUS_SHELL_DIR'
+source '$NIVUUS_SHELL_DIR/themes/nord.zsh'; source '$NIVUUS_SHELL_DIR/config/05-prompt.zsh'
+cd /
+print -rP -- \"\$PROMPT\""
     [ "$status" -eq 0 ]
+    [[ "$output" == *"aws:staging"* ]]
 }
 
 @test "Cloud context uses theme colors" {
