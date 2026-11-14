@@ -8,6 +8,10 @@
 # slug that got retired, say) must therefore never be waited on inline.
 
 setup() {
+    # Test the tree this file belongs to, never whatever NIVUUS_SHELL_DIR the
+    # environment happens to point at.
+    NIVUUS_SHELL_DIR="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
+    export NIVUUS_SHELL_DIR
     export TERM=xterm-256color
     export ENABLE_AI_TERMINAL_TITLES=true
     export AI_TITLE_CACHE_DIR="$BATS_TEST_TMPDIR/titles"

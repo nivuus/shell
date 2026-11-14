@@ -8,6 +8,10 @@ load "${BATS_TEST_DIRNAME}/../helpers/pty"
 # (config/24-ai-command-not-found.zsh)
 
 setup() {
+    # Test the tree this file belongs to, never whatever NIVUUS_SHELL_DIR the
+    # environment happens to point at.
+    NIVUUS_SHELL_DIR="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
+    export NIVUUS_SHELL_DIR
     export AI_COMMAND_NOT_FOUND_CACHE_DIR="$BATS_TEST_TMPDIR/ai-cnf-cache"
     mkdir -p "$AI_COMMAND_NOT_FOUND_CACHE_DIR"
     unset ENABLE_AI_COMMAND_NOT_FOUND

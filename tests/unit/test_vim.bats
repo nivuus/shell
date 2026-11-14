@@ -6,6 +6,13 @@
 # Module Loading Tests
 # =============================================================================
 
+setup() {
+    # Test the tree this file belongs to, never whatever NIVUUS_SHELL_DIR the
+    # environment happens to point at.
+    NIVUUS_SHELL_DIR="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
+    export NIVUUS_SHELL_DIR
+}
+
 @test "Vim module loads without errors" {
     run zsh -c "source '$NIVUUS_SHELL_DIR/config/08-vim.zsh' && echo 'loaded'"
     [ "$status" -eq 0 ]

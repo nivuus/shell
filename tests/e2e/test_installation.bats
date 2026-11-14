@@ -65,20 +65,20 @@ setup() {
 }
 
 @test "All module numbers are sequential" {
-    # Check that config files are numbered correctly
-    run bash -c "ls '$NIVUUS_SHELL_DIR/config' | grep -E '^[0-9]{2}-' | wc -l"
+    # Every module .zshrc lists exists under config/, named NN-name.zsh.
+    run zsh -c "cd '$NIVUUS_SHELL_DIR'; eval \"\$(sed -n '/^config_files=(/,/^)$/p' .zshrc)\"
+for f in \$config_files; do [[ \$f == [0-9][0-9]-*.zsh && -f config/\$f ]] || print -r -- MISSING \$f; done
+print -r -- \${#config_files}"
     [ "$status" -eq 0 ]
-    count="${output}"
-    [ "$count" -ge 15 ]
+    [[ "$output" != *MISSING* ]]
+    [ "${lines[-1]}" -ge 15 ]
 }
 
 @test "Module numbering allows intentional duplicates for related modules" {
     # Some modules intentionally share numbers (e.g., 09-nodejs and 09-python, 20-autoupdate and 20-terminal-title)
-    # This is acceptable when modules are related or complementary
-    run bash -c "ls '$NIVUUS_SHELL_DIR/config' | grep -E '^[0-9]{2}-.*\.zsh$' | grep -v '.zwc' | wc -l"
+    run zsh -c "files=('$NIVUUS_SHELL_DIR'/config/[0-9][0-9]-*.zsh(N)); print -r -- \${#files}"
     [ "$status" -eq 0 ]
-    count="${output}"
-    [ "$count" -ge 20 ]
+    [ "$output" -ge 20 ]
 }
 
 @test "Installation includes test framework" {

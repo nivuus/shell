@@ -4,6 +4,10 @@
 # real nivuus-update runs against an install in a throwaway HOME.
 
 setup() {
+    # Test the tree this file belongs to, never whatever NIVUUS_SHELL_DIR the
+    # environment happens to point at.
+    NIVUUS_SHELL_DIR="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
+    export NIVUUS_SHELL_DIR
     UPDATER="${BATS_TEST_DIRNAME}/../../config/20-autoupdate.zsh"
     WORK="$(mktemp -d)"
     export HOME="$WORK/home"

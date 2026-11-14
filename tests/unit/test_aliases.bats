@@ -5,6 +5,10 @@
 load "${BATS_TEST_DIRNAME}/../helpers/pty"
 
 setup() {
+    # Test the tree this file belongs to, never whatever NIVUUS_SHELL_DIR the
+    # environment happens to point at.
+    NIVUUS_SHELL_DIR="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
+    export NIVUUS_SHELL_DIR
     source "$NIVUUS_SHELL_DIR/config/15-aliases.zsh"
 }
 

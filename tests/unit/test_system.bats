@@ -3,6 +3,10 @@
 # Unit tests for System module (config/13-system.zsh)
 
 setup() {
+    # Test the tree this file belongs to, never whatever NIVUUS_SHELL_DIR the
+    # environment happens to point at.
+    NIVUUS_SHELL_DIR="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
+    export NIVUUS_SHELL_DIR
     source "$NIVUUS_SHELL_DIR/config/13-system.zsh"
 }
 
@@ -31,13 +35,17 @@ setup() {
 }
 
 @test "zsh_info shows NIVUUS_SHELL_DIR" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep 'NIVUUS_SHELL_DIR' config/13-system.zsh | head -3"
+    run zsh -c "source '$NIVUUS_SHELL_DIR/config/13-system.zsh'; zsh_info"
     [ "$status" -eq 0 ]
+    [[ "$output" == *"Install dir:    $NIVUUS_SHELL_DIR"* ]]
 }
 
 @test "zsh_info shows ZSH_VERSION" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep 'ZSH_VERSION' config/13-system.zsh | head -3"
+    local version
+    version="$(zsh -c 'print -r -- $ZSH_VERSION')"
+    run zsh -c "source '$NIVUUS_SHELL_DIR/config/13-system.zsh'; zsh_info"
     [ "$status" -eq 0 ]
+    [[ "$output" == *"ZSH version:    $version"* ]]
 }
 
 @test "zsh_info shows feature flags" {
@@ -46,8 +54,9 @@ setup() {
 }
 
 @test "zsh_info shows load time" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep 'NIVUUS_LOAD_TIME' config/13-system.zsh | head -3"
+    run env NIVUUS_LOAD_TIME=123 zsh -c "source '$NIVUUS_SHELL_DIR/config/13-system.zsh'; zsh_info"
     [ "$status" -eq 0 ]
+    [[ "$output" == *"Load time:      123ms"* ]]
 }
 
 @test "zsh_info lists config files" {
@@ -65,8 +74,13 @@ setup() {
 }
 
 @test "healthcheck checks for bin/healthcheck" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep 'bin/healthcheck' config/13-system.zsh | head -3"
+    local dir="$BATS_TEST_TMPDIR/install"
+    mkdir -p "$dir/bin"
+    printf '#!/bin/sh\necho FULL-HEALTHCHECK\n' > "$dir/bin/healthcheck"
+    chmod +x "$dir/bin/healthcheck"
+    run env NIVUUS_SHELL_DIR="$dir" zsh -c "source '$NIVUUS_SHELL_DIR/config/13-system.zsh'; healthcheck"
     [ "$status" -eq 0 ]
+    [ "$output" = "FULL-HEALTHCHECK" ]
 }
 
 @test "healthcheck has inline fallback" {
@@ -153,8 +167,13 @@ setup() {
 }
 
 @test "cleanup deduplicates history" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep 'zsh_history' config/13-system.zsh | head -3"
+    local home="$BATS_TEST_TMPDIR/home"
+    mkdir -p "$home"
+    printf 'ls\ncd /tmp\nls\ngit status\ncd /tmp\n' > "$home/.zsh_history"
+    run env HOME="$home" zsh -c "source '$NIVUUS_SHELL_DIR/config/13-system.zsh'; cleanup"
     [ "$status" -eq 0 ]
+    [[ "$output" == *"removed 2 entries"* ]]
+    [ "$(cat "$home/.zsh_history")" = "$(printf 'ls\ncd /tmp\ngit status')" ]
 }
 
 @test "cleanup uses awk to remove duplicates" {

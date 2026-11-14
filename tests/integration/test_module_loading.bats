@@ -6,6 +6,13 @@
 # Module Load Order Tests
 # =============================================================================
 
+setup() {
+    # Test the tree this file belongs to, never whatever NIVUUS_SHELL_DIR the
+    # environment happens to point at.
+    NIVUUS_SHELL_DIR="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
+    export NIVUUS_SHELL_DIR
+}
+
 @test "Config files array exists in .zshrc" {
     run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep 'config_files=(' .zshrc"
     [ "$status" -eq 0 ]
@@ -20,9 +27,9 @@
 }
 
 @test "Cleanup module (99-cleanup) is last in array" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && sed -n '/config_files=(/,/)$/p' .zshrc | grep '\.zsh' | tail -1"
+    run zsh -c "cd '$NIVUUS_SHELL_DIR'; eval \"\$(sed -n '/^config_files=(/,/^)$/p' .zshrc)\"; print -r -- \$config_files[-1]"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"99-cleanup.zsh"* ]]
+    [ "$output" = "99-cleanup.zsh" ]
 }
 
 @test "All modules load without errors" {
@@ -32,10 +39,11 @@
 }
 
 @test "No duplicate modules in config_files array" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && sed -n '/config_files=(/,/)$/p' .zshrc | grep '05-prompt.zsh' | wc -l"
+    run zsh -c "cd '$NIVUUS_SHELL_DIR'; eval \"\$(sed -n '/^config_files=(/,/^)$/p' .zshrc)\"; print -r -- \${#config_files} \${#\${(u)config_files}}"
     [ "$status" -eq 0 ]
-    count="${output}"
-    [ "$count" -eq 1 ]
+    local total="${output% *}" unique="${output#* }"
+    [ "$total" -ge 20 ]
+    [ "$total" -eq "$unique" ]
 }
 
 # =============================================================================
@@ -111,15 +119,15 @@
 # =============================================================================
 
 @test "Core module (00-core) is first in config_files array" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && sed -n '/config_files=(/,/)$/p' .zshrc | grep '\.zsh' | head -1"
+    run zsh -c "cd '$NIVUUS_SHELL_DIR'; eval \"\$(sed -n '/^config_files=(/,/^)$/p' .zshrc)\"; print -r -- \$config_files[1]"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"00-core.zsh"* ]]
+    [ "$output" = "00-core.zsh" ]
 }
 
 @test "Environment module (01-environment) is second in array" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && sed -n '/config_files=(/,/)$/p' .zshrc | grep '\.zsh' | head -2 | tail -1"
+    run zsh -c "cd '$NIVUUS_SHELL_DIR'; eval \"\$(sed -n '/^config_files=(/,/^)$/p' .zshrc)\"; print -r -- \$config_files[2]"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"01-environment.zsh"* ]]
+    [ "$output" = "01-environment.zsh" ]
 }
 
 @test "History module (02) appears before prompt (05) in array" {

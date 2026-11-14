@@ -6,6 +6,13 @@
 # AI Module Integration Tests
 # =============================================================================
 
+setup() {
+    # Test the tree this file belongs to, never whatever NIVUUS_SHELL_DIR the
+    # environment happens to point at.
+    NIVUUS_SHELL_DIR="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
+    export NIVUUS_SHELL_DIR
+}
+
 @test "AI module loads without errors" {
     run zsh -c "source '$NIVUUS_SHELL_DIR/config/10-ai.zsh' && echo 'loaded'"
     [ "$status" -eq 0 ]
@@ -262,7 +269,7 @@ EOF
 # =============================================================================
 
 @test "AI suggestions don't block prompt" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep 'background\|async\|&)' config/19-ai-suggestions.zsh | head -3"
+    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -q 'background\\|async\\|&)' config/19-ai-suggestions.zsh"
     [ "$status" -eq 0 ]
 }
 

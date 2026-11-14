@@ -6,6 +6,13 @@
 # Git Alias Integration Tests
 # =============================================================================
 
+setup() {
+    # Test the tree this file belongs to, never whatever NIVUUS_SHELL_DIR the
+    # environment happens to point at.
+    NIVUUS_SHELL_DIR="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
+    export NIVUUS_SHELL_DIR
+}
+
 @test "Git status alias is defined (gs)" {
     run zsh -c "source '$NIVUUS_SHELL_DIR/config/06-git.zsh' && alias gs"
     [ "$status" -eq 0 ]

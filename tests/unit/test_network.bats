@@ -5,6 +5,10 @@
 load "${BATS_TEST_DIRNAME}/../helpers/pty"
 
 setup() {
+    # Test the tree this file belongs to, never whatever NIVUUS_SHELL_DIR the
+    # environment happens to point at.
+    NIVUUS_SHELL_DIR="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
+    export NIVUUS_SHELL_DIR
     source "$NIVUUS_SHELL_DIR/config/12-network.zsh"
 }
 
@@ -48,8 +52,14 @@ setup() {
 }
 
 @test "localip supports macOS" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep 'darwin' config/12-network.zsh | head -3"
+    local bin="$BATS_TEST_TMPDIR/bin"
+    mkdir -p "$bin"
+    printf '#!/bin/sh\nprintf "\\tinet 127.0.0.1 netmask 0xff000000\\n\\tinet 192.0.2.7 netmask 0xffffff00\\n"\n' > "$bin/ifconfig"
+    chmod +x "$bin/ifconfig"
+    run env PATH="$bin:$PATH" zsh -c "source '$NIVUUS_SHELL_DIR/config/12-network.zsh' 2>/dev/null; OSTYPE=darwin23; localip"
     [ "$status" -eq 0 ]
+    [[ "$output" == *"192.0.2.7"* ]]
+    [[ "$output" != *"127.0.0.1"* ]]
 }
 
 @test "localip supports Linux" {

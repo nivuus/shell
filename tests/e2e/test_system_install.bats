@@ -7,6 +7,10 @@
 load '../helpers/fingerprint'
 
 setup() {
+    # Test the tree this file belongs to, never whatever NIVUUS_SHELL_DIR the
+    # environment happens to point at.
+    NIVUUS_SHELL_DIR="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
+    export NIVUUS_SHELL_DIR
     ROOT="${BATS_TEST_DIRNAME}/../.."
     NIVUUS="$ROOT/bin/nivuus"
     TMP="$(mktemp -d)"
