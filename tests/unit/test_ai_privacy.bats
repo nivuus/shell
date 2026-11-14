@@ -25,10 +25,11 @@ printf '%s' '{"choices":[{"message":{"content":"Mock title"}}],"content":[{"text
 MOCK
     chmod +x "$MOCK_BIN/curl"
 
-    # Token-shaped, under a header name no keyword list knows, next to a
+    # Token-shaped (built here, so no credential-like literal sits in the
+    # repository), under a header name no keyword list knows, next to a
     # comment in another language than English.
-    SECRET='Zq7Lm3Nx9Pw2Rt5Vb8Kc4Hd6Fj1Gs0YaQe'
-    API_KEY='key-under-test-0123456789'
+    SECRET="$(printf 'tok%02d' {10..20})A"
+    API_KEY="fake$(printf '%02d' {1..9})"
     COMMAND_LINE="curl -H 'X-Jeton: $SECRET' https://intra.example # le jeton de prod"
 }
 

@@ -185,5 +185,9 @@ _show_tool_suggestions() {
     fi
 }
 
-# Run suggestions check (async, non-blocking)
-(_show_tool_suggestions &)
+# Run suggestions check (async, non-blocking), at a terminal only: the hint
+# is printed on stdout, which in a script or an agent shell is the caller's
+# data, and nobody is there to act on it.
+if nivuus_has_terminal; then
+    (_show_tool_suggestions &)
+fi

@@ -16,6 +16,9 @@ setup() {
     mkdir -p "$_home"
     printf 'source %q\n' "$NIVUUS_SHELL_DIR/.zshrc" > "$_home/.zshrc"
 
+    # NIVUUS_PLUGIN_ROOT below points at an empty directory, so the daily
+    # optional-tools hint always has something to say on any machine.
+
     # A directory every project hook reacts to.
     _project="$BATS_TEST_TMPDIR/project"
     mkdir -p "$_project/venv/bin"
@@ -27,6 +30,7 @@ setup() {
 @test "cd into a project and back prints nothing on stdout without a terminal" {
     run --separate-stderr env HOME="$_home" ZDOTDIR="$_home" NIVUUS_NO_COMPILE=1 \
         TERM=xterm-256color ENABLE_PYTHON_AUTO_ACTIVATE=true \
+        NIVUUS_PLUGIN_ROOT="$BATS_TEST_TMPDIR/no-plugins" \
         zsh -i -c "cd ${_project@Q}; cd /" </dev/null
     [ "$status" -eq 0 ]
     if [ -n "$output" ]; then
