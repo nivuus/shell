@@ -136,22 +136,21 @@ setup() {
     [[ "$output" == *"ps aux"* ]]
 }
 
-@test "top alias includes cpu sorting" {
-    run zsh -c "source '$NIVUUS_SHELL_DIR/config/15-aliases.zsh' && alias top"
-    [ "$status" -eq 0 ]
-    [[ "$output" == *"top"* ]]
+@test "top is not aliased (procps top has no -o cpu)" {
+    pty_run "source '$NIVUUS_SHELL_DIR/config/00-core.zsh'; source '$NIVUUS_SHELL_DIR/config/15-aliases.zsh'; whence -w top"
+    [[ "$output" != *"top: alias"* ]]
 }
 
-@test "df alias includes -h flag (human readable)" {
-    run zsh -c "source '$NIVUUS_SHELL_DIR/config/15-aliases.zsh' && alias df"
+@test "at a terminal, df alias includes -h flag (human readable)" {
+    pty_run "source '$NIVUUS_SHELL_DIR/config/00-core.zsh'; source '$NIVUUS_SHELL_DIR/config/15-aliases.zsh'; alias df"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"-h"* ]]
+    [[ "$output" == *"df -h"* ]]
 }
 
-@test "du alias includes -h flag (human readable)" {
-    run zsh -c "source '$NIVUUS_SHELL_DIR/config/15-aliases.zsh' && alias du"
+@test "at a terminal, du alias includes -h flag (human readable)" {
+    pty_run "source '$NIVUUS_SHELL_DIR/config/00-core.zsh'; source '$NIVUUS_SHELL_DIR/config/15-aliases.zsh'; alias du"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"-h"* ]]
+    [[ "$output" == *"du -h"* ]]
 }
 
 # =============================================================================

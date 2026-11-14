@@ -222,6 +222,7 @@ backup myfile           # Create timestamped backup
 ```bash
 myip                    # Show public IP
 localip                 # Show local IPs
+myips                   # Both of the above
 ports                   # List open ports
 weather Paris           # Get weather forecast
 ```

@@ -2,6 +2,8 @@
 
 # Unit tests for Network module (config/12-network.zsh)
 
+load "${BATS_TEST_DIRNAME}/../helpers/pty"
+
 setup() {
     source "$NIVUUS_SHELL_DIR/config/12-network.zsh"
 }
@@ -127,8 +129,8 @@ setup() {
 # Network Testing Aliases
 # =============================================================================
 
-@test "ping alias is defined with count" {
-    run zsh -c "source '$NIVUUS_SHELL_DIR/config/12-network.zsh' && alias ping"
+@test "at a terminal, ping alias is defined with count" {
+    pty_run "source '$NIVUUS_SHELL_DIR/config/00-core.zsh'; source '$NIVUUS_SHELL_DIR/config/12-network.zsh'; alias ping"
     [ "$status" -eq 0 ]
     [[ "$output" == *"-c 5"* ]]
 }

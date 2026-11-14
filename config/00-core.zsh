@@ -80,20 +80,24 @@ DIRSTACKSIZE=10
 # Enable colors
 autoload -U colors && colors
 
-# Colored output for ls
+# Colored output for ls and grep. Terminal only: an alias under a standard
+# command name changes what that command does for every caller, and a script
+# or an agent shell must get the command itself.
 if [[ "$OSTYPE" == "darwin"* ]]; then
     # macOS
     export CLICOLOR=1
-    alias ls='ls -G'
-else
+    nivuus_has_terminal && alias ls='ls -G'
+elif nivuus_has_terminal; then
     # Linux
     alias ls='ls --color=auto'
 fi
 
 # Colored grep
-alias grep='grep --color=auto'
-alias fgrep='fgrep --color=auto'
-alias egrep='egrep --color=auto'
+if nivuus_has_terminal; then
+    alias grep='grep --color=auto'
+    alias fgrep='fgrep --color=auto'
+    alias egrep='egrep --color=auto'
+fi
 
 # =============================================================================
 # Disable Python/Conda Prompt Modifications

@@ -58,15 +58,16 @@ alias pls='sudo'
 
 # Process management
 alias psa='ps aux'
-alias top='top -o cpu'
 
-# Disk usage
-alias df='df -h'
-alias du='du -h'
-
-# Free memory
-if [[ "$OSTYPE" != "darwin"* ]]; then
-    alias free='free -h'
+# Human-readable sizes, at a terminal only (same reason as the -i aliases
+# above): a script parsing `df` or `du` output gets the standard format.
+# -h exists in GNU, BSD and busybox df/du; free exists on Linux only.
+if nivuus_has_terminal; then
+    alias df='df -h'
+    alias du='du -h'
+    if [[ "$OSTYPE" != "darwin"* ]]; then
+        alias free='free -h'
+    fi
 fi
 
 # =============================================================================
@@ -114,10 +115,11 @@ fi
 # Development
 # =============================================================================
 
-# Python
+# Python. `python` and `pip` point at python3/pip3 only where no command of
+# that name exists: an installed python or pip is never hidden.
 alias py='python3'
-alias python='python3'
-alias pip='pip3'
+(( $+commands[python] )) || alias python='python3'
+(( $+commands[pip] )) || alias pip='pip3'
 
 # Virtual environments (managed by 09-python.zsh)
 # alias venv - managed by 09-python.zsh
@@ -154,11 +156,8 @@ alias note='$EDITOR ~/notes.txt'
 # Calculator
 alias calc='bc -l'
 
-# Weather shortcut
-alias w='weather'
-
-# IP shortcuts
-alias ip='myip && localip'
+# Public and local addresses. Not `ip`, which is iproute2's command.
+alias myips='myip; localip'
 
 # Update everything
 alias update='update_system'

@@ -86,8 +86,12 @@ weatherfull() {
 # Network Testing
 # =============================================================================
 
-# Ping with count
-alias ping='ping -c 5'
+# Ping with count, at a terminal only: a script or an agent shell calling
+# `ping` gets ping's own behaviour. `-c` is the count option of every ping
+# this shell targets (iputils, BSD/macOS, busybox).
+if nivuus_has_terminal; then
+    alias ping='ping -c 5'
+fi
 
 # Fast speed test (if speedtest-cli is installed)
 if command -v speedtest-cli &>/dev/null; then

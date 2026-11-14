@@ -151,7 +151,8 @@ fi
 # ripgrep with Nord colors
 # =============================================================================
 
-if command -v rg &>/dev/null; then
+# Terminal only, like every alias under a standard command name in this file.
+if nivuus_has_terminal && command -v rg &>/dev/null; then
     # Themed colors: match=green, path=cyan, line=yellow
     alias rg="rg --colors 'match:fg:${THEME_COLORS[green]:-143}' --colors 'match:style:bold' --colors 'path:fg:${THEME_COLORS[cyan]:-110}' --colors 'line:fg:${THEME_COLORS[yellow]:-221}'"
 fi
@@ -160,9 +161,11 @@ fi
 # grep colors (fallback)
 # =============================================================================
 
-alias grep='grep --color=auto'
-alias egrep='egrep --color=auto'
-alias fgrep='fgrep --color=auto'
+if nivuus_has_terminal; then
+    alias grep='grep --color=auto'
+    alias egrep='egrep --color=auto'
+    alias fgrep='fgrep --color=auto'
+fi
 
 # GREP_COLORS/LS_COLORS come from the loaded theme (themes/*.zsh); only
 # fall back here if no theme happened to set them.
@@ -173,7 +176,9 @@ export GREP_COLORS="${GREP_COLORS:-mt=01;32:fn=36:ln=33:se=90}"
 # grc (Generic Colouriser)
 # =============================================================================
 
-if [[ "$TERM" != dumb ]] && command -v grc &>/dev/null; then
+# grc wraps standard commands (ps, df, diff, systemctl, ...) under their own
+# names: a terminal-only decision, a `TERM` value is not one.
+if [[ "$TERM" != dumb ]] && nivuus_has_terminal && command -v grc &>/dev/null; then
     # Try to source grc's ZSH integration
     if [[ -f "/etc/grc.zsh" ]]; then
         source /etc/grc.zsh
