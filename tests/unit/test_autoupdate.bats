@@ -117,3 +117,42 @@ run_update() {
     [ "$status" -eq 0 ]
     [[ "$output" == *"Already up to date"* ]]
 }
+
+# --- Pre-update backups ---
+
+@test "backup rotation keeps the five newest, including the one just made" {
+    local base="$HOME/.config/nivuus-shell-backup" stamp
+    for stamp in 20240101-000000 20240201-000000 20240301-000000 \
+                 20240401-000000 20240501-000000 20240601-000000; do
+        mkdir -p "$base/pre-update-$stamp"
+    done
+    publish_release 9.9.9
+    run_update
+    [ "$status" -eq 0 ]
+    local made="${output#*Backup created: }"
+    made="${made%%$'\n'*}"
+    [ -d "$made/nivuus-shell" ]
+    [ ! -d "$base/pre-update-20240101-000000" ]
+    [ ! -d "$base/pre-update-20240201-000000" ]
+    [ -d "$base/pre-update-20240601-000000" ]
+    [ "$(ls -1d "$base"/pre-update-* | wc -l)" -eq 5 ]
+}
+
+@test "a failed copy of the new release is reported and the backup restored" {
+    # A cp that fails only on the copy of the extracted release.
+    local real_cp
+    real_cp="$(command -v cp)"
+    cat > "$WORK/bin/cp" <<EOF2
+#!/usr/bin/env bash
+case "\$*" in *"/extract/."*) echo "cp: simulated failure" >&2; exit 1 ;; esac
+exec "$real_cp" "\$@"
+EOF2
+    chmod +x "$WORK/bin/cp"
+    publish_release 9.9.9
+    run_update
+    [ "$status" -ne 0 ]
+    [[ "$output" != *"Installation complete"* ]]
+    [[ "$output" == *"Restored from backup"* ]]
+    [ "$(cat "$NIVUUS_SHELL_DIR/.version")" = "3.0.0" ]
+    [ "$(cat "$NIVUUS_SHELL_DIR/config/marker.zsh")" = "old" ]
+}

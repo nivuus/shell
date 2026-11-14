@@ -136,16 +136,17 @@ _nivuus_cleanup_old_backups() {
     # Check if backup directory exists
     [[ ! -d "$backup_base" ]] && return
 
-    # Find all pre-update backups, sort by date (newest first), keep only first 5
-    local backups=("$backup_base"/pre-update-*(N))
+    # Newest first: the names carry a YYYYMMDD-HHMMSS stamp, so descending
+    # name order (the On qualifier) is newest first. A bare glob sorts
+    # ascending, which put the OLDEST first and pruned the newest backups,
+    # the one just made included.
+    local backups=("$backup_base"/pre-update-*(NOn))
 
     # If we have more than 5 backups, remove the oldest ones
     if (( ${#backups[@]} > 5 )); then
-        # Sort by modification time (newest first) and get all except first 5
-        local to_remove=("${(@)backups[6,-1]}")
-
-        for old_backup in "${to_remove[@]}"; do
-            rm -rf "$old_backup"
+        local old_backup
+        for old_backup in "${(@)backups[6,-1]}"; do
+            rm -rf "$old_backup" || echo "⚠️  Could not remove old backup $old_backup" >&2
         done
     fi
 }
@@ -154,16 +155,18 @@ _nivuus_cleanup_old_backups() {
 _nivuus_create_update_backup() {
     local backup_dir="$HOME/.config/nivuus-shell-backup/pre-update-$(date +%Y%m%d-%H%M%S)"
 
-    mkdir -p "$backup_dir"
+    # An update without a complete backup could not be undone: any failure
+    # here fails the backup, and the caller does not update.
+    mkdir -p "$backup_dir" || return 1
 
     # Backup entire installation directory
     if [[ -d "$NIVUUS_SHELL_DIR" ]]; then
-        cp -r "$NIVUUS_SHELL_DIR" "$backup_dir/nivuus-shell"
+        cp -r "$NIVUUS_SHELL_DIR" "$backup_dir/nivuus-shell" || return 1
     fi
 
     # Backup user files
-    [[ -f "$HOME/.zshrc" ]] && cp "$HOME/.zshrc" "$backup_dir/.zshrc"
-    [[ -f "$HOME/.zsh_local" ]] && cp "$HOME/.zsh_local" "$backup_dir/.zsh_local"
+    if [[ -f "$HOME/.zshrc" ]]; then cp "$HOME/.zshrc" "$backup_dir/.zshrc" || return 1; fi
+    if [[ -f "$HOME/.zsh_local" ]]; then cp "$HOME/.zsh_local" "$backup_dir/.zsh_local" || return 1; fi
 
     # Clean up old backups after creating new one
     _nivuus_cleanup_old_backups
@@ -258,8 +261,9 @@ _nivuus_install_release() {
     mkdir -p "$temp_preserve"
 
     for file in "${files_to_preserve[@]}"; do
-        [[ -f "$NIVUUS_SHELL_DIR/$file" ]] && \
-            cp "$NIVUUS_SHELL_DIR/$file" "$temp_preserve/"
+        if [[ -f "$NIVUUS_SHELL_DIR/$file" ]]; then
+            cp "$NIVUUS_SHELL_DIR/$file" "$temp_preserve/" || return 1
+        fi
     done
 
     # Refuse to wipe a git checkout, whatever the caller did.
@@ -271,15 +275,24 @@ _nivuus_install_release() {
     # Install new version. Remove old contents explicitly (never via a glob,
     # which would honour GLOB_DOTS and could match .git / dotfiles) while
     # always preserving VCS metadata and user files.
-    find "$NIVUUS_SHELL_DIR" -mindepth 1 -maxdepth 1 \
+    # A failed delete or copy leaves a half-installed tree: report it, and
+    # the caller restores the backup.
+    if ! find "$NIVUUS_SHELL_DIR" -mindepth 1 -maxdepth 1 \
         ! -name '.git' ! -name '.zsh_local' ! -name '.version' \
-        -exec rm -rf {} + 2>/dev/null
-    cp -r "$extract_dir"/. "$NIVUUS_SHELL_DIR/"
+        -exec rm -rf {} +; then
+        echo "❌ Failed to remove the previous installation"
+        return 1
+    fi
+    if ! cp -r "$extract_dir"/. "$NIVUUS_SHELL_DIR/"; then
+        echo "❌ Failed to copy the new release into $NIVUUS_SHELL_DIR"
+        return 1
+    fi
 
     # Restore preserved files
     for file in "${files_to_preserve[@]}"; do
-        [[ -f "$temp_preserve/$file" ]] && \
-            cp "$temp_preserve/$file" "$NIVUUS_SHELL_DIR/"
+        if [[ -f "$temp_preserve/$file" ]]; then
+            cp "$temp_preserve/$file" "$NIVUUS_SHELL_DIR/" || return 1
+        fi
     done
 
     # Update version file
@@ -311,7 +324,11 @@ _nivuus_perform_update() {
     fi
 
     # Create backup
-    local backup_dir=$(_nivuus_create_update_backup)
+    local backup_dir
+    if ! backup_dir=$(_nivuus_create_update_backup); then
+        echo "❌ Could not back up the current installation, update aborted"
+        return 1
+    fi
     echo "📦 Backup created: $backup_dir"
 
     # Download release
@@ -332,9 +349,11 @@ _nivuus_perform_update() {
 
         # Restore from backup
         if [[ -d "$backup_dir/nivuus-shell" ]]; then
-            rm -rf "$NIVUUS_SHELL_DIR"
-            cp -r "$backup_dir/nivuus-shell" "$NIVUUS_SHELL_DIR"
-            echo "✅ Restored from backup"
+            if rm -rf "$NIVUUS_SHELL_DIR" && cp -r "$backup_dir/nivuus-shell" "$NIVUUS_SHELL_DIR"; then
+                echo "✅ Restored from backup"
+            else
+                echo "❌ Restore failed: copy $backup_dir/nivuus-shell back to $NIVUUS_SHELL_DIR by hand"
+            fi
         fi
 
         rm -rf "$temp_dir"
