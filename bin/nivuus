@@ -142,6 +142,10 @@ cmd_install() {
     fi
 
     if [ "$NIVUUS_MODE" = system ]; then
+        # Directories created from here on are read by every account: the
+        # caller's umask (077 under a hardened profile) must not make them
+        # private. File modes are settled in lib/manifest.sh.
+        umask 022
         : "${prefix:=$NIVUUS_SYSTEM_PREFIX}"
         : "${NIVUUS_STATE_DIR:=$NIVUUS_SYSTEM_STATE_DIR}"
         # zshrc_target is resolved later, once zsh is installed: on a fresh

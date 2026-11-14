@@ -259,3 +259,33 @@ EOP
     [ "$(stat -c '%u' "$R/usr/local/share/nivuus-shell/.zshrc")" = "0" ]
     [ "$(stat -c '%u' "$R/usr/local/share/nivuus-shell/config/00-core.zsh")" = "0" ]
 }
+
+# File modes: a system install writes files every account reads.
+_mode() { stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1"; }
+
+@test "install --system keeps the global zshrc and the shells list at 0644" {
+    # zsh missing from the shells list, so the chsh step rewrites it.
+    printf '/bin/sh\n/bin/bash\n' > "$R/etc/shells"
+    chmod 0644 "$R/etc/shells" "$R/etc/zsh/zshrc"
+    run "$NIVUUS" install --system --yes
+    [ "$status" -eq 0 ]
+    grep -q "zsh" "$R/etc/shells"
+    grep -q ">>> nivuus shell >>>" "$R/etc/zsh/zshrc"
+    [ "$(_mode "$R/etc/shells")" = "644" ]
+    [ "$(_mode "$R/etc/zsh/zshrc")" = "644" ]
+}
+
+@test "install --system makes installed files world-readable even from a private clone" {
+    cp -r "$ROOT" "$TMP/clone"
+    find "$TMP/clone" -name '*.zwc' -delete
+    # A clone made under umask 077, installed from a shell with the same umask.
+    chmod -R go-rwx "$TMP/clone"
+    run bash -c "umask 077; '$TMP/clone/bin/nivuus' install --system --yes --minimal"
+    [ "$status" -eq 0 ]
+    local p="$R/usr/local/share/nivuus-shell"
+    [ "$(_mode "$p/config/00-core.zsh")" = "644" ]
+    [ "$(_mode "$p/.zshrc")" = "644" ]
+    [ "$(_mode "$p/bin/nivuus")" = "755" ]
+    [ "$(_mode "$p")" = "755" ]
+    [ "$(_mode "$p/config")" = "755" ]
+}

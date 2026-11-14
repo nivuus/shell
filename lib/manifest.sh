@@ -258,13 +258,50 @@ _nivuus_prior_entry_exists() {
         "$NIVUUS_MANIFEST_TMP" 2>/dev/null
 }
 
-# Coeur partagé : $1 = source, $2 = destination.
+# Octal mode of an existing file (GNU stat, then BSD/macOS stat).
+_nivuus_file_mode() {
+    stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1"
+}
+
+# Give the file just placed at $1 the mode it should have.
+#   $2 = write: content Nivuus generated (global zshrc, /etc/shells,
+#        ~/.zshrc). It keeps the mode of the file it replaces ($3), 0644 when
+#        there was none -- never the 0600 of the temporary file it came from.
+#   $2 = copy: a file of the source tree ($4). A user install keeps the
+#        source mode (cp -p).
+# In system mode every placed file is read by every account and written by
+# root only, whatever the clone's modes or the caller's umask: a copied file
+# becomes 0755 when the source is executable, 0644 otherwise, and a written
+# file is made world-readable and not group- or world-writable.
+_nivuus_settle_mode() {
+    local dst="$1" kind="$2" old_mode="$3" src="$4"
+    if [ "$kind" = write ]; then
+        chmod "${old_mode:-644}" "$dst" || return 1
+        if [ "${NIVUUS_MODE:-}" = system ]; then
+            chmod go+r,go-w "$dst" || return 1
+        fi
+    elif [ "${NIVUUS_MODE:-}" = system ]; then
+        case "$(_nivuus_file_mode "$src")" in
+            *[1357]*) chmod 755 "$dst" ;;
+            *)        chmod 644 "$dst" ;;
+        esac || return 1
+    fi
+    return 0
+}
+
+# Shared core: $1 = source, $2 = destination, $3 = copy (default) | write
+# (see _nivuus_settle_mode).
 _nivuus_place() {
-    local src="$1" dst="$2" existed=0 backup='-' new_hash prior_ref
+    local src="$1" dst="$2" kind="${3:-copy}" existed=0 backup='-' new_hash prior_ref old_mode=''
 
     [ -f "$dst" ] && existed=1
+    [ "$existed" -eq 1 ] && old_mode="$(_nivuus_file_mode "$dst")"
     if [ "$existed" -eq 1 ] && [ "$(nivuus_hash_file "$src")" = "$(nivuus_hash_file "$dst")" ]; then
-        return 0   # idempotent : rien à faire, rien à journaliser
+        # Idempotent: nothing to journal. The mode is still settled, so a
+        # system file left unreadable by an earlier install is repaired.
+        [ -n "${NIVUUS_DRY_RUN:-}" ] && return 0
+        _nivuus_settle_mode "$dst" "$kind" "$old_mode" "$src"
+        return
     fi
 
     # [ -f "$dst" ] suit les liens : un utilisateur stow/chezmoi dont
@@ -326,6 +363,7 @@ _nivuus_place() {
         if [ "${NIVUUS_MODE:-}" = system ] && [ "$(id -u)" -eq 0 ]; then
             chown 0:0 "$dst" 2>/dev/null || true
         fi
+        _nivuus_settle_mode "$dst" "$kind" "$old_mode" "$src" || return 1
         new_hash="$(nivuus_hash_file "$dst")"
     fi
 
@@ -342,7 +380,7 @@ nivuus_write_file() {
     local dst="$1" tmp result
     tmp="$(mktemp)"
     cat > "$tmp"
-    _nivuus_place "$tmp" "$dst"
+    _nivuus_place "$tmp" "$dst" write
     result=$?
     rm -f "$tmp"
     return $result
