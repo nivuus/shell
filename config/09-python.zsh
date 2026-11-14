@@ -42,6 +42,9 @@ get_python_venv() {
 # Auto-activate venv when entering directory with venv/
 _python_auto_activate() {
     [[ "${ENABLE_PYTHON_AUTO_ACTIVATE:-false}" != "true" ]] && return
+    # chpwd hooks fire in non-interactive shells too: without a terminal
+    # this output would land in the standard output of a script or an agent.
+    nivuus_has_terminal || return 0
 
     # Look for common venv directories
     local venv_dirs=("venv" ".venv" "env" ".env")

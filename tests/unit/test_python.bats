@@ -81,7 +81,7 @@ setup() {
 }
 
 @test "Auto-activation looks for common venv directories" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -A 5 '_python_auto_activate()' config/09-python.zsh | grep -E '(venv|.venv|env|.env)'"
+    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -A 10 '_python_auto_activate()' config/09-python.zsh | grep -E '(venv|.venv|env|.env)'"
     [ "$status" -eq 0 ]
 }
 

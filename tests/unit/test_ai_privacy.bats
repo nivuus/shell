@@ -38,6 +38,7 @@ _run_title() {
         "$key_var=$API_KEY" TERM=xterm-256color ENABLE_AI_TERMINAL_TITLES=true \
         AI_TITLE_CACHE_DIR="$BATS_TEST_TMPDIR/titles-$backend" \
         zsh -c "
+source '$NIVUUS_SHELL_DIR/config/00-core.zsh'
 source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh'
 source '$NIVUUS_SHELL_DIR/config/09-ai-backend-gemini.zsh'
 source '$NIVUUS_SHELL_DIR/config/09-ai-backend-openai.zsh'

@@ -395,6 +395,15 @@ if [[ "$ENABLE_AUTOUPDATE" == "true" ]] && nivuus_has_terminal && ! _nivuus_is_d
         _nivuus_check_update_async
     fi
     unset days_since_check
+elif [[ "$ENABLE_AUTOUPDATE" == "true" ]] && nivuus_has_terminal && _nivuus_is_dev_checkout; then
+    # Say why nothing updates, once per check period, instead of skipping
+    # silently: an older install made with `git clone` is such a checkout.
+    days_since_check=$(_nivuus_days_since_check)
+    if (( days_since_check >= AUTOUPDATE_CHECK_FREQUENCY_DAYS )); then
+        print -u2 -r -- "ℹ️  Nivuus Shell: $NIVUUS_SHELL_DIR is a development checkout, release auto-update skipped (use git pull)."
+        _nivuus_update_check_timestamp
+    fi
+    unset days_since_check
 fi
 
 # ============================================================================

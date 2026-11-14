@@ -76,12 +76,12 @@
 }
 
 @test "load-nvmrc uses nvm_find_nvmrc" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -A 10 'load-nvmrc()' config/09-nodejs.zsh | grep 'nvm_find_nvmrc'"
+    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -A 15 'load-nvmrc()' config/09-nodejs.zsh | grep 'nvm_find_nvmrc'"
     [ "$status" -eq 0 ]
 }
 
 @test "load-nvmrc installs missing versions" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -A 10 'load-nvmrc()' config/09-nodejs.zsh | grep 'nvm install'"
+    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -A 15 'load-nvmrc()' config/09-nodejs.zsh | grep 'nvm install'"
     [ "$status" -eq 0 ]
 }
 

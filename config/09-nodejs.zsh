@@ -44,6 +44,9 @@ fi
 # Function to load .nvmrc if present
 load-nvmrc() {
     [[ ! "${ENABLE_PROJECT_DETECTION:-true}" == "true" ]] && return
+    # chpwd hooks fire in non-interactive shells too: without a terminal
+    # this output would land in the standard output of a script or an agent.
+    nivuus_has_terminal || return 0
 
     local nvmrc_path="$(nvm_find_nvmrc)"
 
@@ -123,6 +126,9 @@ detect-project() {
 
 # Show project info when entering a directory with project files
 _check_project_on_cd() {
+    # chpwd hooks fire in non-interactive shells too: without a terminal
+    # this output would land in the standard output of a script or an agent.
+    nivuus_has_terminal || return 0
     if [[ -f "package.json" ]] || [[ -f "requirements.txt" ]] || [[ -f "Cargo.toml" ]] || [[ -f "go.mod" ]] || [[ -f ".nvmrc" ]]; then
         detect-project
     fi
