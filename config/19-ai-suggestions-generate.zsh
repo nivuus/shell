@@ -38,9 +38,10 @@ _ai_get_context() {
     context+="Home: $HOME\n"
 
     # Full PATH (truncated if too long)
-    local path_truncated=$(echo "$PATH" | cut -c1-200)
-    [[ ${#PATH} -gt 200 ]] && path_truncated="$path_truncated..."
-    context+="PATH: $path_truncated\n"
+    local REPLY
+    _ai_truncate 200 "$PATH"
+    [[ ${#PATH} -gt 200 ]] && REPLY+="..."
+    context+="PATH: $REPLY\n"
 
     # Project type detection with file contents
     if [[ -f "package.json" ]]; then

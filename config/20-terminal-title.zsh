@@ -193,7 +193,9 @@ if [[ "${ENABLE_AI_TERMINAL_TITLES:-false}" == "true" ]]; then
 
         # Use ONLY this session's commands (SHARE_HISTORY would otherwise leak
         # commands from other terminals via `fc`). Falls back to nothing if empty.
-        local recent_history=$(print -rl -- "${_AI_TITLE_SESSION_HISTORY[@]}" | tr '\n' ';' | sed 's/;$//' | cut -c1-500)
+        local REPLY
+        _ai_truncate 500 "${(j:;:)${(@)_AI_TITLE_SESSION_HISTORY//$'\n'/;}}"
+        local recent_history=$REPLY
 
         # Check cache first (cache by directory + context, not command)
         local cache_key=$(_ai_title_cache_key "$recent_history" "$dir_name" "$context")
@@ -219,8 +221,9 @@ if [[ "${ENABLE_AI_TERMINAL_TITLES:-false}" == "true" ]]; then
             tail -1 | \
             sed 's/^\*\*\(.*\)\*\*$/\1/' | \
             sed 's/^"\(.*\)"$/\1/' | \
-            sed 's/^[[:space:]]*//' | \
-            cut -c1-30)
+            sed 's/^[[:space:]]*//')
+        _ai_truncate 30 "$result"
+        result=$REPLY
 
         if [[ -n "$result" ]]; then
             _ai_title_cache_set "$cache_key" "$result"
