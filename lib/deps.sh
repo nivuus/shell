@@ -78,6 +78,12 @@ nivuus_pkg_name() {
                 apk) printf 'delta\n' ;;
                 *)   printf 'git-delta\n' ;;
             esac ;;
+        gh)
+            case "$mgr" in
+                pacman|apk) printf 'github-cli\n' ;;
+                yum)        printf '\n' ;;
+                *)          printf 'gh\n' ;;
+            esac ;;
         grc)
             case "$mgr" in
                 apk|zypper) printf '\n' ;;

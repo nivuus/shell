@@ -121,7 +121,8 @@ _ai_get_terminal_title 'make build' 'shell' >/dev/null
 # title escape itself is what gets inspected.
 
 _title_raw() {
-    script -qec "zsh --no-rcs -ic $(printf '%q' "$1")" /dev/null 2>/dev/null | tr -d '\r'
+    # SHELL: see pty_run in tests/helpers/pty.bash.
+    SHELL="$BASH" script -qec "zsh --no-rcs -ic $(printf '%q' "$1")" /dev/null 2>/dev/null | tr -d '\r'
 }
 
 _title_preamble() {

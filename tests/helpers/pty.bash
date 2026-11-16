@@ -31,7 +31,11 @@ pty_run() {
     # Le `|| status=$?` n'est pas décoratif : bats tourne sous `set -e`, et une
     # affectation dont la substitution échoue interromprait la fonction avant
     # qu'on ait pu lire le code. Ici l'échec est justement ce qu'on mesure.
-    raw="$(script -qec "zsh --no-rcs -ic $(printf '%q' "$code")" /dev/null 2>/dev/null)" && status=0 || status=$?
+    # `script -c` runs its command with $SHELL, and the quoting above is
+    # bash's printf %q ($'...'): with SHELL unset (a container) or set to a
+    # POSIX sh, /bin/sh fails on it and every pty test fails with status 2.
+    # The bash running this helper is the shell that quoting was made for.
+    raw="$(SHELL="$BASH" script -qec "zsh --no-rcs -ic $(printf '%q' "$code")" /dev/null 2>/dev/null)" && status=0 || status=$?
     # Le titre de terminal (OSC 0) est émis par config/20-terminal-title.zsh
     # dès qu'un terminal est présent : c'est du bruit attendu ici, pas un
     # résultat, donc on le retire pour que les assertions portent sur la sortie.

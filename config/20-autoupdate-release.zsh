@@ -32,6 +32,28 @@
 
 zmodload -F zsh/stat b:zstat 2>/dev/null
 
+# lib/ of the tree this file belongs to, for the gh install command.
+typeset -g _NIVUUS_UPDATE_LIB="${${(%):-%x}:A:h:h}/lib"
+
+# One command that removes the cause of the last failure, when there is one
+# the person can run (set by _nivuus_verify_attestation, read by
+# config/20-autoupdate.zsh for the report at the next terminal start).
+typeset -g NIVUUS_UPDATE_REMEDY=""
+
+# What to run to install gh and retry, from the installer's package table
+# (lib/deps.sh); a pointer to its install page when no known package manager
+# here ships it.
+_nivuus_gh_remedy() {
+    local cmd
+    cmd=$(source "$_NIVUUS_UPDATE_LIB/detect.sh" && source "$_NIVUUS_UPDATE_LIB/deps.sh" &&
+        nivuus_pkg_hint_cmd "$(nivuus_pkg_manager)" gh)
+    if [[ -n "$cmd" ]]; then
+        print -r -- "$cmd && nivuus-update"
+    else
+        print -r -- "install the GitHub CLI (https://cli.github.com), then nivuus-update"
+    fi
+}
+
 # Release versions are plain X.Y.Z: anything else is refused before it is
 # used in a URL or a path.
 _nivuus_valid_version() {
@@ -119,16 +141,25 @@ _nivuus_verify_attestation() {
     fi
     echo "🔏 Verifying build provenance..." >&2
     if ! (( $+commands[gh] )); then
+        NIVUUS_UPDATE_REMEDY=$(_nivuus_gh_remedy)
         echo "❌ Cannot verify the release provenance: the GitHub CLI (gh) is not installed (aborting)" >&2
-        echo "   Install gh (https://cli.github.com), or set NIVUUS_VERIFY_ATTESTATION=false to bypass at your own risk." >&2
+        echo "   Run: $NIVUUS_UPDATE_REMEDY (or set NIVUUS_VERIFY_ATTESTATION=false to bypass at your own risk)" >&2
         return 1
     fi
-    local report
-    if ! report=$(gh attestation verify "$archive" \
+    local report rc=0
+    report=$(gh attestation verify "$archive" \
             --repo "$NIVUUS_GITHUB_REPO" \
             --signer-workflow "$NIVUUS_RELEASE_SIGNER_WORKFLOW" \
             --source-ref "$NIVUUS_RELEASE_SOURCE_REF" \
-            --deny-self-hosted-runners 2>&1); then
+            --deny-self-hosted-runners 2>&1) || rc=$?
+    # gh exits 4 when it has no credentials: the attestation API needs them.
+    if (( rc == 4 )); then
+        NIVUUS_UPDATE_REMEDY="gh auth login && nivuus-update"
+        echo "❌ Cannot verify the release provenance: gh is not logged in to GitHub (aborting)" >&2
+        echo "   Run: $NIVUUS_UPDATE_REMEDY" >&2
+        return 1
+    fi
+    if (( rc != 0 )); then
         echo "❌ Build provenance verification failed (aborting):" >&2
         print -r -- "$report" | sed 's/^/   /' >&2
         return 1

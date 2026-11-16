@@ -23,7 +23,7 @@ setup() {
 }
 
 @test "TRAPUSR1 signal handler is defined" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep 'TRAPUSR1()' config/19-ai-suggestions.zsh"
+    run zsh -c "source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh' && source '$NIVUUS_SHELL_DIR/config/19-ai-suggestions.zsh' && (( \$+functions[TRAPUSR1] ))"
     [ "$status" -eq 0 ]
 }
 
@@ -47,9 +47,18 @@ setup() {
     [ "$status" -eq 0 ]
 }
 
-@test "Suggestion display uses Nord green color (143)" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep '143' config/19-ai-suggestions.zsh"
+# What the person sees when a generation lands: the rest of the line after
+# what they typed, as ghost text in the suggestion colour.
+@test "a finished suggestion is drawn as the rest of the typed line" {
+    run zsh -c "source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh' && source '$NIVUUS_SHELL_DIR/config/19-ai-suggestions.zsh'
+_ai_cancel_animation() { : }; _ai_clear_postdisplay() { : }; _ai_restore_autosuggest() { : }
+_ai_set_postdisplay() { print -r -- \"[\$1] \$2\" }
+BUFFER='git st'
+_AI_TEMP_FILE='$BATS_TEST_TMPDIR/result'
+print -r -- 'git status --short' > \$_AI_TEMP_FILE
+_ai_handle_completion"
     [ "$status" -eq 0 ]
+    [ "$output" = "[atus --short] fg=143" ]
 }
 
 @test "Cancel generation function exists" {

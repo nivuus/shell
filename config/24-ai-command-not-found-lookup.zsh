@@ -108,6 +108,11 @@ _ai_cnf_ai_lookup() {
     local cmd="$1"
     local full_cmd="$2"
     local sys_context="$3"
+    # The command line is the person's text; the system context is built by
+    # _ai_cnf_get_sys_context from uname and os-release.
+    local REPLY
+    _ai_redact_text "$cmd"; cmd=$REPLY
+    _ai_redact_text "$full_cmd"; full_cmd=$REPLY
 
     _ai_credentials_ok || return 1
 
