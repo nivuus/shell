@@ -76,6 +76,10 @@ _ai_get_api_key() {
 #     whatever language the command line or its comments are written in.
 # Text in any script (accented, CJK, RTL...) is left untouched: the shape rule
 # only ever matches ASCII token characters.
+# Limit: the key=value rule knows English key names only, so a short secret
+# that does not look like a token (under 32 characters, or not mixing digits
+# and letters) behind a key in another language (`motdepasse=hunter2`,
+# `パスワード=abc`) is sent as is.
 _ai_redact() {
     setopt localoptions extendedglob
     local text MATCH MBEGIN MEND

@@ -11,9 +11,14 @@ export VISUAL="${VISUAL:-vim}"
 export PAGER="${PAGER:-less}"
 export LESS="-R -F -X"
 
-# Language
-export LANG="${LANG:-en_US.UTF-8}"
-export LC_ALL="${LC_ALL:-en_US.UTF-8}"
+# Language: the locale belongs to the person (system, login, terminal, SSH)
+# and is never overridden here; forcing LC_ALL replaced their language,
+# sorting and formats with American English in every program. Only when
+# nothing is set at all does the shell fall back to C.UTF-8, which carries
+# no language, only the UTF-8 encoding that multibyte text handling needs.
+if [[ -z "${LANG}${LC_ALL}${LC_CTYPE}" ]]; then
+    export LANG=C.UTF-8
+fi
 
 # PATH setup
 # Ensure basic system paths are included
