@@ -324,6 +324,7 @@ Modify `config/05-prompt.zsh`:
 - **`config/09-nodejs.zsh`**: NVM lazy loading, auto-switch with .nvmrc, project detection
 - **`config/09-python.zsh`**: Python virtual environment detection and management (venv/conda/poetry)
 - **`config/09-ai-core.zsh`**: Multi-backend AI dispatcher (`_ai_api_call`, `_ai_get_api_key`, `_ai_resolve_model`)
+- **`config/09-ai-redact.zsh`**: Secret redaction before anything reaches a model (`_ai_redact_text` for the person's and the system's text at each call site, `_ai_redact_shapes` over every whole prompt in `_ai_api_call`). Language-independent: it reads the shape of the value and of the assignment, never the key's name; the over-redaction it accepts is documented in the file
 - **`config/09-ai-agy-daemon.zsh`**: Persistent Antigravity CLI process (`_agy_daemon_call`, `ai-daemon`) - removes agy's 3-6s per-call startup
 - **`config/09-ai-backend-gemini.zsh`** / **`09-ai-backend-openai.zsh`** / **`09-ai-backend-anthropic.zsh`**: Per-provider REST (and, for Gemini, Antigravity CLI) implementations
 - **`config/10-ai.zsh`**: AI command wrappers (`??`, `?git`, `?gh`, `why`, `explain`, `ask`), calls the Gemini API directly
