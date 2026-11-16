@@ -5,6 +5,25 @@ All notable changes to Nivuus Shell will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## About this file
+
+This changelog is not maintained per release. The last dated entry below is 2.0.0
+(2025-01-23); the repository has been tagged since, and the entries under `[Unreleased]` were
+written before those tags and describe changes that have since shipped. Per-release change
+lists are not kept here: use the [GitHub releases](https://github.com/nivuus/shell/releases) and
+`git log <previous-tag>..<tag>`. Tag dates, from `git log -1 --format=%ad <tag>`:
+
+| Tag | Date |
+|---|---|
+| v3.0.0 | 2025-11-23 |
+| v3.1.0 | 2026-09-08 |
+| v3.1.1 / v3.1.2 | 2026-09-12 / 2026-09-14 |
+| v3.2.0 | 2026-10-02 |
+| v3.2.1, v3.2.2, v3.2.3 | 2026-10-16 |
+| v3.3.0 | 2026-10-17 |
+
+(Tags v1.0.0 to v1.2.14 date from May and June 2025; there is no v2.x tag.)
+
 ## [Unreleased]
 
 ### Added

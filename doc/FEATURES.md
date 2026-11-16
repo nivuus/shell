@@ -18,7 +18,7 @@ Complete guide of what you can do with Nivuus Shell.
 
 ## AI-Powered Commands
 
-Get instant help and command suggestions powered by Google Gemini AI.
+Get instant help and command suggestions powered by an AI backend: Google Gemini (default), OpenAI or Anthropic, chosen with `AI_BACKEND`.
 
 ### Quick Help
 ```bash
@@ -443,21 +443,23 @@ export ENABLE_PROJECT_DETECTION=true     # Show project suggestions
 
 ## Installation Modes
 
-### User Installation (Default)
+Releases publish only the source archive and its `SHA256SUMS`; there is no standalone
+`install.sh` download. Install from a clone (see the [README](../README.md) for the one-line form).
+
+### System-Wide Installation (default when root or sudo is available)
 ```bash
-curl -fsSL https://github.com/nivuus/shell/releases/latest/download/install.sh | bash
+git clone https://github.com/nivuus/shell.git
+cd shell
+./install.sh                 # same as --system
 ```
 
-Install for current user only.
+Installs for every account on the machine; `sudo` is requested when needed and the installer
+falls back to a per-user install when it is not available.
 
-### System-Wide Installation
+### User Installation
 ```bash
-curl -fsSL https://github.com/nivuus/shell/releases/latest/download/install.sh | sudo bash -s -- --system
+./install.sh --user          # ~/.nivuus-shell and ~/.zshrc only
 ```
-
-Install for all users on the system.
-
-> **Note:** `--system` is temporarily unavailable (it now exits with an error). Use the per-user installation above instead.
 
 ### Options
 ```bash
@@ -471,7 +473,7 @@ Install for all users on the system.
 ## What You Get
 
 ✅ **Sub-100ms startup** - Lightning-fast shell
-✅ **AI command help** - Google Gemini AI integration
+✅ **AI command help** - Gemini, OpenAI or Anthropic backend
 ✅ **Modern vim** - Ctrl+C/V shortcuts everywhere
 ✅ **Smart history** - Type prefix then ↑/↓
 ✅ **Auto Node.js** - Version switching with `.nvmrc`
@@ -490,5 +492,4 @@ Install for all users on the system.
 
 ---
 
-**License:** MIT
-**Last Updated:** January 2025
+**License:** PolyForm Noncommercial 1.0.0 (see [LICENSE.md](../LICENSE.md))

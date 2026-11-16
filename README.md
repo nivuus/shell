@@ -3,7 +3,7 @@
 > A modern, fast, AI-powered ZSH shell with a configurable theme/prompt and intelligent features
 
 ![Version](https://img.shields.io/github/v/release/nivuus/shell?label=version)
-![License](https://img.shields.io/badge/license-MIT-black.svg)
+![License](https://img.shields.io/badge/license-PolyForm%20Noncommercial-black.svg)
 ![Shell](https://img.shields.io/badge/shell-ZSH-black.svg)
 ![Performance](https://img.shields.io/badge/startup-<100ms-black.svg)
 ![Tests](https://github.com/nivuus/shell/workflows/Tests/badge.svg)
@@ -12,7 +12,7 @@
 
 - **Lightning Fast** - Sub-100ms startup time (lazy-loaded completion)
 - **Configurable Theme & Prompt** - Nord by default, swap themes or the prompt layout via `~/.zsh_local`
-- **AI-Powered** - Command suggestions via the Gemini API
+- **AI-Powered** - Command suggestions through Gemini, OpenAI or Anthropic (`AI_BACKEND`)
 - **Modern Vim** - Ctrl+C/V/X/A shortcuts
 - **Smart Navigation** - History prefix search with ↑/↓
 - **Auto Node.js** - Version switching with .nvmrc
@@ -82,7 +82,7 @@ exec zsh
 
 ### AI Commands
 
-Get intelligent command suggestions powered by Gemini:
+Get intelligent command suggestions from the AI backend you choose (Gemini by default):
 
 ```bash
 ??                      # Get command suggestions
@@ -95,9 +95,11 @@ aihelp                  # Show all AI commands
 ```
 
 **Setup AI:**
-- AI commands require a Google Gemini API key
-- Get a key: https://aistudio.google.com/apikey
-- Configure: `export GOOGLE_API_KEY='your-api-key'`
+- AI commands need an API key for the active backend, selected with `AI_BACKEND=gemini|openai|anthropic` (default `gemini`)
+- Gemini (default): key from https://aistudio.google.com/apikey, `export GOOGLE_API_KEY='your-api-key'`
+- OpenAI: `export AI_BACKEND=openai OPENAI_API_KEY='your-api-key'`
+- Anthropic: `export AI_BACKEND=anthropic ANTHROPIC_API_KEY='your-api-key'`
+- The model can be overridden per backend with `GEMINI_MODEL`, `OPENAI_MODEL` or `ANTHROPIC_MODEL`
 
 ### Modern Vim Editing
 
@@ -294,8 +296,9 @@ export BAT_STYLE="plain"                # Options: plain, auto, numbers, grid, h
                                         # Combine: "numbers,grid"
 
 # AI configuration
+export AI_BACKEND=gemini               # gemini (default), openai or anthropic
 export GOOGLE_API_KEY='your-api-key'   # https://aistudio.google.com/apikey
-export GEMINI_MODEL='gemini-3.1-flash-lite'
+export GEMINI_MODEL='gemini-3.1-flash-lite'   # OPENAI_API_KEY/OPENAI_MODEL, ANTHROPIC_API_KEY/ANTHROPIC_MODEL for the others
 ```
 
 See [PROMPT.md](doc/PROMPT.md) for the full list of prompt tokens and the theme file contract
@@ -476,7 +479,7 @@ nivuus-shell/
 - **Curl** 7.0+
 
 ### Optional
-- **Gemini API key** - For AI commands (get one at https://aistudio.google.com/apikey)
+- **AI API key** - For AI commands: Gemini (default, https://aistudio.google.com/apikey), OpenAI or Anthropic
 - **jq** - Robust JSON parsing for AI responses (falls back to grep/sed if absent)
 - **NVM** - For Node.js version management
 - **fd** - Fast file search
@@ -499,7 +502,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
-MIT License - see LICENSE file for details
+PolyForm Noncommercial License 1.0.0 - see [LICENSE.md](LICENSE.md) for details
 
 ## Credits
 

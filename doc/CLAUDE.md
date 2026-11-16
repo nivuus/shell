@@ -9,7 +9,7 @@ Nivuus Shell is a modern, performance-focused ZSH configuration framework with:
 - **Theme**: Configurable via `NIVUUS_THEME` (default: Nord). Prompt colors, vim, and command
   colorization all read from the loaded theme's `$THEME_*` variables — see "Theming & Prompt
   Format" below.
-- **AI Integration**: direct Gemini REST API calls for command assistance (not GitHub Copilot, no gemini-cli dependency)
+- **AI Integration**: direct REST API calls to one of three backends, Gemini (default), OpenAI or Anthropic, selected with `AI_BACKEND` (not GitHub Copilot, no gemini-cli dependency; see "AI Command System")
 - **Philosophy**: Pure ZSH, no external plugin frameworks (no Oh-My-Zsh, no Prezto)
 
 ## Development Commands
@@ -322,7 +322,7 @@ Modify `config/05-prompt.zsh`:
 - **`config/09-ai-core.zsh`**: Multi-backend AI dispatcher (`_ai_api_call`, `_ai_get_api_key`, `_ai_resolve_model`)
 - **`config/09-ai-agy-daemon.zsh`**: Persistent Antigravity CLI process (`_agy_daemon_call`, `ai-daemon`) - removes agy's 3-6s per-call startup
 - **`config/09-ai-backend-gemini.zsh`** / **`09-ai-backend-openai.zsh`** / **`09-ai-backend-anthropic.zsh`**: Per-provider REST (and, for Gemini, Antigravity CLI) implementations
-- **`config/10-ai.zsh`**: AI command wrappers (`??`, `?git`, `?gh`, `why`, `explain`, `ask`), calls the Gemini API directly
+- **`config/10-ai.zsh`**: AI command wrappers (`??`, `?git`, `?gh`, `why`, `explain`, `ask`), call the backend dispatcher in `09-ai-core.zsh`
 - **`config/21-safety.zsh`**: Command safety checks, dangerous pattern detection, safe alternatives
 - **`config/99-cleanup.zsh`**: Compilation, welcome messages, final cleanup
 - **`.vimrc.nord`**: Standalone vim config with inline Nord theme (no plugins)
