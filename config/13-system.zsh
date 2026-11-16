@@ -110,6 +110,36 @@ benchmark() {
 # Cleanup
 # =============================================================================
 
+# Rewrite $HISTFILE without duplicate entries; on failure REPLY says why.
+# The read and the write each take zsh's history lock, but not as one
+# transaction: a line another shell appends in the moment between the two is
+# lost.
+_nivuus_dedup_history() {
+    # Outside an interactive shell zsh keeps no history list to rewrite.
+    if [[ ! -o interactive ]]; then
+        REPLY="history can only be rewritten from an interactive shell"
+        return 1
+    fi
+    setopt localoptions extended_history hist_ignore_all_dups hist_save_no_dups
+    local file=$HISTFILE
+    local -i size=$(( ${HISTSIZE:-0} > ${SAVEHIST:-0} ? ${HISTSIZE:-0} : ${SAVEHIST:-0} ))
+    # The list holds at most this many entries, and the file is rewritten
+    # from the list: zero would empty it.
+    if (( size <= 0 )); then
+        REPLY="HISTSIZE and SAVEHIST are not set"
+        return 1
+    fi
+    # fc -p: a fresh list read from the file, popped afterwards; the
+    # session's own list is left alone.
+    fc -p "$file" $size $size || { REPLY="could not read $file"; return 1; }
+    if ! fc -W "$file"; then
+        fc -P
+        REPLY="could not write $file"
+        return 1
+    fi
+    fc -P
+}
+
 # Clean temporary files and caches
 cleanup() {
     echo "Cleaning up..."
@@ -126,19 +156,18 @@ cleanup() {
         echo "✓ Removed completion dumps"
     fi
 
-    # History deduplication
-    if [[ -f "$HOME/.zsh_history" ]]; then
-        local hist_size_before=$(wc -l < "$HOME/.zsh_history")
-        local temp_hist=$(mktemp)
-
-        # Remove duplicates while preserving order
-        awk '!seen[$0]++' "$HOME/.zsh_history" > "$temp_hist"
-        mv "$temp_hist" "$HOME/.zsh_history"
-
-        local hist_size_after=$(wc -l < "$HOME/.zsh_history")
-        local removed=$((hist_size_before - hist_size_after))
-
-        echo "✓ Deduplicated history (removed $removed entries)"
+    # History deduplication, by zsh itself. The file is not a list of lines:
+    # with EXTENDED_HISTORY each entry carries its timestamp, a multi-line
+    # command spans several lines, and non-ASCII text is stored metafied, so
+    # only zsh can tell two entries apart. Read it into a separate history
+    # list where HIST_IGNORE_ALL_DUPS / HIST_SAVE_NO_DUPS mark and drop each
+    # older duplicate, and write it back with zsh's own writer and lock.
+    if [[ -n "$HISTFILE" && -f "$HISTFILE" ]]; then
+        if _nivuus_dedup_history; then
+            echo "✓ Deduplicated history"
+        else
+            echo "✗ History left as is: $REPLY" >&2
+        fi
     fi
 
     # Nivuus cache
