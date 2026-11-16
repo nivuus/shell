@@ -18,81 +18,74 @@ typeset -gA _AI_CACHE_TIME
 # Context Collection
 # =============================================================================
 
+# Append "LABEL: VALUE" to the caller's $context, VALUE redacted. The
+# labels are this code's; only the values come from the machine and the
+# person, so only they go through _ai_redact_text (redacting the whole
+# context would also hit `Git branch: main`, an assignment by its shape).
+_ai_context_add() {
+    local label=$1 value=$2 sep=${3:- }
+    [[ -n "$value" ]] || return 0
+    local REPLY
+    _ai_redact_text "$value"
+    context+="${label}:${sep}${REPLY}"$'\n'
+}
+
 _ai_get_context() {
     local context=""
 
-    # Working directory
-    context+="Dir: $PWD\n"
+    _ai_context_add "Dir" "$PWD"
 
     # ALL files in current directory (limited to 50 to avoid huge repos)
-    local files=$(ls -1 2>/dev/null | head -50 | tr '\n' ', ' | sed 's/,$//')
-    [[ -n "$files" ]] && context+="Files (all): $files\n"
+    _ai_context_add "Files (all)" "$(ls -1 2>/dev/null | head -50 | tr '\n' ',' | sed 's/,$//')"
 
     # Recent command history (last 20 commands)
-    local hist=$(fc -ln -25 2>/dev/null | sed 's/^[[:space:]]*//' | grep -v "^$" | tail -20 | tr '\n' ';')
-    [[ -n "$hist" ]] && context+="Recent commands: $hist\n"
+    _ai_context_add "Recent commands" "$(fc -ln -25 2>/dev/null | sed 's/^[[:space:]]*//' | grep -v "^$" | tail -20 | tr '\n' ';')"
 
     # Environment variables
-    context+="User: $USER\n"
-    context+="Shell: $SHELL\n"
-    context+="Home: $HOME\n"
+    _ai_context_add "User" "$USER"
+    _ai_context_add "Shell" "$SHELL"
+    _ai_context_add "Home" "$HOME"
 
     # Full PATH (truncated if too long)
     local REPLY
     _ai_truncate 200 "$PATH"
     [[ ${#PATH} -gt 200 ]] && REPLY+="..."
-    context+="PATH: $REPLY\n"
+    _ai_context_add "PATH" "$REPLY"
 
     # Project type detection with file contents
     if [[ -f "package.json" ]]; then
-        context+="Project: Node.js\n"
-        local pkg_scripts=$(grep -A20 '"scripts"' package.json 2>/dev/null | head -25)
-        [[ -n "$pkg_scripts" ]] && context+="package.json scripts:\n$pkg_scripts\n"
+        context+="Project: Node.js"$'\n'
+        _ai_context_add "package.json scripts" "$(grep -A20 '"scripts"' package.json 2>/dev/null | head -25)" $'\n'
     fi
 
     if [[ -f "go.mod" ]]; then
-        context+="Project: Go\n"
-        local go_content=$(head -15 go.mod 2>/dev/null)
-        [[ -n "$go_content" ]] && context+="go.mod:\n$go_content\n"
+        context+="Project: Go"$'\n'
+        _ai_context_add "go.mod" "$(head -15 go.mod 2>/dev/null)" $'\n'
     fi
 
     if [[ -f "Cargo.toml" ]]; then
-        context+="Project: Rust\n"
-        local cargo_content=$(head -20 Cargo.toml 2>/dev/null)
-        [[ -n "$cargo_content" ]] && context+="Cargo.toml:\n$cargo_content\n"
+        context+="Project: Rust"$'\n'
+        _ai_context_add "Cargo.toml" "$(head -20 Cargo.toml 2>/dev/null)" $'\n'
     fi
 
     if [[ -f "requirements.txt" ]]; then
-        context+="Project: Python\n"
-        local req_content=$(head -15 requirements.txt 2>/dev/null)
-        [[ -n "$req_content" ]] && context+="requirements.txt:\n$req_content\n"
+        context+="Project: Python"$'\n'
+        _ai_context_add "requirements.txt" "$(head -15 requirements.txt 2>/dev/null)" $'\n'
     fi
 
     # README preview
     if [[ -f "README.md" ]]; then
-        local readme_preview=$(head -20 README.md 2>/dev/null)
-        [[ -n "$readme_preview" ]] && context+="README.md preview:\n$readme_preview\n"
+        _ai_context_add "README.md preview" "$(head -20 README.md 2>/dev/null)" $'\n'
     fi
 
     # Git detailed status with diff
     if git rev-parse --git-dir &>/dev/null 2>&1; then
-        local branch=$(git symbolic-ref --short HEAD 2>/dev/null)
-        [[ -n "$branch" ]] && context+="Git branch: $branch\n"
-
-        # Full git status
-        local git_status=$(git status --short 2>/dev/null | head -30)
-        [[ -n "$git_status" ]] && context+="Git status:\n$git_status\n"
-
-        # Git diff of modified files (limited to 100 lines)
-        local git_diff=$(git diff 2>/dev/null | head -100)
-        [[ -n "$git_diff" ]] && context+="Git diff (first 100 lines):\n$git_diff\n"
+        _ai_context_add "Git branch" "$(git symbolic-ref --short HEAD 2>/dev/null)"
+        _ai_context_add "Git status" "$(git status --short 2>/dev/null | head -30)" $'\n'
+        _ai_context_add "Git diff (first 100 lines)" "$(git diff 2>/dev/null | head -100)" $'\n'
     fi
 
-    # Secrets are stripped by _ai_api_call (config/09-ai-core.zsh) before
-    # anything is sent; redacting here as well keeps them out of the
-    # suggestion cache. (No -r: keep the historical behaviour of expanding
-    # the embedded \n.)
-    print -- "$context" | _ai_redact
+    print -r -- "$context"
 }
 
 # =============================================================================
@@ -131,9 +124,16 @@ _ai_generate() {
     # Inline mode always generates 1 suggestion for speed
     local num_suggestions=1
 
+    # The model sees the partial command redacted; what it returns starts
+    # with that redacted text, which is put back to what was typed below. The
+    # secret never leaves, and the suggestion still extends the real line.
+    local REPLY
+    _ai_redact_text "$prefix"
+    local sent_prefix=$REPLY
+
     local context=$(_ai_get_context)
-    local prompt="You are a shell command autocompletion engine. The user has typed exactly this partial command: \"$prefix\"
-Your output MUST be the full command and MUST start with exactly \"$prefix\" (same characters, same case). Do not suggest an unrelated command, even if the context below seems more relevant. Output ONLY the completed command, no explanation, no markdown.
+    local prompt="You are a shell command autocompletion engine. The user has typed exactly this partial command: \"$sent_prefix\"
+Your output MUST be the full command and MUST start with exactly \"$sent_prefix\" (same characters, same case). Do not suggest an unrelated command, even if the context below seems more relevant. Output ONLY the completed command, no explanation, no markdown.
 
 Context (background reference only, does not override the partial command above):
 $context"
@@ -151,7 +151,9 @@ $context"
 
     # Reject completions that don't actually extend what the user typed
     # (the model sometimes ignores the partial and free-associates from context)
-    if [[ -n "$result" && "$result" != "$prefix"* ]]; then
+    if [[ -n "$result" && "$result" == "$sent_prefix"* ]]; then
+        result=$prefix${result#"$sent_prefix"}
+    else
         result=""
     fi
 

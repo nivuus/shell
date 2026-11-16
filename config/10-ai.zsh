@@ -130,7 +130,8 @@ fi
 
 # General command suggestions
 _nivuus_ai_suggest() {
-    local query="$*"
+    local REPLY; _ai_redact_text "$*"
+    local query=$REPLY
     local response
     if [[ -z "$query" ]]; then
         response=$(_ai_api_call "Suggest useful zsh commands and shell tricks") || return $?
@@ -142,7 +143,8 @@ _nivuus_ai_suggest() {
 
 # Git-specific help
 _nivuus_git_help() {
-    local query="$*"
+    local REPLY; _ai_redact_text "$*"
+    local query=$REPLY
     local response
     response=$(_ai_api_call "Git command help: $query. Provide the exact command to run.") || return $?
     [[ -n "$response" ]] && _render_markdown "$response"
@@ -150,7 +152,8 @@ _nivuus_git_help() {
 
 # GitHub CLI help
 _nivuus_gh_help() {
-    local query="$*"
+    local REPLY; _ai_redact_text "$*"
+    local query=$REPLY
     local response
     response=$(_ai_api_call "GitHub CLI (gh) help: $query. Provide the exact command to run.") || return $?
     [[ -n "$response" ]] && _render_markdown "$response"
@@ -165,8 +168,9 @@ why() {
         return 1
     fi
 
-    local response
-    response=$(_ai_api_call "Explain this command concisely: $cmd") || return $?
+    local response REPLY
+    _ai_redact_text "$cmd"
+    response=$(_ai_api_call "Explain this command concisely: $REPLY") || return $?
     [[ -n "$response" ]] && _render_markdown "$response"
 }
 
@@ -179,8 +183,9 @@ explain() {
         return 1
     fi
 
-    local response
-    response=$(_ai_api_call "Provide a detailed explanation of this command, including each option: $cmd") || return $?
+    local response REPLY
+    _ai_redact_text "$cmd"
+    response=$(_ai_api_call "Provide a detailed explanation of this command, including each option: $REPLY") || return $?
     [[ -n "$response" ]] && _render_markdown "$response"
 }
 
@@ -193,8 +198,9 @@ ask() {
         return 1
     fi
 
-    local response
-    response=$(_ai_api_call "$question") || return $?
+    local response REPLY
+    _ai_redact_text "$question"
+    response=$(_ai_api_call "$REPLY") || return $?
     [[ -n "$response" ]] && _render_markdown "$response"
 }
 

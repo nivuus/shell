@@ -139,6 +139,9 @@ _ai_analyze_error() {
     local exit_code="$2"
     local context="$3"
     local current_dir="$4"
+    local REPLY
+    _ai_redact_text "$cmd"; cmd=$REPLY
+    _ai_redact_text "$current_dir"; current_dir=$REPLY
 
     # Build prompt for AI
     local prompt="You are a helpful command-line assistant. A user ran a command that failed.

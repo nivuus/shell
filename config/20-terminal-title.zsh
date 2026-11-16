@@ -193,8 +193,11 @@ if [[ "${ENABLE_AI_TERMINAL_TITLES:-false}" == "true" ]]; then
 
         # Use ONLY this session's commands (SHARE_HISTORY would otherwise leak
         # commands from other terminals via `fc`). Falls back to nothing if empty.
+        # Redacted before it is cut: a secret cut in half no longer has the
+        # shape that gives it away.
         local REPLY
-        _ai_truncate 500 "${(j:;:)${(@)_AI_TITLE_SESSION_HISTORY//$'\n'/;}}"
+        _ai_redact_text "${(j:;:)${(@)_AI_TITLE_SESSION_HISTORY//$'\n'/;}}"
+        _ai_truncate 500 "$REPLY"
         local recent_history=$REPLY
 
         # Check cache first (cache by directory + context, not command)

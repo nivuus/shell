@@ -66,32 +66,9 @@ _ai_get_api_key() {
 # What leaves the machine
 # =============================================================================
 
-# Redact secrets from stdin before any of it is sent to an AI provider.
-# Two kinds of rule:
-#   - known shapes: a key=value / key: value whose key names a credential,
-#     Authorization headers, and the fixed prefixes of common providers;
-#   - any run of 32+ characters from [A-Za-z0-9_+-] holding both a digit and
-#     a letter, which is what generated tokens look like. This one depends on
-#     the value only, never on the words around it, so a secret is masked
-#     whatever language the command line or its comments are written in.
-# Text in any script (accented, CJK, RTL...) is left untouched: the shape rule
-# only ever matches ASCII token characters.
-# Limit: the key=value rule knows English key names only, so a short secret
-# that does not look like a token (under 32 characters, or not mixing digits
-# and letters) behind a key in another language (`motdepasse=hunter2`,
-# `パスワード=abc`) is sent as is.
-_ai_redact() {
-    setopt localoptions extendedglob
-    local text MATCH MBEGIN MEND
-    text=$(sed -E \
-        -e 's/((api[_-]?key|token|secret|password|passwd|pwd|access[_-]?key|client[_-]?secret|authorization)[[:space:]]*[:=][[:space:]]*)[^[:space:]"'"'"']+/\1***REDACTED***/gI' \
-        -e 's/(Bearer[[:space:]]+)[A-Za-z0-9._-]+/\1***REDACTED***/g' \
-        -e 's/(gh[pousr]_)[A-Za-z0-9]+/\1***REDACTED***/g' \
-        -e 's/(AKIA)[0-9A-Z]{12,}/\1***REDACTED***/g' \
-        -e 's/(sk-)[A-Za-z0-9]{16,}/\1***REDACTED***/g')
-    text=${text//(#m)[A-Za-z0-9_+-](#c32,)/${${${MATCH//[^0-9]/}:+${${MATCH//[^A-Za-z]/}:+***REDACTED***}}:-$MATCH}}
-    print -r -- "$text"
-}
+# Secret redaction (_ai_redact_text, _ai_redact_shapes, _ai_redact) lives in
+# its own file; see the trade-off documented there.
+source "${${(%):-%x}:A:h}/09-ai-redact.zsh"
 
 # Cut $2 to at most $1 characters and set REPLY. Characters, not bytes:
 # `cut -c` counts bytes in practice, so it split a Japanese character or an
@@ -151,13 +128,20 @@ _ai_http_post_json() {
     } | timeout "$timeout_secs" curl -s -X POST -K - 2>/dev/null
 }
 
-# Call the active backend and print the response text. Every backend call
-# goes through here, so the prompt is redacted here and nowhere else can skip
-# it.
+# Call the active backend and print the response text.
 # Usage: _ai_api_call PROMPT [MODEL] [MAX_TOKENS] [TEMPERATURE] [TIMEOUT_SECS]
+#
+# Callers pass every piece of text that comes from the person or the system
+# (command lines, history, file contents, questions) through _ai_redact_text
+# before putting it in PROMPT: the assignment rules would also rewrite the
+# prompt's own instructions (`"found": true`), so they cannot run on the whole
+# prompt. Every backend call goes through here, and the whole prompt still gets
+# the rules that need a credential-shaped value (prefixes, private keys, URL
+# userinfo, Authorization, entropy), so no caller can skip those.
 _ai_api_call() {
-    local prompt
-    prompt=$(print -r -- "$1" | _ai_redact)
+    local REPLY
+    _ai_redact_shapes "$1"
+    local prompt=$REPLY
     local model="${2:-$(_ai_resolve_model)}"
     local max_tokens="${3:-1024}"
     local temperature="${4:-0.3}"
