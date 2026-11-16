@@ -44,7 +44,6 @@ export ENABLE_AI_SUGGESTIONS="${ENABLE_AI_SUGGESTIONS:-true}"
 export ENABLE_AI_TERMINAL_TITLES="${ENABLE_AI_TERMINAL_TITLES:-true}"
 export GIT_PROMPT_CACHE_TTL="${GIT_PROMPT_CACHE_TTL:-2}"
 export ENABLE_AI_AUTO_DEBOUNCE="${ENABLE_AI_AUTO_DEBOUNCE:-true}"
-export AI_INLINE_MODE="${AI_INLINE_MODE:-true}"
 export ENABLE_AI_COMMAND_NOT_FOUND="${ENABLE_AI_COMMAND_NOT_FOUND:-true}"
 
 # =============================================================================

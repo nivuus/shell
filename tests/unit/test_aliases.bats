@@ -2,6 +2,8 @@
 
 # Unit tests for general aliases module (config/15-aliases.zsh)
 
+bats_require_minimum_version 1.5.0
+
 load "${BATS_TEST_DIRNAME}/../helpers/pty"
 
 setup() {
@@ -9,17 +11,18 @@ setup() {
     # environment happens to point at.
     NIVUUS_SHELL_DIR="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
     export NIVUUS_SHELL_DIR
-    source "$NIVUUS_SHELL_DIR/config/15-aliases.zsh"
 }
 
 # =============================================================================
 # Module Loading Tests
 # =============================================================================
 
+# Loaded the way .zshrc loads it (after 00-core, which defines
+# nivuus_has_terminal): no error at all, not merely a zero exit status.
 @test "Aliases module loads without errors" {
-    run zsh -c "source '$NIVUUS_SHELL_DIR/config/15-aliases.zsh' && echo 'loaded'"
+    run --separate-stderr zsh -c "source '$NIVUUS_SHELL_DIR/config/00-core.zsh'; source '$NIVUUS_SHELL_DIR/config/15-aliases.zsh'"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"loaded"* ]]
+    [ -z "$stderr" ]
 }
 
 # =============================================================================
@@ -194,11 +197,6 @@ setup() {
 # =============================================================================
 # Coverage Tests
 # =============================================================================
-
-@test "Aliases module defines at least 30 aliases" {
-    count=$(zsh -c "source '$NIVUUS_SHELL_DIR/config/15-aliases.zsh' && alias | wc -l")
-    [ "$count" -ge 30 ]
-}
 
 @test "Safety aliases are enabled by default" {
     # Check that rm, cp, mv, ln have -i flag

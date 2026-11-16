@@ -1,43 +1,49 @@
 #!/usr/bin/env bats
 
-# Integration tests for AI workflow (suggestions, commands, error handling)
+# Integration tests for the AI modules: they load together, the commands
+# answer, the suggestion cache and the error capture behave. Every test runs
+# the modules in zsh; none reads their source text. The behaviour of each
+# module in depth lives in its unit tests (test_ai_backends, test_ai_privacy,
+# test_ai_redact, test_ai_suggestions, test_terminal_title,
+# test_ai_command_not_found).
 
-# =============================================================================
-# AI Module Integration Tests
-# =============================================================================
+bats_require_minimum_version 1.5.0
+
+load "${BATS_TEST_DIRNAME}/../helpers/pty"
 
 setup() {
     # Test the tree this file belongs to, never whatever NIVUUS_SHELL_DIR the
     # environment happens to point at.
     NIVUUS_SHELL_DIR="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
     export NIVUUS_SHELL_DIR
+    AI_CORE="source '$NIVUUS_SHELL_DIR/config/00-core.zsh'
+source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh'
+source '$NIVUUS_SHELL_DIR/config/09-ai-backend-gemini.zsh'
+source '$NIVUUS_SHELL_DIR/config/09-ai-backend-openai.zsh'
+source '$NIVUUS_SHELL_DIR/config/09-ai-backend-anthropic.zsh'"
 }
+
+# =============================================================================
+# Commands
+# =============================================================================
 
 @test "AI module loads without errors" {
-    run zsh -c "source '$NIVUUS_SHELL_DIR/config/10-ai.zsh' && echo 'loaded'"
+    run --separate-stderr zsh -c "$AI_CORE; source '$NIVUUS_SHELL_DIR/config/10-ai.zsh'"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"loaded"* ]]
+    [ -z "$stderr" ]
 }
 
-@test "AI command functions are defined" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -c -E '(why\\(\\)|explain\\(\\)|ask\\(\\)|aihelp\\(\\))' config/10-ai.zsh"
+@test "aihelp lists the AI commands" {
+    run zsh -c "export AI_BACKEND=openai OPENAI_API_KEY=test-key; $AI_CORE; source '$NIVUUS_SHELL_DIR/config/10-ai.zsh'; aihelp"
     [ "$status" -eq 0 ]
-    count="${output}"
-    [ "$count" -ge 3 ]
-}
-
-@test "AI module checks for gemini command" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep 'command -v gemini' config/10-ai.zsh"
-    [ "$status" -eq 0 ]
-}
-
-@test "AI help shows command information" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -A 10 'aihelp()' config/10-ai.zsh | grep -E '(\\?\\?|why|explain)'"
-    [ "$status" -eq 0 ]
+    [[ "$output" == *"??"* ]]
+    [[ "$output" == *"why"* ]]
+    [[ "$output" == *"explain"* ]]
+    [[ "$output" == *"ask"* ]]
 }
 
 @test "aihelp shows the active backend and model" {
-    run zsh -c "export AI_BACKEND=openai OPENAI_API_KEY=test-key; source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh'; source '$NIVUUS_SHELL_DIR/config/09-ai-backend-gemini.zsh'; source '$NIVUUS_SHELL_DIR/config/09-ai-backend-openai.zsh'; source '$NIVUUS_SHELL_DIR/config/09-ai-backend-anthropic.zsh'; source '$NIVUUS_SHELL_DIR/config/10-ai.zsh'; aihelp"
+    run zsh -c "export AI_BACKEND=openai OPENAI_API_KEY=test-key; $AI_CORE; source '$NIVUUS_SHELL_DIR/config/10-ai.zsh'; aihelp"
     [ "$status" -eq 0 ]
     [[ "$output" == *"Backend: openai"* ]]
     [[ "$output" == *"gpt-5.6-luna"* ]]
@@ -52,7 +58,7 @@ setup() {
 EOF
     chmod +x "$fake_bin_dir/agy"
 
-    run zsh -c "export PATH='$fake_bin_dir:\$PATH' GEMINI_AUTH_MODE=cli; source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh'; source '$NIVUUS_SHELL_DIR/config/09-ai-backend-gemini.zsh'; source '$NIVUUS_SHELL_DIR/config/09-ai-backend-openai.zsh'; source '$NIVUUS_SHELL_DIR/config/09-ai-backend-anthropic.zsh'; source '$NIVUUS_SHELL_DIR/config/10-ai.zsh'; aihelp"
+    run zsh -c "export PATH='$fake_bin_dir:\$PATH' GEMINI_AUTH_MODE=cli; $AI_CORE; source '$NIVUUS_SHELL_DIR/config/10-ai.zsh'; aihelp"
     [ "$status" -eq 0 ]
     [[ "$output" == *"Antigravity CLI"* ]]
     [[ "$output" == *"✓"* ]]
@@ -67,188 +73,126 @@ echo '{"response":"mocked e2e response","status":"SUCCESS"}'
 EOF
     chmod +x "$fake_bin_dir/agy"
 
-    run zsh -c "export PATH=\"$fake_bin_dir:\$PATH\" GEMINI_AUTH_MODE=cli; unset GOOGLE_API_KEY; source '$NIVUUS_SHELL_DIR/config/09-ai-core.zsh'; source '$NIVUUS_SHELL_DIR/config/09-ai-backend-gemini.zsh'; source '$NIVUUS_SHELL_DIR/config/09-ai-backend-openai.zsh'; source '$NIVUUS_SHELL_DIR/config/09-ai-backend-anthropic.zsh'; source '$NIVUUS_SHELL_DIR/config/10-ai.zsh'; ask 'test question'"
+    run zsh -c "export PATH=\"$fake_bin_dir:\$PATH\" GEMINI_AUTH_MODE=cli AGY_DAEMON_ENABLED=false; unset GOOGLE_API_KEY; $AI_CORE; source '$NIVUUS_SHELL_DIR/config/10-ai.zsh'; ask 'test question'"
     [ "$status" -eq 0 ]
     [ "$output" = "mocked e2e response" ]
 }
 
 # =============================================================================
-# AI Suggestions Module Tests
+# Suggestions
 # =============================================================================
 
 @test "AI suggestions module loads" {
-    run zsh -c "source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/19-ai-suggestions.zsh' 2>/dev/null && echo 'loaded'"
+    run --separate-stderr zsh -c "source '$NIVUUS_SHELL_DIR/themes/nord.zsh'; $AI_CORE; source '$NIVUUS_SHELL_DIR/config/19-ai-suggestions.zsh'"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"loaded"* ]]
+    [ -z "$stderr" ]
 }
 
 @test "AI suggestions can be disabled" {
-    run zsh -c "export ENABLE_AI_SUGGESTIONS=false && source '$NIVUUS_SHELL_DIR/config/19-ai-suggestions.zsh' 2>/dev/null && echo 'loaded'"
+    run zsh -c "export ENABLE_AI_SUGGESTIONS=false; $AI_CORE; source '$NIVUUS_SHELL_DIR/config/19-ai-suggestions.zsh'; (( ! \$+functions[_ai_generate] ))"
     [ "$status" -eq 0 ]
 }
 
-@test "AI suggestions hook is defined" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep 'precmd' config/19-ai-suggestions.zsh"
+# A second request for the same prefix in the same directory within five
+# minutes is answered from the cache; an older entry is not.
+@test "a suggestion is served from the cache for five minutes, then asked again" {
+    run zsh -c "$AI_CORE
+source '$NIVUUS_SHELL_DIR/config/19-ai-suggestions-generate.zsh'
+_ai_credentials_ok() { return 0 }
+# _ai_generate calls the backend in a command substitution: count in a file.
+_ai_api_call() { print >> '$BATS_TEST_TMPDIR/calls'; print -r -- 'git status --short' }
+_ai_generate 'git st' >/dev/null
+_ai_generate 'git st' >/dev/null
+print -r -- \"after two: \$(wc -l < '$BATS_TEST_TMPDIR/calls')\"
+(( _AI_CACHE_TIME[git st_\$PWD] -= 301 ))
+_ai_generate 'git st'
+print -r -- \"after expiry: \$(wc -l < '$BATS_TEST_TMPDIR/calls')\""
     [ "$status" -eq 0 ]
+    [ "${lines[0]}" = "after two: 1" ]
+    [ "${lines[1]}" = "git status --short" ]
+    [ "${lines[2]}" = "after expiry: 2" ]
 }
 
-@test "AI suggestions use SIGUSR1" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep 'SIGUSR1' config/19-ai-suggestions.zsh"
+# Generation runs in a background job; the shell stores what it returns, so
+# the next request for the same line is a hit.
+@test "a suggestion generated in the background is cached by the shell" {
+    run zsh -c "$AI_CORE
+source '$NIVUUS_SHELL_DIR/config/19-ai-suggestions.zsh'
+_ai_cancel_animation() { : }; _ai_set_postdisplay() { : }
+_ai_clear_postdisplay() { : }; _ai_restore_autosuggest() { : }
+_AI_TEMP_FILE='$BATS_TEST_TMPDIR/result'
+print -r -- 'git status --short' > \$_AI_TEMP_FILE
+_AI_GENERATE_KEY=\"git st_\$PWD\"
+_ai_handle_completion
+print -r -- \"\${_AI_CACHE[git st_\$PWD]}|\${+_AI_CACHE_TIME[git st_\$PWD]}\""
     [ "$status" -eq 0 ]
-}
-
-@test "AI suggestions run in background" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep '&)' config/19-ai-suggestions.zsh"
-    [ "$status" -eq 0 ]
-}
-
-@test "AI suggestions have cache" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep '_AI_CACHE' config/19-ai-suggestions.zsh"
-    [ "$status" -eq 0 ]
-}
-
-@test "AI suggestions cache has TTL" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -E '(cache_ttl|CACHE_TTL|TTL.*300)' config/19-ai-suggestions.zsh"
-    [ "$status" -eq 0 ]
-}
-
-# =============================================================================
-# AI Inline Mode Tests
-# =============================================================================
-
-@test "AI inline mode feature toggle exists" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep 'AI_INLINE_MODE' config/19-ai-suggestions.zsh"
-    [ "$status" -eq 0 ]
-}
-
-@test "AI inline mode respects toggle" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -A 5 'AI_INLINE_MODE' config/19-ai-suggestions.zsh | grep 'if'"
-    [ "$status" -eq 0 ]
+    [ "$output" = "git status --short|1" ]
 }
 
 # =============================================================================
-# AI Error Handling Module Tests
+# Error capture
 # =============================================================================
 
 @test "AI error module loads" {
-    run zsh -c "source '$NIVUUS_SHELL_DIR/config/22-ai-errors.zsh' 2>/dev/null && echo 'loaded'"
+    run --separate-stderr zsh -c "export AI_BACKEND=openai OPENAI_API_KEY=test-key; $AI_CORE; source '$NIVUUS_SHELL_DIR/config/22-ai-errors.zsh'"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"loaded"* ]]
+    [ -z "$stderr" ]
 }
 
-@test "AI error module has preexec hook" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep 'preexec' config/22-ai-errors.zsh"
+# The module loads only when a backend is usable: a fake key, nothing is sent.
+@test "a failed command is recorded with its exit code, a success clears it" {
+    run zsh -c "export AI_BACKEND=openai OPENAI_API_KEY=test-key; $AI_CORE
+source '$NIVUUS_SHELL_DIR/config/22-ai-errors.zsh'
+_ai_error_preexec 'make deploy'
+(exit 3); _ai_error_precmd
+print -r -- \"\$_AI_LAST_COMMAND|\$_AI_LAST_ERROR_CODE|\$_AI_ERROR_AVAILABLE\"
+_ai_error_preexec 'true'
+true; _ai_error_precmd
+print -r -- \"\$_AI_ERROR_AVAILABLE\""
     [ "$status" -eq 0 ]
-}
-
-@test "AI error module stores exit codes" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -E '(_LAST_EXIT|_LAST_COMMAND|exit.*code)' config/22-ai-errors.zsh"
-    [ "$status" -eq 0 ]
-}
-
-@test "AI error module suggests fixes" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -E '(suggest|fix|error.*help)' config/22-ai-errors.zsh"
-    [ "$status" -eq 0 ]
-}
-
-# =============================================================================
-# AI Terminal Titles Module Tests
-# =============================================================================
-
-@test "AI terminal titles module loads" {
-    run zsh -c "source '$NIVUUS_SHELL_DIR/config/23-ai-terminal-titles.zsh' 2>/dev/null && echo 'loaded'"
-    [ "$status" -eq 0 ]
-    [[ "$output" == *"loaded"* ]]
-}
-
-@test "AI terminal titles can be disabled" {
-    run zsh -c "export ENABLE_AI_TERMINAL_TITLES=false && source '$NIVUUS_SHELL_DIR/config/23-ai-terminal-titles.zsh' 2>/dev/null && echo 'loaded'"
-    [ "$status" -eq 0 ]
-}
-
-@test "AI terminal titles use preexec" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep 'preexec' config/23-ai-terminal-titles.zsh"
-    [ "$status" -eq 0 ]
-}
-
-@test "AI terminal titles set terminal escape codes" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -E '(\\\\033|ESC|title)' config/23-ai-terminal-titles.zsh"
-    [ "$status" -eq 0 ]
+    [ "${lines[0]}" = "make deploy|3|true" ]
+    [ "${lines[1]}" != "true" ]
 }
 
 # =============================================================================
-# AI Command Tests
-# =============================================================================
-
-@test "AI commands use gemini model variable" {
-    # GEMINI_MODEL is now resolved centrally by _ai_resolve_model() in
-    # config/09-ai-core.zsh (config/10-ai.zsh only calls _ai_resolve_model).
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep 'GEMINI_MODEL' config/09-ai-core.zsh"
-    [ "$status" -eq 0 ]
-}
-
-@test "AI commands default to gemini-2.0-flash" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep 'gemini-2.0-flash' config/10-ai.zsh"
-    [ "$status" -eq 0 ]
-}
-
-@test "AI commands support temperature setting" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -E '(temperature|TEMPERATURE)' config/10-ai.zsh"
-    [ "$status" -eq 0 ]
-}
-
-# =============================================================================
-# Full AI Workflow Integration
+# Full shell
 # =============================================================================
 
 @test "AI modules load in correct order" {
-    run zsh -c "source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/10-ai.zsh' && source '$NIVUUS_SHELL_DIR/config/19-ai-suggestions.zsh' 2>/dev/null && source '$NIVUUS_SHELL_DIR/config/22-ai-errors.zsh' 2>/dev/null && echo 'all loaded'"
+    run --separate-stderr zsh -c "source '$NIVUUS_SHELL_DIR/themes/nord.zsh'; $AI_CORE; source '$NIVUUS_SHELL_DIR/config/10-ai.zsh'; source '$NIVUUS_SHELL_DIR/config/19-ai-suggestions.zsh'; source '$NIVUUS_SHELL_DIR/config/22-ai-errors.zsh'"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"all loaded"* ]]
+    [ -z "$stderr" ]
 }
 
 @test "AI modules work together with prompt" {
-    run zsh -c "source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/05-prompt.zsh' && source '$NIVUUS_SHELL_DIR/config/10-ai.zsh' && source '$NIVUUS_SHELL_DIR/config/19-ai-suggestions.zsh' 2>/dev/null && echo 'integrated'"
+    run zsh -c "source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/05-prompt.zsh' && $AI_CORE && source '$NIVUUS_SHELL_DIR/config/10-ai.zsh' && source '$NIVUUS_SHELL_DIR/config/19-ai-suggestions.zsh' 2>/dev/null && echo 'integrated'"
     [ "$status" -eq 0 ]
     [[ "$output" == *"integrated"* ]]
 }
 
-@test "Full shell loads all AI modules" {
-    run zsh -c "source '$NIVUUS_SHELL_DIR/.zshrc' 2>/dev/null && typeset -f _ai_suggest"
+# What "every AI module is listed in .zshrc" was meant to protect: loading the
+# real .zshrc, at a terminal and with a usable backend (a fake key, nothing is
+# sent), gives the shell each module's entry point.
+@test "the full shell defines the entry point of every AI module" {
+    mkdir -p "$BATS_TEST_TMPDIR/home"
+    pty_run "export HOME='$BATS_TEST_TMPDIR/home' TERM=xterm-256color AI_BACKEND=openai OPENAI_API_KEY=test-key ENABLE_AUTOUPDATE=false
+source '$NIVUUS_SHELL_DIR/.zshrc'
+for f in _ai_api_call _ai_redact_text aihelp _ai_generate _terminal_title_preexec _ai_analyze_error command_not_found_handler; do
+    (( \$+functions[\$f] )) || print -r -- \"undefined function: \$f\"
+done
+print -r -- checked"
     [ "$status" -eq 0 ]
+    [[ "$output" == *checked* ]]
+    [[ "$output" != *"undefined function:"* ]]
 }
 
 # =============================================================================
-# AI Feature Toggles
-# =============================================================================
-
-@test "ENABLE_AI_SUGGESTIONS toggle exists in .zshrc" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep 'ENABLE_AI_SUGGESTIONS' .zshrc"
-    [ "$status" -eq 0 ]
-}
-
-@test "ENABLE_AI_TERMINAL_TITLES toggle exists in .zshrc" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep 'ENABLE_AI_TERMINAL_TITLES' .zshrc"
-    [ "$status" -eq 0 ]
-}
-
-@test "AI_INLINE_MODE toggle exists in .zshrc" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep 'AI_INLINE_MODE' .zshrc"
-    [ "$status" -eq 0 ]
-}
-
-@test "ENABLE_AI_AUTO_DEBOUNCE toggle exists in .zshrc" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep 'ENABLE_AI_AUTO_DEBOUNCE' .zshrc"
-    [ "$status" -eq 0 ]
-}
-
-# =============================================================================
-# AI Performance Tests
+# Performance
 # =============================================================================
 
 @test "AI modules load quickly" {
     start=$(date +%s%N)
-    zsh -c "source '$NIVUUS_SHELL_DIR/config/10-ai.zsh' && source '$NIVUUS_SHELL_DIR/config/19-ai-suggestions.zsh' 2>/dev/null" >/dev/null
+    zsh -c "$AI_CORE; source '$NIVUUS_SHELL_DIR/config/10-ai.zsh' && source '$NIVUUS_SHELL_DIR/config/19-ai-suggestions.zsh' 2>/dev/null" >/dev/null
     end=$(date +%s%N)
     elapsed_ms=$(( (end - start) / 1000000 ))
 
@@ -262,67 +206,4 @@ EOF
     elapsed_ms=$(( (end - start) / 1000000 ))
 
     [ "$elapsed_ms" -lt 50 ]
-}
-
-# =============================================================================
-# AI Safety Tests
-# =============================================================================
-
-@test "AI suggestions don't block prompt" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -q 'background\\|async\\|&)' config/19-ai-suggestions.zsh"
-    [ "$status" -eq 0 ]
-}
-
-@test "AI error handling is non-blocking" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -A 10 'preexec' config/22-ai-errors.zsh | grep '&'"
-    [ "$status" -eq 0 ]
-}
-
-# =============================================================================
-# AI Nord Color Integration
-# =============================================================================
-
-@test "AI suggestions use Nord colors" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -E '(NORD_|%F\\{)' config/19-ai-suggestions.zsh"
-    [ "$status" -eq 0 ]
-}
-
-@test "AI error messages use charte colors, not raw palette codes" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -E '(NORD_|%F\{)' config/22-ai-errors.zsh"
-    [ "$status" -ne 0 ]
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -c 'NIVUUS_C_' config/22-ai-errors.zsh"
-    [ "$status" -eq 0 ]
-    [ "$output" -ge 5 ]
-}
-
-# =============================================================================
-# AI Cache Behavior
-# =============================================================================
-
-@test "AI suggestions cache prevents duplicate calls" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -A 10 '_AI_CACHE' config/19-ai-suggestions.zsh | grep -E '(if.*cache|return)'"
-    [ "$status" -eq 0 ]
-}
-
-@test "AI cache has reasonable TTL (5 minutes)" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -E '(300|5.*min|cache_ttl.*300)' config/19-ai-suggestions.zsh"
-    [ "$status" -eq 0 ]
-}
-
-# =============================================================================
-# Module Coverage Tests
-# =============================================================================
-
-@test "AI module files exist" {
-    [ -f "$NIVUUS_SHELL_DIR/config/10-ai.zsh" ]
-    [ -f "$NIVUUS_SHELL_DIR/config/19-ai-suggestions.zsh" ]
-    [ -f "$NIVUUS_SHELL_DIR/config/22-ai-errors.zsh" ]
-    [ -f "$NIVUUS_SHELL_DIR/config/23-ai-terminal-titles.zsh" ]
-}
-
-@test "All AI modules are in .zshrc config_files" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && sed -n '/config_files=(/,/)$/p' .zshrc | grep -c -E '(10-ai|19-ai-suggestions|22-ai-errors|23-ai-terminal-titles)'"
-    [ "$status" -eq 0 ]
-    count="${output}"
-    [ "$count" -eq 4 ]
 }

@@ -68,10 +68,13 @@ setup() {
     [[ "$output" == *"loaded"* ]]
 }
 
+# A module reads NIVUUS_SHELL_DIR and leaves it as it found it. (It used to
+# check for the string "nivuus-shell", which is the name of an installed
+# tree, not of a checkout or a CI workspace.)
 @test "Modules can access NIVUUS_SHELL_DIR" {
     run zsh -c "source '$NIVUUS_SHELL_DIR/config/08-vim.zsh' && echo \$NIVUUS_SHELL_DIR"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"nivuus-shell"* ]]
+    [ "$output" = "$NIVUUS_SHELL_DIR" ]
 }
 
 # =============================================================================
