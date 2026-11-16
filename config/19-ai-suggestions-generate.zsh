@@ -10,9 +10,19 @@
 [[ -n "${NIVUUS_AI_SUGGESTIONS_GENERATE_LOADED}" ]] && return
 typeset -g NIVUUS_AI_SUGGESTIONS_GENERATE_LOADED=1
 
-# Cache of generated suggestions, keyed by prefix and directory.
+# Cache of generated suggestions, keyed by prefix and directory, five minutes.
+# Generation runs in a background job, which reads this cache (it is a fork
+# of the shell) but cannot fill it: the shell stores what the job returns,
+# in _ai_handle_completion. Without zsh/datetime, EPOCHSECONDS is empty and
+# nothing is ever a hit.
+zmodload -F zsh/datetime p:EPOCHSECONDS
 typeset -gA _AI_CACHE
 typeset -gA _AI_CACHE_TIME
+
+_ai_cache_store() {
+    _AI_CACHE[$1]=$2
+    _AI_CACHE_TIME[$1]=$EPOCHSECONDS
+}
 
 # =============================================================================
 # Context Collection
@@ -157,10 +167,7 @@ $context"
         result=""
     fi
 
-    if [[ -n "$result" ]]; then
-        _AI_CACHE[$cache_key]="$result"
-        _AI_CACHE_TIME[$cache_key]="$EPOCHSECONDS"
-    fi
+    [[ -n "$result" ]] && _ai_cache_store "$cache_key" "$result"
 
     print -r -- "$result"
 }

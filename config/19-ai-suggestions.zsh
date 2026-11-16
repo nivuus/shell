@@ -43,6 +43,9 @@ source "$_AI_SUGGESTIONS_DIR/19-ai-suggestions-render.zsh"
 
 # Global variable for temp file (shared with async checker)
 typeset -g _AI_TEMP_FILE=""
+# Cache key of the generation in flight, for _ai_handle_completion to store
+# its result: the background job cannot.
+typeset -g _AI_GENERATE_KEY=""
 
 _ai_show_inline() {
     local prefix="$BUFFER"
@@ -79,6 +82,7 @@ _ai_show_inline() {
 
     # Generate in background with SIGUSR1 notification
     _AI_TEMP_FILE=$(mktemp)
+    _AI_GENERATE_KEY="${prefix}_${PWD}"
 
     # Generate in background and signal when done
     {
@@ -109,6 +113,8 @@ _ai_handle_completion() {
     if [[ "$suggestion" == ERROR:* ]] || [[ -z "$suggestion" ]]; then
         suggestion=""
     fi
+    [[ -n "$suggestion" && -n "$_AI_GENERATE_KEY" ]] && _ai_cache_store "$_AI_GENERATE_KEY" "$suggestion"
+    _AI_GENERATE_KEY=""
 
     # Store suggestion (full command returned by AI)
     _AI_CURRENT_SUGGESTION="$suggestion"
@@ -182,6 +188,7 @@ _ai_cancel_generation() {
         rm -f "$_AI_TEMP_FILE"
         _AI_TEMP_FILE=""
     fi
+    _AI_GENERATE_KEY=""
 
     # Clear suggestion and POSTDISPLAY
     _AI_CURRENT_SUGGESTION=""
