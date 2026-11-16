@@ -6,7 +6,8 @@
 # - Weekly automatic update checks (configurable)
 # - Automatic installation with backup
 # - Manual update via 'nivuus-update' command
-# - Checksum verification for security
+# - Checksum and build-provenance verification, atomic swap, one update at a
+#   time: see config/20-autoupdate-release.zsh
 # ============================================================================
 
 # Configuration variables (can be overridden in .zsh_local)
@@ -14,13 +15,21 @@
 : ${AUTOUPDATE_CHECK_FREQUENCY_DAYS:=7}
 : ${NIVUUS_GITHUB_REPO:=nivuus/shell}
 : ${NIVUUS_GITHUB_API:=https://api.github.com}
-: ${NIVUUS_VERIFY_CHECKSUMS:=true}
 
 # Last update check timestamp file
 NIVUUS_UPDATE_CHECK_FILE="$HOME/.nivuus-shell-last-update-check"
 
 # Version file to track installed version
 NIVUUS_VERSION_FILE="$NIVUUS_SHELL_DIR/.version"
+
+# Outcome of the last automatic update, read at the next terminal start: an
+# update runs in the background, where nobody would see it fail.
+NIVUUS_UPDATE_STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/nivuus-shell"
+NIVUUS_UPDATE_LOG="$NIVUUS_UPDATE_STATE_DIR/update.log"
+NIVUUS_UPDATE_STATUS="$NIVUUS_UPDATE_STATE_DIR/update.status"
+
+# Download, verification, staging and swap of a release.
+source "${${(%):-%x}:A:h}/20-autoupdate-release.zsh"
 
 # ============================================================================
 # Helper Functions
@@ -36,9 +45,10 @@ _nivuus_is_dev_checkout() {
 
 # A system-wide install (see `nivuus install --system`) lives in a root-owned
 # directory: a user shell can neither replace it nor should it try. Updating it
-# is `sudo nivuus install --system` from a fresh checkout.
+# is `sudo nivuus install --system` from a fresh checkout. The update swaps
+# the whole directory, so its parent must be writable as well.
 _nivuus_install_writable() {
-    [[ -w "$NIVUUS_SHELL_DIR" ]]
+    [[ -w "$NIVUUS_SHELL_DIR" && -w "${NIVUUS_SHELL_DIR:h}" ]]
 }
 
 # Get current installed version
@@ -59,11 +69,12 @@ _nivuus_latest_version() {
         -H "Accept: application/vnd.github.v3+json" \
         "$NIVUUS_GITHUB_API/repos/$NIVUUS_GITHUB_REPO/releases/latest" 2>/dev/null)
 
-    if [[ $? -eq 0 ]] && [[ -n "$response" ]]; then
-        echo "$response" | grep '"tag_name"' | sed 's/.*"tag_name": "v\?\(.*\)".*/\1/'
-    else
-        return 1
-    fi
+    [[ $? -eq 0 && -n "$response" ]] || return 1
+    local version
+    version=$(print -r -- "$response" | grep '"tag_name"' | sed 's/.*"tag_name": "v\?\(.*\)".*/\1/')
+    # The tag ends up in URLs and paths: only a plain X.Y.Z is accepted.
+    _nivuus_valid_version "$version" || return 1
+    print -r -- "$version"
 }
 
 # Compare versions (returns 0 if v2 > v1, 1 otherwise)
@@ -174,156 +185,22 @@ _nivuus_create_update_backup() {
     echo "$backup_dir"
 }
 
-# Download and verify release archive.
-# Prints ONLY the temporary directory on stdout - the caller captures it with
-# $(...) - so every progress or error message goes to stderr.
-_nivuus_download_release() {
-    local version=$1
-    local temp_dir=$(mktemp -d)
-    # The shared nivuus/.github release workflow names the archive after the
-    # repository: <repo-name>-<version>.tar.gz (e.g. shell-3.2.1.tar.gz).
-    local archive_name="${NIVUUS_GITHUB_REPO##*/}-${version}.tar.gz"
-    local archive_url="https://github.com/$NIVUUS_GITHUB_REPO/releases/download/v${version}/${archive_name}"
-    local checksums_url="https://github.com/$NIVUUS_GITHUB_REPO/releases/download/v${version}/SHA256SUMS"
-
-    # Download archive
-    echo "📥 Downloading release v${version}..." >&2
-    if ! curl -fsSL -o "$temp_dir/nivuus-shell.tar.gz" "$archive_url"; then
-        echo "❌ Failed to download release archive" >&2
-        rm -rf "$temp_dir"
-        return 1
-    fi
-
-    # Download and verify checksums if enabled.
-    # When verification is requested we fail CLOSED: any inability to fetch or
-    # match a checksum aborts the install, so a network/MITM failure cannot be
-    # used to silently skip verification.
-    if [[ "$NIVUUS_VERIFY_CHECKSUMS" == "true" ]]; then
-        echo "🔐 Verifying checksums..." >&2
-
-        if ! curl -fsSL -o "$temp_dir/SHA256SUMS" "$checksums_url"; then
-            echo "❌ Could not download checksums (verification required, aborting)" >&2
-            echo "   Set NIVUUS_VERIFY_CHECKSUMS=false to bypass at your own risk." >&2
-            rm -rf "$temp_dir"
-            return 1
-        fi
-
-        # Extract the checksum for our archive
-        local expected_sum=$(awk -v name="$archive_name" '$2 == name {print $1}' "$temp_dir/SHA256SUMS")
-
-        if [[ -z "$expected_sum" ]]; then
-            echo "❌ No checksum found for ${archive_name} (aborting)" >&2
-            rm -rf "$temp_dir"
-            return 1
-        fi
-
-        local actual_sum=$(sha256sum "$temp_dir/nivuus-shell.tar.gz" | awk '{print $1}')
-
-        if [[ "$expected_sum" != "$actual_sum" ]]; then
-            echo "❌ Checksum verification failed!" >&2
-            echo "   Expected: $expected_sum" >&2
-            echo "   Got:      $actual_sum" >&2
-            rm -rf "$temp_dir"
-            return 1
-        fi
-
-        echo "✅ Checksum verified" >&2
-    fi
-
-    echo "$temp_dir"
-}
-
-# Install release from archive
-_nivuus_install_release() {
-    local version=$1
-    local temp_dir=$2
-
-    echo "📦 Installing Nivuus Shell v${version}..."
-
-    # Extract archive to temp location
-    local extract_dir="$temp_dir/extract"
-    mkdir -p "$extract_dir"
-
-    if ! tar -xzf "$temp_dir/nivuus-shell.tar.gz" -C "$extract_dir"; then
-        echo "❌ Failed to extract release archive"
-        return 1
-    fi
-
-    # Preserve user configuration
-    local user_config=""
-    if [[ -f "$NIVUUS_SHELL_DIR/.zsh_local" ]]; then
-        user_config=$(cat "$NIVUUS_SHELL_DIR/.zsh_local")
-    fi
-
-    # Remove old installation (except user files)
-    local files_to_preserve=(".zsh_local" ".version")
-    local temp_preserve="$temp_dir/preserve"
-    mkdir -p "$temp_preserve"
-
-    for file in "${files_to_preserve[@]}"; do
-        if [[ -f "$NIVUUS_SHELL_DIR/$file" ]]; then
-            cp "$NIVUUS_SHELL_DIR/$file" "$temp_preserve/" || return 1
-        fi
-    done
-
-    # Refuse to wipe a git checkout, whatever the caller did.
-    if _nivuus_is_dev_checkout; then
-        echo "❌ Refusing to overwrite a git checkout at $NIVUUS_SHELL_DIR"
-        return 1
-    fi
-
-    # Install new version. Remove old contents explicitly (never via a glob,
-    # which would honour GLOB_DOTS and could match .git / dotfiles) while
-    # always preserving VCS metadata and user files.
-    # A failed delete or copy leaves a half-installed tree: report it, and
-    # the caller restores the backup.
-    if ! find "$NIVUUS_SHELL_DIR" -mindepth 1 -maxdepth 1 \
-        ! -name '.git' ! -name '.zsh_local' ! -name '.version' \
-        -exec rm -rf {} +; then
-        echo "❌ Failed to remove the previous installation"
-        return 1
-    fi
-    if ! cp -r "$extract_dir"/. "$NIVUUS_SHELL_DIR/"; then
-        echo "❌ Failed to copy the new release into $NIVUUS_SHELL_DIR"
-        return 1
-    fi
-
-    # Restore preserved files
-    for file in "${files_to_preserve[@]}"; do
-        if [[ -f "$temp_preserve/$file" ]]; then
-            cp "$temp_preserve/$file" "$NIVUUS_SHELL_DIR/" || return 1
-        fi
-    done
-
-    # Update version file
-    echo "$version" > "$NIVUUS_VERSION_FILE"
-
-    # Make bin scripts executable
-    if [[ -d "$NIVUUS_SHELL_DIR/bin" ]]; then
-        chmod +x "$NIVUUS_SHELL_DIR/bin"/*
-    fi
-
-    # Recompile all .zsh files
-    for file in "$NIVUUS_SHELL_DIR"/**/*.zsh(N); do
-        zcompile "$file" 2>/dev/null
-    done
-
-    echo "🔨 Recompiled configuration files"
-    echo "✅ Installation complete!"
-
-    return 0
-}
-
-# Perform the actual update
+# Perform the update to <version>. The caller holds the update lock.
 _nivuus_perform_update() {
-    local target_version=${1:-$(_nivuus_latest_version)}
+    local target_version=$1
 
     if [[ -z "$target_version" ]]; then
         echo "❌ Could not determine target version"
         return 1
     fi
 
-    # Create backup
+    # Under the lock, re-read the installed version: another shell may have
+    # installed this release while this one waited for its turn.
+    if ! _nivuus_version_greater "$(_nivuus_current_version)" "$target_version"; then
+        echo "✅ v$(_nivuus_current_version) is already installed"
+        return 0
+    fi
+
     local backup_dir
     if ! backup_dir=$(_nivuus_create_update_backup); then
         echo "❌ Could not back up the current installation, update aborted"
@@ -331,50 +208,52 @@ _nivuus_perform_update() {
     fi
     echo "📦 Backup created: $backup_dir"
 
-    # Download release
-    local temp_dir=$(_nivuus_download_release "$target_version")
-
-    if [[ -z "$temp_dir" ]] || [[ ! -d "$temp_dir" ]]; then
-        echo "❌ Download failed"
+    if ! _nivuus_install_release "$target_version"; then
+        echo "❌ Update to v${target_version} failed; v$(_nivuus_current_version) is still installed"
         return 1
     fi
+    echo "♻️  Restart your shell to apply changes: exec zsh"
+}
 
-    # Install release
-    if _nivuus_install_release "$target_version" "$temp_dir"; then
-        echo "♻️  Restart your shell to apply changes: exec zsh"
-        rm -rf "$temp_dir"
-        return 0
+# Record the outcome of an update for the next terminal start.
+_nivuus_record_update_status() {
+    mkdir -p "$NIVUUS_UPDATE_STATE_DIR" || return 1
+    print -r -- "$1 $2" > "$NIVUUS_UPDATE_STATUS"
+}
+
+# Unattended update: check, and install if a newer release exists. Exactly one
+# shell does this at a time; the others leave at once.
+_nivuus_auto_update() {
+    _nivuus_update_lock || return 0
+    _nivuus_update_check_timestamp
+
+    local latest
+    latest=$(_nivuus_latest_version) || return 0   # offline: try next period
+    _nivuus_version_greater "$(_nivuus_current_version)" "$latest" || return 0
+
+    mkdir -p "$NIVUUS_UPDATE_STATE_DIR" || return 1
+    if _nivuus_perform_update "$latest" > "$NIVUUS_UPDATE_LOG" 2>&1; then
+        _nivuus_record_update_status ok "$latest"
     else
-        echo "❌ Installation failed! Restoring from backup..."
-
-        # Restore from backup
-        if [[ -d "$backup_dir/nivuus-shell" ]]; then
-            if rm -rf "$NIVUUS_SHELL_DIR" && cp -r "$backup_dir/nivuus-shell" "$NIVUUS_SHELL_DIR"; then
-                echo "✅ Restored from backup"
-            else
-                echo "❌ Restore failed: copy $backup_dir/nivuus-shell back to $NIVUUS_SHELL_DIR by hand"
-            fi
-        fi
-
-        rm -rf "$temp_dir"
-        return 1
+        _nivuus_record_update_status failed "$latest"
     fi
 }
 
 # Background update check (async, no performance impact)
 _nivuus_check_update_async() {
-    local log_file
-    log_file=$(mktemp "${TMPDIR:-/tmp}/nivuus-update.XXXXXX") || return
-    (
-        # Update timestamp
-        _nivuus_update_check_timestamp
+    ( _nivuus_auto_update ) &!
+}
 
-        # Check if update is available
-        if _nivuus_update_available; then
-            # Auto-install the update
-            _nivuus_perform_update > "$log_file" 2>&1
-        fi
-    ) &!
+# Say so when the last unattended update failed, until an update succeeds.
+_nivuus_report_failed_update() {
+    [[ -r "$NIVUUS_UPDATE_STATUS" ]] || return 0
+    local -a outcome
+    outcome=(${=$(<"$NIVUUS_UPDATE_STATUS")})
+    [[ "${outcome[1]}" == failed ]] || return 0
+    # Installed since by other means (or by hand): nothing left to report.
+    _nivuus_version_greater "$(_nivuus_current_version)" "${outcome[2]}" || return 0
+    print -u2 -r -- "⚠️  Nivuus Shell: the automatic update to v${outcome[2]} failed; v$(_nivuus_current_version) is still installed."
+    print -u2 -r -- "   Details: $NIVUUS_UPDATE_LOG — retry with: nivuus-update"
 }
 
 # ============================================================================
@@ -387,6 +266,10 @@ _nivuus_check_update_async() {
 # Terminal only as well: the check spends a GitHub round-trip and reports to
 # someone, and a self-replacing install is not something to start underneath a
 # script or an agent that is mid-task.
+if [[ -r "$NIVUUS_UPDATE_STATUS" ]] && nivuus_has_terminal && ! _nivuus_is_dev_checkout; then
+    _nivuus_report_failed_update
+fi
+
 if [[ "$ENABLE_AUTOUPDATE" == "true" ]] && nivuus_has_terminal && ! _nivuus_is_dev_checkout && _nivuus_install_writable; then
     # Check if it's time for an update check
     days_since_check=$(_nivuus_days_since_check)
@@ -442,11 +325,23 @@ nivuus-update() {
     echo "📍 Current version: v${current}"
     echo "📍 Latest version:  v${latest}"
 
-    if _nivuus_update_available; then
+    if _nivuus_version_greater "$current" "$latest"; then
         echo ""
         echo "🆕 Update available!"
         echo ""
-        _nivuus_perform_update "$latest"
+        if ! _nivuus_update_lock; then
+            echo "⏳ Another update of $NIVUUS_SHELL_DIR is already running; try again when it has finished"
+            return 1
+        fi
+        local -i rc=0
+        _nivuus_perform_update "$latest" || rc=$?
+        _nivuus_update_unlock
+        if (( rc == 0 )); then
+            _nivuus_record_update_status ok "$latest"
+        else
+            _nivuus_record_update_status failed "$latest"
+        fi
+        return rc
     else
         echo ""
         echo "✅ Already up to date!"
