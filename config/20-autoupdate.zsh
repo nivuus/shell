@@ -215,10 +215,13 @@ _nivuus_perform_update() {
     echo "♻️  Restart your shell to apply changes: exec zsh"
 }
 
-# Record the outcome of an update for the next terminal start.
+# Record the outcome of an update for the next terminal start: "<outcome>
+# <version>", then, after a failure with a known fix, the command to run.
 _nivuus_record_update_status() {
     mkdir -p "$NIVUUS_UPDATE_STATE_DIR" || return 1
     print -r -- "$1 $2" > "$NIVUUS_UPDATE_STATUS"
+    [[ -n "$3" ]] && print -r -- "$3" >> "$NIVUUS_UPDATE_STATUS"
+    return 0
 }
 
 # Unattended update: check, and install if a newer release exists. Exactly one
@@ -232,10 +235,11 @@ _nivuus_auto_update() {
     _nivuus_version_greater "$(_nivuus_current_version)" "$latest" || return 0
 
     mkdir -p "$NIVUUS_UPDATE_STATE_DIR" || return 1
+    NIVUUS_UPDATE_REMEDY=""
     if _nivuus_perform_update "$latest" > "$NIVUUS_UPDATE_LOG" 2>&1; then
         _nivuus_record_update_status ok "$latest"
     else
-        _nivuus_record_update_status failed "$latest"
+        _nivuus_record_update_status failed "$latest" "$NIVUUS_UPDATE_REMEDY"
     fi
 }
 
@@ -247,13 +251,18 @@ _nivuus_check_update_async() {
 # Say so when the last unattended update failed, until an update succeeds.
 _nivuus_report_failed_update() {
     [[ -r "$NIVUUS_UPDATE_STATUS" ]] || return 0
-    local -a outcome
-    outcome=(${=$(<"$NIVUUS_UPDATE_STATUS")})
+    local -a lines outcome
+    lines=("${(@f)$(<"$NIVUUS_UPDATE_STATUS")}")
+    outcome=(${=lines[1]})
     [[ "${outcome[1]}" == failed ]] || return 0
     # Installed since by other means (or by hand): nothing left to report.
     _nivuus_version_greater "$(_nivuus_current_version)" "${outcome[2]}" || return 0
     print -u2 -r -- "⚠️  Nivuus Shell: the automatic update to v${outcome[2]} failed; v$(_nivuus_current_version) is still installed."
-    print -u2 -r -- "   Details: $NIVUUS_UPDATE_LOG — retry with: nivuus-update"
+    if [[ -n "${lines[2]}" ]]; then
+        print -u2 -r -- "   Run: ${lines[2]} (details: $NIVUUS_UPDATE_LOG)"
+    else
+        print -u2 -r -- "   Details: $NIVUUS_UPDATE_LOG — retry with: nivuus-update"
+    fi
 }
 
 # ============================================================================

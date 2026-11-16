@@ -321,6 +321,44 @@ hold_update_lock() {
     [[ "$output" == *"$XDG_STATE_HOME/nivuus-shell/update.log"* ]]
 }
 
+# The report names the one command that removes the cause, on one line.
+_report_line() {
+    run zsh -c "nivuus_has_terminal() { return 0 }; source '$UPDATER'"
+    printf '%s\n' "$output" | grep -F -- "$1" | grep -qF "nivuus-update"
+}
+
+@test "without gh, the report says exactly how to install it, on one line" {
+    publish_release 9.9.9
+    rm "$WORK/bin/gh"
+    if command -v gh >/dev/null; then skip "a real gh is installed on this machine"; fi
+    run env NIVUUS_PKG_MANAGER=apt-get zsh -c "source '$UPDATER' && _nivuus_auto_update"
+    assert_old_install_intact
+    _report_line "apt-get install -y --no-install-recommends gh && nivuus-update"
+}
+
+@test "the gh install command follows the package manager's package name" {
+    publish_release 9.9.9
+    rm "$WORK/bin/gh"
+    if command -v gh >/dev/null; then skip "a real gh is installed on this machine"; fi
+    run env NIVUUS_PKG_MANAGER=pacman zsh -c "source '$UPDATER' && nivuus-update"
+    [ "$status" -ne 0 ]
+    printf '%s\n' "$output" | grep -F "pacman -S --noconfirm --needed github-cli && nivuus-update"
+}
+
+@test "with gh not logged in, the report says to run gh auth login, on one line" {
+    publish_release 9.9.9
+    # What gh does without credentials: exit 4.
+    cat > "$WORK/bin/gh" <<'GH'
+#!/usr/bin/env bash
+echo "To get started with GitHub CLI, please run:  gh auth login" >&2
+exit 4
+GH
+    chmod +x "$WORK/bin/gh"
+    run zsh -c "source '$UPDATER' && _nivuus_auto_update"
+    assert_old_install_intact
+    _report_line "gh auth login && nivuus-update"
+}
+
 @test "a successful update clears the failure report" {
     publish_release 9.9.9
     mkdir -p "$XDG_STATE_HOME/nivuus-shell"
