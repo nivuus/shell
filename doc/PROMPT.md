@@ -206,7 +206,11 @@ livré, `dracula`, sert d'exemple pour écrire vos propres thèmes.
 ## Optimisations Performance
 
 ### Cache Git (2 secondes)
-Le prompt utilise un cache pour éviter les appels git répétés :
+Le prompt utilise un cache pour éviter les appels git répétés. Les segments en cache (`{git}`,
+`{firebase}`, `{cloud}`) sont recalculés par un hook `precmd` (`_nivuus_prompt_precmd`) dans le
+shell courant, et le prompt lit la variable (`${_GIT_PROMPT_CACHE_VALUE}`,
+`${_FIREBASE_PROMPT_CACHE_VALUE}`, `${_CLOUD_PROMPT_VALUE}`) : un segment rendu en `$(fonction)`
+s'exécute dans un sous-shell, où le cache disparaît avec lui.
 
 **Variables de cache:**
 - `_GIT_PROMPT_CACHE_DIR` - Répertoire en cache

@@ -94,9 +94,18 @@ run_zsh() {
 }
 
 @test "Git prompt uses THEME_GIT_PREFIX/THEME_GIT_BRANCH/THEME_SUCCESS/THEME_ERROR" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -A 35 'git_prompt_info()' config/05-prompt.zsh | grep -cE 'THEME_GIT_PREFIX|THEME_GIT_BRANCH|THEME_SUCCESS|THEME_ERROR'"
+    local repo="$BATS_TEST_TMPDIR/themed"
+    git init -q -b main "$repo"
+    run zsh -c "
+source '$NIVUUS_SHELL_DIR/themes/nord.zsh'; source '$NIVUUS_SHELL_DIR/config/05-prompt.zsh'
+THEME_GIT_PREFIX='<P>' THEME_GIT_BRANCH='<B>' THEME_SUCCESS='<S>' THEME_ERROR='<E>'
+cd '$repo'
+git_prompt_info
+touch dirty; _GIT_PROMPT_CACHE_TIME=0
+git_prompt_info"
     [ "$status" -eq 0 ]
-    [ "$output" -ge 3 ]
+    [[ "${lines[0]}" == *'<P>'*'git:('*'<B>'*'main'*'<S>'* ]]
+    [[ "${lines[1]}" == *'<E>'* ]]
 }
 
 # =============================================================================
@@ -285,7 +294,7 @@ run_zsh() {
 @test "default build_prompt output matches the documented default template" {
     run zsh -c "export NIVUUS_SHELL_DIR='$NIVUUS_SHELL_DIR' && unset NIVUUS_PROMPT_FORMAT && source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/05-prompt.zsh' >/dev/null 2>&1 && build_prompt"
     [ "$status" -eq 0 ]
-    [ "$output" = '$(prompt_segment_ssh)$(prompt_segment_root)$(prompt_segment_status) $(prompt_segment_path)$(prompt_python_venv)$(prompt_cloud_context)$(prompt_firebase)$(git_prompt_info) ' ]
+    [ "$output" = '$(prompt_segment_ssh)$(prompt_segment_root)$(prompt_segment_status) $(prompt_segment_path)$(prompt_python_venv)${_CLOUD_PROMPT_VALUE}${_FIREBASE_PROMPT_CACHE_VALUE}${_GIT_PROMPT_CACHE_VALUE} ' ]
 }
 
 # =============================================================================
@@ -318,9 +327,75 @@ print -r -- \"C=\$_FIREBASE_PROMPT_CACHE_VALUE\""
     [[ "${lines[2]}" == *"second-project"* ]]  # TTL elapsed: re-read
 }
 
-@test "Azure cache has TTL" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep '_AZURE_PROMPT_CACHE_TIME' config/05-prompt.zsh"
+@test "Azure cache has TTL, even when az fails" {
+    mkdir -p "$BATS_TEST_TMPDIR/bin"
+    printf '#!/bin/sh\necho run >> "%s"\n[ -n "$AZ_FAIL" ] && exit 1\necho My Subscription\n' \
+        "$BATS_TEST_TMPDIR/az.log" > "$BATS_TEST_TMPDIR/bin/az"
+    chmod +x "$BATS_TEST_TMPDIR/bin/az"
+    run zsh -c "
+PATH='$BATS_TEST_TMPDIR/bin':\$PATH
+source '$NIVUUS_SHELL_DIR/themes/nord.zsh'; source '$NIVUUS_SHELL_DIR/config/05-prompt.zsh'
+export AZURE_SUBSCRIPTION_ID=sub-id
+_nivuus_cloud_prompt_refresh; print -r -- \"A=\$_CLOUD_PROMPT_VALUE\"
+_nivuus_cloud_prompt_refresh; print -r -- \"B=\$_CLOUD_PROMPT_VALUE\"
+AZ_FAIL=1 AZURE_PROMPT_CACHE_TTL=0 _nivuus_cloud_prompt_refresh
+AZ_FAIL=1 _nivuus_cloud_prompt_refresh; print -r -- \"C=\$_CLOUD_PROMPT_VALUE\""
     [ "$status" -eq 0 ]
+    [[ "${lines[0]}" == *"az:My Subscription"* ]]
+    [[ "${lines[1]}" == *"az:My Subscription"* ]]
+    [[ "${lines[2]}" == *"az:sub-id"* ]]
+    # First refresh, then the forced one; the second and the last were cached.
+    [ "$(wc -l < "$BATS_TEST_TMPDIR/az.log")" -eq 2 ]
+}
+
+# =============================================================================
+# The caches hold across real prompts
+# =============================================================================
+# Each prompt used to evaluate $(git_prompt_info), $(prompt_firebase) and
+# $(prompt_cloud_context) in a subshell: the cache they wrote died with it,
+# so git, jq and az ran at every prompt whatever the TTL. Count the git runs
+# of an interactive shell, behind a real terminal, over several prompts.
+
+_count_git_over_prompts() {
+    local repo="$BATS_TEST_TMPDIR/repo" bin="$BATS_TEST_TMPDIR/bin"
+    git init -q -b main "$repo"
+    mkdir -p "$bin"
+    printf '#!/bin/sh\necho "$1" >> "%s"\nexec %s "$@"\n' "$BATS_TEST_TMPDIR/git.log" "$(command -v git)" > "$bin/git"
+    chmod +x "$bin/git"
+    printf '%s\n' \
+        "export NIVUUS_SHELL_DIR='$NIVUUS_SHELL_DIR' GIT_PROMPT_CACHE_TTL=600" \
+        "source '$NIVUUS_SHELL_DIR/themes/nord.zsh'; source '$NIVUUS_SHELL_DIR/config/05-prompt.zsh'" \
+        "PROMPT+='%(?:<OK>:<KO>)'" \
+        "PATH='$bin':\$PATH; cd '$repo'; : > '$BATS_TEST_TMPDIR/git.log'" \
+        "true" "true" "false" "true" "exit" > "$BATS_TEST_TMPDIR/input"
+    script -qec "zsh --no-rcs -i" /dev/null < "$BATS_TEST_TMPDIR/input" | tr -d '\r' > "$BATS_TEST_TMPDIR/screen"
+}
+
+@test "the git segment runs git once per TTL, not at every prompt" {
+    _count_git_over_prompts
+    # Five prompts after the log was reset; one refresh in the TTL.
+    [ "$(grep -c '^rev-parse' "$BATS_TEST_TMPDIR/git.log")" -eq 1 ]
+    grep -q 'git:(' "$BATS_TEST_TMPDIR/screen"
+}
+
+@test "refreshing the caches before a prompt keeps the last exit status" {
+    _count_git_over_prompts
+    # After `false` the status segment must still see the failure.
+    grep -q '<KO>' "$BATS_TEST_TMPDIR/screen"
+    grep -q '<OK>' "$BATS_TEST_TMPDIR/screen"
+}
+
+@test "a cached segment follows a change of directory at once" {
+    local repo="$BATS_TEST_TMPDIR/repo2"
+    git init -q -b topic "$repo"
+    run zsh -c "
+source '$NIVUUS_SHELL_DIR/themes/nord.zsh'; source '$NIVUUS_SHELL_DIR/config/05-prompt.zsh'
+GIT_PROMPT_CACHE_TTL=600
+cd '$repo'; _nivuus_prompt_precmd; print -rP -- \"A=\$PROMPT\"
+cd /; _nivuus_prompt_precmd; print -rP -- \"B=\$PROMPT\""
+    [ "$status" -eq 0 ]
+    [[ "${lines[0]}" == *"git:("*"topic"* ]]
+    [[ "${lines[1]}" != *"git:("* ]]
 }
 
 # =============================================================================
@@ -355,6 +430,7 @@ source '$NIVUUS_SHELL_DIR/themes/nord.zsh'
 source '$NIVUUS_SHELL_DIR/config/05-prompt.zsh'
 cd ${1@Q}
 $2
+_nivuus_prompt_precmd
 print -rP -- \"\$PROMPT\"
 "
 }

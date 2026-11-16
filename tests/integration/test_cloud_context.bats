@@ -24,9 +24,19 @@ setup() {
     [ "$status" -eq 0 ]
 }
 
+
+# Render the cloud segment with marker colours in place of the theme's.
+_cloud_render() {
+    run env "$@" zsh -c "
+source '$NIVUUS_SHELL_DIR/themes/nord.zsh'; source '$NIVUUS_SHELL_DIR/config/05-prompt.zsh'
+THEME_COLORS[orange]=ORANGE THEME_GIT_PREFIX='<GITPREFIX>' THEME_SSH='<SSH>'
+prompt_cloud_context"
+}
+
 @test "AWS uses the theme's orange color" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -A 20 'prompt_cloud_context' config/05-prompt.zsh | grep 'THEME_COLORS\[orange\]'"
+    _cloud_render AWS_PROFILE=staging
     [ "$status" -eq 0 ]
+    [[ "$output" == *"%F{ORANGE}%}aws:staging"* ]]
 }
 
 @test "AWS context checks for AWS_PROFILE" {
@@ -50,8 +60,9 @@ setup() {
 }
 
 @test "GCP uses the theme's git-prefix (cyan) color" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -A 20 'prompt_cloud_context' config/05-prompt.zsh | grep 'THEME_GIT_PREFIX'"
+    _cloud_render CLOUDSDK_CORE_PROJECT=proj ENABLE_FIREBASE_PROMPT=false
     [ "$status" -eq 0 ]
+    [[ "$output" == *"<GITPREFIX>%}gcp:proj"* ]]
 }
 
 @test "GCP context checks for CLOUDSDK_CORE_PROJECT" {
@@ -119,6 +130,7 @@ setup() {
 export NIVUUS_SHELL_DIR='$NIVUUS_SHELL_DIR'
 source '$NIVUUS_SHELL_DIR/themes/nord.zsh'; source '$NIVUUS_SHELL_DIR/config/05-prompt.zsh'
 cd /
+_nivuus_prompt_precmd
 print -rP -- \"\$PROMPT\""
     [ "$status" -eq 0 ]
     [[ "$output" == *"aws:staging"* ]]
@@ -174,18 +186,23 @@ print -rP -- \"\$PROMPT\""
 # =============================================================================
 
 @test "AWS detection is conditional" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -A 30 'prompt_cloud_context()' config/05-prompt.zsh | grep -E 'if.*AWS_PROFILE'"
+    _cloud_render AWS_PROFILE=default
     [ "$status" -eq 0 ]
+    [[ "$output" != *"aws:"* ]]
 }
 
 @test "GCP detection is conditional" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -A 30 'prompt_cloud_context()' config/05-prompt.zsh | grep -E 'if.*CLOUDSDK'"
+    _cloud_render CLOUDSDK_CORE_PROJECT= ENABLE_FIREBASE_PROMPT=false
     [ "$status" -eq 0 ]
+    [[ "$output" != *"gcp:"* ]]
 }
 
 @test "Azure detection is conditional" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -A 30 'prompt_cloud_context()' config/05-prompt.zsh | grep -E 'if.*AZURE'"
+    _cloud_render AZURE_SUBSCRIPTION_ID=
     [ "$status" -eq 0 ]
+    [[ "$output" != *"az:"* ]]
+    _cloud_render AZURE_SUBSCRIPTION_ID=sub-1 PATH=/usr/bin:/bin
+    [[ "$output" == *"<SSH>%}az:sub-1"* ]]
 }
 
 # =============================================================================
