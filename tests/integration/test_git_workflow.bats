@@ -84,8 +84,10 @@ setup() {
 }
 
 @test "Git prompt checks if in repository" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -A 5 'git_prompt_info()' config/05-prompt.zsh | grep 'git rev-parse'"
+    mkdir -p "$BATS_TEST_TMPDIR/plain"
+    run zsh -c "source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/05-prompt.zsh' && cd '$BATS_TEST_TMPDIR/plain' && GIT_CEILING_DIRECTORIES='$BATS_TEST_TMPDIR' git_prompt_info"
     [ "$status" -eq 0 ]
+    [ -z "$output" ]
 }
 
 @test "Git prompt returns early if not in repo" {
@@ -135,13 +137,28 @@ setup() {
 }
 
 @test "Git cache checks directory match" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -A 10 'git_prompt_info()' config/05-prompt.zsh | grep 'current_dir'"
+    git init -q -b one "$BATS_TEST_TMPDIR/one"
+    git init -q -b two "$BATS_TEST_TMPDIR/two"
+    run zsh -c "source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/05-prompt.zsh'
+GIT_PROMPT_CACHE_TTL=600
+cd '$BATS_TEST_TMPDIR/one'; git_prompt_info
+cd '$BATS_TEST_TMPDIR/two'; git_prompt_info"
     [ "$status" -eq 0 ]
+    [[ "${lines[0]}" == *one* ]]
+    [[ "${lines[1]}" == *two* ]]
 }
 
 @test "Git cache validates TTL" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -A 15 'git_prompt_info()' config/05-prompt.zsh | grep 'cache_ttl'"
+    git init -q -b before "$BATS_TEST_TMPDIR/repo"
+    run zsh -c "source '$NIVUUS_SHELL_DIR/themes/nord.zsh' && source '$NIVUUS_SHELL_DIR/config/05-prompt.zsh'
+cd '$BATS_TEST_TMPDIR/repo'
+GIT_PROMPT_CACHE_TTL=600; git_prompt_info
+git checkout -q -b after; git_prompt_info
+GIT_PROMPT_CACHE_TTL=0; git_prompt_info"
     [ "$status" -eq 0 ]
+    [[ "${lines[0]}" == *before* ]]
+    [[ "${lines[1]}" == *before* ]]   # within the TTL: cached
+    [[ "${lines[2]}" == *after* ]]    # TTL elapsed: recomputed
 }
 
 # =============================================================================

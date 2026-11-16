@@ -3,9 +3,16 @@
 # Nivuus Prompt
 # =============================================================================
 # Default format: [SSH] [ROOT] STATUS PATH (VENV) CLOUD [FIREBASE] GIT [JOBS]
-# Synchronous with Git caching (2s TTL). Layout is driven by the
-# NIVUUS_PROMPT_FORMAT / NIVUUS_RPROMPT_FORMAT template strings (see
-# doc/PROMPT.md); colors come from the loaded theme ($THEME_*).
+# Synchronous. Layout is driven by the NIVUUS_PROMPT_FORMAT /
+# NIVUUS_RPROMPT_FORMAT template strings (see doc/PROMPT.md); colors come from
+# the loaded theme ($THEME_*).
+#
+# Segments that cost a process (git, firebase, cloud) are cached: a precmd
+# hook refreshes them in this shell when their TTL has run out (git 2s,
+# firebase 10s, azure 60s), and the prompt reads the cached variable. A
+# segment rendered as $(function) runs in a subshell, where a cache written
+# by the function dies with it, so cached segments are never rendered that
+# way.
 # =============================================================================
 
 # Enable prompt substitution
@@ -33,6 +40,7 @@ typeset -g _FIREBASE_PROMPT_CACHE_VALUE=""
 
 typeset -g _AZURE_PROMPT_CACHE_TIME=0
 typeset -g _AZURE_PROMPT_CACHE_VALUE=""
+typeset -g _CLOUD_PROMPT_VALUE=""
 
 # =============================================================================
 # Helper Functions
@@ -60,20 +68,25 @@ _nivuus_prompt_literal() {
 # Git Prompt with Cache
 # =============================================================================
 
-git_prompt_info() {
-    # Check if in a git repository
-    git rev-parse --git-dir &>/dev/null || return 0
-
+# Refresh $_GIT_PROMPT_CACHE_VALUE when it is older than the TTL or was
+# computed for another directory. Runs in the current shell (precmd), never in
+# a subshell, so the cache survives to the next prompt.
+_nivuus_git_prompt_refresh() {
+    zmodload -F zsh/datetime p:EPOCHSECONDS 2>/dev/null
     local current_dir="$PWD"
     local current_time="$EPOCHSECONDS"
     local cache_ttl="${GIT_PROMPT_CACHE_TTL:-2}"
 
-    # Use cache if valid
     if [[ "$_GIT_PROMPT_CACHE_DIR" == "$current_dir" ]] && \
        (( current_time - _GIT_PROMPT_CACHE_TIME < cache_ttl )); then
-        echo "$_GIT_PROMPT_CACHE_VALUE"
-        return
+        return 0
     fi
+    _GIT_PROMPT_CACHE_DIR="$current_dir"
+    _GIT_PROMPT_CACHE_TIME="$current_time"
+    _GIT_PROMPT_CACHE_VALUE=""
+
+    # Check if in a git repository
+    git rev-parse --git-dir &>/dev/null || return 0
 
     # Get git branch
     local branch
@@ -90,23 +103,26 @@ git_prompt_info() {
     # Build git prompt with theme colors
     # git:( in prefix color bold, branch in branch color, ) in prefix color bold, space, status icon
     branch=$(_nivuus_prompt_literal "$branch")
-    local git_prompt=" %{%B${THEME_GIT_PREFIX}%}git:(%{${THEME_GIT_BRANCH}%}${branch}%{%B${THEME_GIT_PREFIX}%})%{%f%b%} ${status_icon}"
+    _GIT_PROMPT_CACHE_VALUE=" %{%B${THEME_GIT_PREFIX}%}git:(%{${THEME_GIT_BRANCH}%}${branch}%{%B${THEME_GIT_PREFIX}%})%{%f%b%} ${status_icon}"
+}
 
-    # Update cache
-    _GIT_PROMPT_CACHE_DIR="$current_dir"
-    _GIT_PROMPT_CACHE_TIME="$current_time"
-    _GIT_PROMPT_CACHE_VALUE="$git_prompt"
-
-    echo "$git_prompt"
+git_prompt_info() {
+    _nivuus_git_prompt_refresh
+    [[ -n "$_GIT_PROMPT_CACHE_VALUE" ]] && print -r -- "$_GIT_PROMPT_CACHE_VALUE"
+    return 0
 }
 
 # =============================================================================
 # Firebase Prompt (Optional)
 # =============================================================================
 
-prompt_firebase() {
-    [[ "${ENABLE_FIREBASE_PROMPT:-true}" != "true" ]] && return
+_nivuus_firebase_prompt_refresh() {
+    if [[ "${ENABLE_FIREBASE_PROMPT:-true}" != "true" ]]; then
+        _FIREBASE_PROMPT_CACHE_VALUE=""
+        return 0
+    fi
 
+    zmodload -F zsh/datetime p:EPOCHSECONDS 2>/dev/null
     local current_dir="$PWD"
     local current_time="$EPOCHSECONDS"
     local cache_ttl="${FIREBASE_PROMPT_CACHE_TTL:-10}"
@@ -114,8 +130,7 @@ prompt_firebase() {
     # Use cache if valid and we're in the same directory
     if [[ "$_FIREBASE_PROMPT_CACHE_DIR" == "$current_dir" ]] && \
        (( current_time - _FIREBASE_PROMPT_CACHE_TIME < cache_ttl )); then
-        echo "$_FIREBASE_PROMPT_CACHE_VALUE"
-        return
+        return 0
     fi
 
     # Check if we're in a Firebase project (look for .firebaserc or firebase.json)
@@ -176,8 +191,12 @@ prompt_firebase() {
     _FIREBASE_PROMPT_CACHE_DIR="$current_dir"
     _FIREBASE_PROMPT_CACHE_TIME="$current_time"
     _FIREBASE_PROMPT_CACHE_VALUE="$firebase_prompt"
+}
 
-    echo "$firebase_prompt"
+prompt_firebase() {
+    _nivuus_firebase_prompt_refresh
+    [[ -n "$_FIREBASE_PROMPT_CACHE_VALUE" ]] && print -r -- "$_FIREBASE_PROMPT_CACHE_VALUE"
+    return 0
 }
 
 # =============================================================================
@@ -212,9 +231,13 @@ prompt_python_venv() {
 # Cloud Provider Context (Optional)
 # =============================================================================
 
-prompt_cloud_context() {
-    [[ "${ENABLE_CLOUD_PROMPT:-true}" != "true" ]] && return
+# AWS and GCP come from the environment and are re-read at every prompt; only
+# the Azure subscription name, which costs an `az` run, is cached.
+_nivuus_cloud_prompt_refresh() {
+    _CLOUD_PROMPT_VALUE=""
+    [[ "${ENABLE_CLOUD_PROMPT:-true}" != "true" ]] && return 0
 
+    zmodload -F zsh/datetime p:EPOCHSECONDS 2>/dev/null
     local cloud_info=""
 
     # AWS Profile
@@ -234,25 +257,25 @@ prompt_cloud_context() {
         local cache_ttl="${AZURE_PROMPT_CACHE_TTL:-60}"
         local az_sub_name="$AZURE_SUBSCRIPTION_ID"
 
-        # Use cache if valid
-        if (( current_time - _AZURE_PROMPT_CACHE_TIME < cache_ttl )) && [[ -n "$_AZURE_PROMPT_CACHE_VALUE" ]]; then
-            az_sub_name="$_AZURE_PROMPT_CACHE_VALUE"
-        elif command -v az &>/dev/null; then
-            # Try to get subscription name (with timeout protection)
-            local az_name=$(az account show --query name -o tsv 2>/dev/null)
-            if [[ -n "$az_name" ]]; then
-                az_sub_name="$az_name"
-                # Update cache
-                _AZURE_PROMPT_CACHE_TIME="$current_time"
-                _AZURE_PROMPT_CACHE_VALUE="$az_name"
-            fi
+        # One `az` run per TTL, whether it answered or not: a failing az
+        # must not cost its start-up time at every prompt.
+        if (( current_time - _AZURE_PROMPT_CACHE_TIME >= cache_ttl )) && (( $+commands[az] )); then
+            _AZURE_PROMPT_CACHE_TIME="$current_time"
+            _AZURE_PROMPT_CACHE_VALUE=$(az account show --query name -o tsv 2>/dev/null)
         fi
+        [[ -n "$_AZURE_PROMPT_CACHE_VALUE" ]] && az_sub_name="$_AZURE_PROMPT_CACHE_VALUE"
 
         [[ -n "$cloud_info" ]] && cloud_info+=" "
         cloud_info+="%{${THEME_SSH}%}az:$(_nivuus_prompt_literal "$az_sub_name")%{%f%}"
     fi
 
-    echo "$cloud_info"
+    _CLOUD_PROMPT_VALUE="$cloud_info"
+}
+
+prompt_cloud_context() {
+    _nivuus_cloud_prompt_refresh
+    [[ -n "$_CLOUD_PROMPT_VALUE" ]] && print -r -- "$_CLOUD_PROMPT_VALUE"
+    return 0
 }
 
 # =============================================================================
@@ -297,17 +320,47 @@ _NIVUUS_PROMPT_TOKENS=(
     jobs     background_jobs_info
 )
 
-# Expand a NIVUUS_PROMPT_FORMAT/NIVUUS_RPROMPT_FORMAT template: {token} is
-# replaced with a literal \$(function) call so evaluation stays lazy (each
-# prompt render, via PROMPT_SUBST) instead of happening once at build time.
+# Cached segments: {token} -> "refresh-function variable". The precmd hook
+# runs the refresh function of each cached token the templates use, and the
+# prompt reads the variable.
+typeset -gA _NIVUUS_PROMPT_CACHED_TOKENS
+_NIVUUS_PROMPT_CACHED_TOKENS=(
+    git      "_nivuus_git_prompt_refresh _GIT_PROMPT_CACHE_VALUE"
+    firebase "_nivuus_firebase_prompt_refresh _FIREBASE_PROMPT_CACHE_VALUE"
+    cloud    "_nivuus_cloud_prompt_refresh _CLOUD_PROMPT_VALUE"
+)
+
+# Expand a NIVUUS_PROMPT_FORMAT/NIVUUS_RPROMPT_FORMAT template, so evaluation
+# stays lazy (each prompt render, via PROMPT_SUBST) instead of happening once
+# at build time: a cached {token} becomes a literal \${variable} that the
+# precmd hook keeps fresh, any other {token} a literal \$(function) call.
 # Unknown tokens are left as-is.
 _nivuus_expand_prompt_template() {
     local template="$1"
-    local token func
+    local token func ref
+    local -a cached
     for token func in ${(kv)_NIVUUS_PROMPT_TOKENS}; do
-        template="${template//\{${token}\}/\$(${func})}"
+        cached=(${=_NIVUUS_PROMPT_CACHED_TOKENS[$token]})
+        if (( ${#cached} == 2 )); then
+            ref='${'"${cached[2]}"'}'
+            template="${template//\{${token}\}/$ref}"
+        else
+            template="${template//\{${token}\}/\$(${func})}"
+        fi
     done
     echo "$template"
+}
+
+# Refresh, in this shell, the cached segments the prompts actually display.
+_nivuus_prompt_precmd() {
+    local prompts="${PROMPT}${RPROMPT}"
+    local spec
+    local -a cached
+    for spec in "${(@v)_NIVUUS_PROMPT_CACHED_TOKENS}"; do
+        cached=(${=spec})
+        [[ "$prompts" == *'${'"${cached[2]}"'}'* ]] && ${cached[1]}
+    done
+    return 0
 }
 
 # Synchronous prompt building
@@ -405,12 +458,16 @@ background_jobs_info() {
 # =============================================================================
 
 # Main prompt: template is expanded once at shell startup into a string
-# containing literal \$(...) segment calls, which PROMPT_SUBST re-evaluates
-# on every render (same lazy-evaluation model as before this was configurable).
+# containing literal \$(...) segment calls and \${...} cached segments, which
+# PROMPT_SUBST re-evaluates on every render.
 PROMPT=$(build_prompt)
 
 # Right prompt with background jobs (and any other RPROMPT_FORMAT tokens)
 RPROMPT=$(build_rprompt)
+
+# Keep the cached segments fresh before each prompt.
+autoload -Uz add-zsh-hook
+add-zsh-hook precmd _nivuus_prompt_precmd
 
 # Continuation prompt
 PROMPT2="${THEME_PATH}%_>${THEME_RESET} "

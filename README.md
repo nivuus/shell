@@ -343,7 +343,7 @@ Automatic backups are created at:
 
 ## Updating
 
-Nivuus Shell includes an automatic update system that checks for new releases weekly and installs them automatically with checksum verification.
+Nivuus Shell includes an automatic update system that checks for new releases weekly and installs them automatically once their checksum and build provenance are verified.
 
 ### Check Current Version
 
@@ -356,8 +356,17 @@ nivuus-version --check      # Check for available updates
 
 - **Weekly checks** - Checks for new releases every 7 days
 - **Release-based** - Updates from official GitHub Releases (stable versions only)
-- **Checksum verification** - SHA256 verification for security
-- **Automatic installation** - Updates installed automatically with backup
+- **Checksum verification** - SHA256 verification against the release's `SHA256SUMS`
+- **Provenance verification** - `gh attestation verify` proves the archive was built by
+  the `nivuus/.github` release workflow from `main`; without the GitHub CLI (`gh`) the
+  update is refused
+- **Atomic installation** - the release is staged next to the install, proven (entry files
+  present, every module compiles), then swapped in with two renames; the running install is
+  untouched until then
+- **One at a time** - a lock next to the install (`~/.nivuus-shell.update.lock`) keeps two
+  terminals from updating together
+- **Failures are reported** - a failed background update is announced at the next terminal
+  start, with its log in `~/.local/state/nivuus-shell/update.log`
 - **Safe rollback** - Previous versions backed up to `~/.config/nivuus-shell-backup/`
 
 ### Manual Update
@@ -368,11 +377,11 @@ nivuus-update               # Check for and install updates manually
 
 The update system will:
 1. Check the latest release on GitHub
-2. Download the release archive
-3. Verify SHA256 checksum
-4. Create a backup of your current installation
-5. Install the new version
-6. Recompile ZSH files
+2. Create a backup of your current installation
+3. Download the release archive
+4. Verify its SHA256 checksum and its build provenance attestation
+5. Extract, prove and compile it beside the install
+6. Swap it in place of the current install
 
 ### Configuration
 
@@ -387,6 +396,9 @@ export AUTOUPDATE_CHECK_FREQUENCY_DAYS=14
 
 # Disable checksum verification (not recommended)
 export NIVUUS_VERIFY_CHECKSUMS=false
+
+# Disable build provenance verification (not recommended)
+export NIVUUS_VERIFY_ATTESTATION=false
 
 # Use different GitHub repository
 export NIVUUS_GITHUB_REPO=yourfork/nivuus-shell
@@ -454,6 +466,7 @@ nivuus-shell/
 │   ├── 09-nodejs.zsh      # Node.js/NVM
 │   ├── 10-ai.zsh          # AI commands
 │   ├── 20-autoupdate.zsh  # Auto-update system (release-based)
+│   ├── 20-autoupdate-release.zsh  # Release download, verification and swap
 │   └── ...                # Other modules
 ├── themes/
 │   ├── nord.zsh           # Default color palette

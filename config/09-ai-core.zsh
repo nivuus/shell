@@ -76,6 +76,10 @@ _ai_get_api_key() {
 #     whatever language the command line or its comments are written in.
 # Text in any script (accented, CJK, RTL...) is left untouched: the shape rule
 # only ever matches ASCII token characters.
+# Limit: the key=value rule knows English key names only, so a short secret
+# that does not look like a token (under 32 characters, or not mixing digits
+# and letters) behind a key in another language (`motdepasse=hunter2`,
+# `パスワード=abc`) is sent as is.
 _ai_redact() {
     setopt localoptions extendedglob
     local text MATCH MBEGIN MEND
@@ -87,6 +91,36 @@ _ai_redact() {
         -e 's/(sk-)[A-Za-z0-9]{16,}/\1***REDACTED***/g')
     text=${text//(#m)[A-Za-z0-9_+-](#c32,)/${${${MATCH//[^0-9]/}:+${${MATCH//[^A-Za-z]/}:+***REDACTED***}}:-$MATCH}}
     print -r -- "$text"
+}
+
+# Cut $2 to at most $1 characters and set REPLY. Characters, not bytes:
+# `cut -c` counts bytes in practice, so it split a Japanese character or an
+# emoji in two and left invalid UTF-8 in a title or in a JSON request body.
+# zsh's subscripts count characters (MULTIBYTE, with a UTF-8 LC_CTYPE), and
+# the cut never separates a character from what renders with it: a mark of
+# width 0 (combining accent, Arabic harakat, variation selector, zero-width
+# joiner) goes with the character before it, a trailing joiner is dropped,
+# and so is the first half of a regional-indicator flag pair.
+_ai_truncate() {
+    local -i max=$1 cut=$1
+    local text=$2
+    if (( ${#text} <= max )); then
+        REPLY=$text
+        return 0
+    fi
+    while (( cut > 0 )) && (( ${(m)#text[cut+1]} == 0 )); do
+        (( cut-- ))
+    done
+    REPLY=${text[1,cut]}
+    while [[ "$REPLY" == *$'\u200d' ]]; do
+        REPLY=${REPLY[1,-2]}
+    done
+    local -i flags=0
+    while [[ "${REPLY[-1-flags]}" == [$'\U0001F1E6'-$'\U0001F1FF'] ]] && (( flags < ${#REPLY} )); do
+        (( flags++ ))
+    done
+    (( flags % 2 )) && REPLY=${REPLY[1,-2]}
+    return 0
 }
 
 # Quote $1 as a parameter of a curl configuration file (curl -K): inside

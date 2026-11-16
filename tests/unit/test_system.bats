@@ -166,19 +166,64 @@ setup() {
     [ "$status" -eq 0 ]
 }
 
-@test "cleanup deduplicates history" {
-    local home="$BATS_TEST_TMPDIR/home"
-    mkdir -p "$home"
-    printf 'ls\ncd /tmp\nls\ngit status\ncd /tmp\n' > "$home/.zsh_history"
-    run env HOME="$home" zsh -c "source '$NIVUUS_SHELL_DIR/config/13-system.zsh'; cleanup"
-    [ "$status" -eq 0 ]
-    [[ "$output" == *"removed 2 entries"* ]]
-    [ "$(cat "$home/.zsh_history")" = "$(printf 'ls\ncd /tmp\ngit status')" ]
+# The history file is written by zsh (timestamps, multi-line entries joined
+# by backslash-newline, metafied non-ASCII), so the fixture is written by zsh
+# too, from an interactive shell: a non-interactive one keeps no history.
+_write_history_fixture() {
+    local file=$1
+    zsh -f -o histignorespace -i >/dev/null 2>&1 <<ZSH
+ setopt hist_ignore_space extended_history
+ HISTFILE='$file'; HISTSIZE=1000; SAVEHIST=1000
+ print -s 'ls'
+ print -s \$'for i in 1 2; do\necho \$i\ndone'
+ print -s 'ls'
+ print -s \$'if true; then\necho x\nfi'
+ print -s \$'for i in 1 2; do\necho \$i\ndone'
+ print -s 'echo 日本語 مرحبا é 👩‍💻'
+ print -s 'echo 日本語 مرحبا é 👩‍💻'
+ print -s 'git status'
+ fc -W
+ZSH
 }
 
-@test "cleanup uses awk to remove duplicates" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -A 30 'cleanup()' config/13-system.zsh | grep 'awk.*seen'"
+# The entries of a history file, one per line, as zsh reads them back.
+_history_entries() {
+    zsh -f -i -c "HISTFILE='$1'; HISTSIZE=1000; fc -R; fc -ln 1" 2>/dev/null
+}
+
+@test "cleanup removes duplicate history entries and keeps multi-line ones whole" {
+    local home="$BATS_TEST_TMPDIR/home"
+    mkdir -p "$home"
+    _write_history_fixture "$home/.zsh_history"
+    [ "$(_history_entries "$home/.zsh_history" | wc -l)" -eq 8 ]
+    zsh -f -o histignorespace -i >/dev/null 2>&1 <<ZSH
+ setopt hist_ignore_space
+ HOME='$home'
+ source '$NIVUUS_SHELL_DIR/config/02-history.zsh'
+ source '$NIVUUS_SHELL_DIR/config/13-system.zsh'
+ cleanup > '$BATS_TEST_TMPDIR/out'
+ZSH
+    grep -q "Deduplicated history" "$BATS_TEST_TMPDIR/out"
+    run _history_entries "$home/.zsh_history"
     [ "$status" -eq 0 ]
+    [ "${#lines[@]}" -eq 5 ]
+    # The newest of each duplicate is kept, in its place.
+    [ "${lines[0]}" = 'ls' ]
+    [ "${lines[1]}" = 'if true; then\necho x\nfi' ]
+    [ "${lines[2]}" = 'for i in 1 2; do\necho $i\ndone' ]
+    [ "${lines[3]}" = 'echo 日本語 مرحبا é 👩‍💻' ]
+    [ "${lines[4]}" = 'git status' ]
+}
+
+@test "cleanup leaves the history alone outside an interactive shell" {
+    local home="$BATS_TEST_TMPDIR/home"
+    mkdir -p "$home"
+    _write_history_fixture "$home/.zsh_history"
+    cp "$home/.zsh_history" "$BATS_TEST_TMPDIR/before"
+    run env HOME="$home" zsh -f -c "source '$NIVUUS_SHELL_DIR/config/02-history.zsh'; source '$NIVUUS_SHELL_DIR/config/13-system.zsh'; cleanup"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"History left as is: history can only be rewritten from an interactive shell"* ]]
+    cmp "$home/.zsh_history" "$BATS_TEST_TMPDIR/before"
 }
 
 @test "cleanup removes Nivuus cache" {

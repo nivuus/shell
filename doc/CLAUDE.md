@@ -101,6 +101,9 @@ nvm() {
 ```zsh
 # Git status cached for 2 seconds (configurable via GIT_PROMPT_CACHE_TTL)
 # Uses global variables: _GIT_PROMPT_CACHE_DIR, _GIT_PROMPT_CACHE_TIME, _GIT_PROMPT_CACHE_VALUE
+# Cached segments ({git} {firebase} {cloud}) are refreshed by the precmd hook
+# _nivuus_prompt_precmd in the current shell, and PROMPT reads ${_GIT_PROMPT_CACHE_VALUE}.
+# Never render a cached segment as $(function): the subshell drops the cache.
 ```
 
 **Compilation** (see `config/99-cleanup.zsh`):
@@ -123,7 +126,8 @@ Each segment is a function (`prompt_segment_ssh`, `prompt_segment_root`, `prompt
 `prompt_segment_path`, `prompt_python_venv`, `prompt_cloud_context`, `prompt_firebase`,
 `git_prompt_info`, `background_jobs_info`) mapped to a `{token}` in `_NIVUUS_PROMPT_TOKENS`. To
 add a new prompt component, write a function returning its rendered string and add it to that
-map — it's then usable in any user-defined `NIVUUS_PROMPT_FORMAT`.
+map — it's then usable in any user-defined `NIVUUS_PROMPT_FORMAT`. A component that caches
+must also be listed in `_NIVUUS_PROMPT_CACHED_TOKENS` (refresh function + variable).
 
 **Main Prompt (left)**:
 - **SSH detection**: Checks `$SSH_CLIENT`, `$SSH_TTY`, `$SESSION_TYPE`

@@ -144,27 +144,75 @@ fi
 # NVM Helper Commands
 # =============================================================================
 
+# nvm is installed the way its README describes a manual install: a git
+# clone of nvm-sh/nvm checked out at a release tag. No install script is
+# piped into a shell (the lazy loader above sources nvm.sh itself, so nvm's
+# profile edits are not needed). The tag is pinned together with the commit
+# it must resolve to: a tag that was moved or rewritten is refused, never
+# run. Bump both together, from `git ls-remote <repo> 'refs/tags/<tag>^{}'`.
+: ${NIVUUS_NVM_REPO:=https://github.com/nvm-sh/nvm.git}
+: ${NIVUUS_NVM_VERSION:=v0.41.0}
+: ${NIVUUS_NVM_COMMIT:=4e8758a801eea9479b32a904f31093e410ddaba4}
+
+# Check that the checkout in $1 is the pinned commit.
+_nivuus_nvm_verify() {
+    local head
+    head=$(git -C "$1" rev-parse HEAD 2>/dev/null)
+    if [[ "$head" != "$NIVUUS_NVM_COMMIT" ]]; then
+        echo "✗ nvm $NIVUUS_NVM_VERSION resolves to ${head:-nothing}, expected $NIVUUS_NVM_COMMIT: refusing it" >&2
+        return 1
+    fi
+}
+
 # Install NVM
 nvm-install() {
     if [[ -d "$HOME/.nvm" ]]; then
         echo "✓ NVM already installed at ~/.nvm"
         return 0
     fi
+    if ! (( $+commands[git] )); then
+        echo "✗ git is required to install NVM" >&2
+        return 1
+    fi
 
-    echo "Installing NVM..."
-    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
-    echo "✓ NVM installed. Restart your shell or run: source ~/.zshrc"
+    echo "Installing NVM $NIVUUS_NVM_VERSION..."
+    local staging
+    staging=$(mktemp -d "$HOME/.nvm.install.XXXXXX") || return 1
+    if ! git -c advice.detachedHead=false clone --quiet --depth 1 \
+            --branch "$NIVUUS_NVM_VERSION" "$NIVUUS_NVM_REPO" "$staging" \
+        || ! _nivuus_nvm_verify "$staging" \
+        || ! mv -- "$staging" "$HOME/.nvm"; then
+        rm -rf -- "$staging"
+        echo "✗ NVM not installed" >&2
+        return 1
+    fi
+    echo "✓ NVM $NIVUUS_NVM_VERSION installed. Restart your shell or run: source ~/.zshrc"
 }
 
-# Update NVM
+# Update NVM to the version pinned above
 nvm-update() {
     if [[ ! -d "$HOME/.nvm" ]]; then
         echo "✗ NVM not installed. Run: nvm-install"
         return 1
     fi
 
-    cd "$HOME/.nvm" && git pull
-    echo "✓ NVM updated. Restart your shell or run: source ~/.zshrc"
+    local nvm_dir="$HOME/.nvm"
+    if ! git -C "$nvm_dir" fetch --quiet --depth 1 "$NIVUUS_NVM_REPO" \
+            "+refs/tags/${NIVUUS_NVM_VERSION}:refs/tags/${NIVUUS_NVM_VERSION}"; then
+        echo "✗ Could not fetch nvm $NIVUUS_NVM_VERSION" >&2
+        return 1
+    fi
+    local tagged
+    tagged=$(git -C "$nvm_dir" rev-parse "refs/tags/$NIVUUS_NVM_VERSION^{commit}" 2>/dev/null)
+    if [[ "$tagged" != "$NIVUUS_NVM_COMMIT" ]]; then
+        echo "✗ nvm $NIVUUS_NVM_VERSION resolves to ${tagged:-nothing}, expected $NIVUUS_NVM_COMMIT: refusing it" >&2
+        return 1
+    fi
+    if ! git -C "$nvm_dir" -c advice.detachedHead=false checkout --quiet "$NIVUUS_NVM_COMMIT"; then
+        echo "✗ Could not check out nvm $NIVUUS_NVM_VERSION" >&2
+        return 1
+    fi
+    echo "✓ NVM at $NIVUUS_NVM_VERSION. Restart your shell or run: source ~/.zshrc"
 }
 
 # Check NVM health
