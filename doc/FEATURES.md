@@ -143,8 +143,8 @@ Automatic Node.js version management with zero configuration.
 
 ### Commands
 ```bash
-nvm-install             # Install NVM
-nvm-update              # Update NVM to latest
+nvm-install             # Install NVM (git clone of the pinned tag, commit checked)
+nvm-update              # Move NVM to the pinned version (NIVUUS_NVM_VERSION)
 nvm-health              # Check NVM status
 nvm use <version>       # Switch Node.js version
 nvm install <version>   # Install specific version

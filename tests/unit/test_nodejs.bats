@@ -218,28 +218,83 @@ setup() {
 }
 
 @test "nvm-install checks if NVM exists" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -A 5 'nvm-install()' config/09-nodejs.zsh | grep 'NVM already installed'"
+    mkdir -p "$BATS_TEST_TMPDIR/home/.nvm"
+    run env HOME="$BATS_TEST_TMPDIR/home" zsh -c "source '$NIVUUS_SHELL_DIR/config/09-nodejs.zsh' >/dev/null 2>&1; nvm-install"
     [ "$status" -eq 0 ]
+    [[ "$output" == *"NVM already installed"* ]]
 }
 
-@test "nvm-install uses curl" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep 'curl.*nvm-sh/nvm' config/09-nodejs.zsh"
-    [ "$status" -eq 0 ]
+# A local repository stands in for nvm-sh/nvm: tag v0.41.0 on a commit whose
+# nvm.sh defines a recognisable nvm function.
+_fake_nvm_repo() {
+    local repo="$BATS_TEST_TMPDIR/nvm-src"
+    git init -q -b master "$repo"
+    printf 'nvm() { print -r -- "pinned nvm" }\n' > "$repo/nvm.sh"
+    git -C "$repo" add nvm.sh
+    git -C "$repo" -c user.name=t -c user.email=t@t commit -q -m release
+    git -C "$repo" tag v0.41.0
+    git -C "$repo" rev-parse HEAD
 }
 
-@test "nvm-update function is defined" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep 'nvm-update()' config/09-nodejs.zsh"
+_nvm_cmd() {
+    run env HOME="$BATS_TEST_TMPDIR/home" NIVUUS_NVM_REPO="file://$BATS_TEST_TMPDIR/nvm-src" \
+        NIVUUS_NVM_COMMIT="$1" zsh -c "source '$NIVUUS_SHELL_DIR/config/09-nodejs.zsh' >/dev/null 2>&1; $2"
+}
+
+@test "nvm-install clones the pinned tag and checks its commit, without piping a script to a shell" {
+    local commit
+    commit="$(_fake_nvm_repo)"
+    mkdir -p "$BATS_TEST_TMPDIR/home"
+    _nvm_cmd "$commit" "nvm-install"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"NVM v0.41.0 installed"* ]]
+    [ "$(git -C "$BATS_TEST_TMPDIR/home/.nvm" rev-parse HEAD)" = "$commit" ]
+    [ -s "$BATS_TEST_TMPDIR/home/.nvm/nvm.sh" ]
+    # The lazy loader picks the clone up.
+    _nvm_cmd "$commit" "nvm"
+    [[ "$output" == *"pinned nvm"* ]]
+}
+
+@test "nvm-install refuses a tag that no longer points at the pinned commit" {
+    _fake_nvm_repo >/dev/null
+    mkdir -p "$BATS_TEST_TMPDIR/home"
+    _nvm_cmd 0000000000000000000000000000000000000000 "nvm-install"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"expected 0000000000000000000000000000000000000000: refusing it"* ]]
+    [ ! -e "$BATS_TEST_TMPDIR/home/.nvm" ]
+    [ -z "$(ls -A "$BATS_TEST_TMPDIR/home")" ]
+}
+
+@test "nvm-update functions are defined" {
+    run zsh -c "source '$NIVUUS_SHELL_DIR/config/09-nodejs.zsh' >/dev/null 2>&1; typeset -f nvm-install nvm-update >/dev/null"
     [ "$status" -eq 0 ]
 }
 
 @test "nvm-update checks if NVM exists" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep -A 5 'nvm-update()' config/09-nodejs.zsh | grep 'NVM not installed'"
-    [ "$status" -eq 0 ]
+    mkdir -p "$BATS_TEST_TMPDIR/home"
+    run env HOME="$BATS_TEST_TMPDIR/home" zsh -c "source '$NIVUUS_SHELL_DIR/config/09-nodejs.zsh' >/dev/null 2>&1; nvm-update"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"NVM not installed"* ]]
 }
 
-@test "nvm-update uses git pull" {
-    run bash -c "cd '$BATS_TEST_DIRNAME/../..' && grep 'git pull' config/09-nodejs.zsh"
+@test "nvm-update moves to the pinned commit and refuses a moved tag" {
+    local commit
+    commit="$(_fake_nvm_repo)"
+    mkdir -p "$BATS_TEST_TMPDIR/home"
+    _nvm_cmd "$commit" "nvm-install"
     [ "$status" -eq 0 ]
+    _nvm_cmd "$commit" "nvm-update"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"NVM at v0.41.0"* ]]
+    # The tag is moved upstream to another commit: refused, checkout kept.
+    local src="$BATS_TEST_TMPDIR/nvm-src"
+    echo "evil" >> "$src/nvm.sh"
+    git -C "$src" -c user.name=t -c user.email=t@t commit -qam moved
+    git -C "$src" tag -f v0.41.0 >/dev/null
+    _nvm_cmd "$commit" "nvm-update"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"refusing it"* ]]
+    [ "$(git -C "$BATS_TEST_TMPDIR/home/.nvm" rev-parse HEAD)" = "$commit" ]
 }
 
 @test "nvm-health function is defined" {
